@@ -1,0 +1,18 @@
+{
+	"schema_version": 1,
+	"id": "override_test",
+	"name": "Override test",
+	"capabilities": ["turn_order"],
+	"stats": [
+		{"id": "mhp", "label": "Max HP", "type": "int", "min": 1, "max": 9999},
+		{"id": "atk", "label": "ATK", "type": "int", "min": 0, "max": 999},
+		{"id": "pdef", "label": "PDEF", "type": "int", "min": 0, "max": 999},
+		{"id": "agi", "label": "AGI", "type": "int", "min": 1, "max": 999}
+	],
+	"resources": [{"id": "hp", "label": "HP", "max_stat": "mhp"}],
+	"life_resource": "hp",
+	"death_state": "knockout",
+	"attack": {"name": "Attack", "formula": "a.atk", "hit_type": "certain", "variance": 0, "scope": "one_enemy"},
+	"damage": {"variance": 0, "min": 0},
+	"turn_order": {"speed": "a.agi"}
+}

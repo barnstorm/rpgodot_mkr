@@ -1,0 +1,42 @@
+{
+	"schema_version": 1,
+	"id": "enemy_gauges",
+	"name": "Enemy HP gauges and popups",
+	"description": "An HP bar under each enemy that drains smoothly (always, while targeted, or once that enemy type has been defeated), hidden for enemies marked as bosses, and damage popups with critical, miss and recovery styles that pop in.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["enemy_gauges.gd"],
+	"commands": [],
+	"save_sections": [{"namespace": "enemy_records", "version": 1}],
+	"custom_fields": {
+		"enemies": [
+			{"key": "hide_hp_gauge", "kind": "bool", "label": "Hide HP gauge (Enemy gauges plugin)", "default": false,
+				"help": "No HP bar for this enemy, for example a boss."}
+		]
+	},
+	"settings_schema": [
+		{"key": "show", "kind": "choice", "options": ["always", "targeted", "defeated"],
+			"option_labels": ["Always", "While targeted (and a moment after a hit)", "Once that enemy type has been defeated"],
+			"default": "always", "label": "Show the gauges"},
+		{"key": "width", "kind": "int", "label": "Gauge width (pixels at 320x240)", "default": 40, "min": 16, "max": 160},
+		{"key": "height", "kind": "int", "label": "Gauge height", "default": 4, "min": 2, "max": 12},
+		{"key": "numbers", "kind": "choice", "options": ["none", "value", "value_max", "percent"],
+			"option_labels": ["None", "HP", "HP / max HP", "Percent"], "default": "none", "label": "Numbers on the gauge"},
+		{"key": "colour_full", "kind": "color", "label": "Colour when healthy", "default": [104, 216, 96, 255]},
+		{"key": "colour_low", "kind": "color", "label": "Colour when low", "default": [232, 72, 56, 255]},
+		{"key": "colour_drain", "kind": "color", "label": "Colour of HP being lost", "default": [255, 226, 140, 255]},
+		{"key": "colour_back", "kind": "color", "label": "Background", "default": [14, 14, 24, 210]},
+		{"key": "popups", "kind": "bool", "label": "Styled damage popups", "default": true,
+			"help": "Critical hits, misses and recovery each get their own look, and numbers pop in."},
+		{"key": "critical_text", "kind": "text", "label": "Critical hit tag", "default": "Critical!", "show_if": {"key": "popups", "equals": true}},
+		{"key": "miss_text", "kind": "text", "label": "Miss text", "default": "Miss", "show_if": {"key": "popups", "equals": true}},
+		{"key": "heal_sign", "kind": "bool", "label": "A + before recovered amounts", "default": true, "show_if": {"key": "popups", "equals": true}},
+		{"key": "colour_damage", "kind": "color", "label": "Damage colour", "default": [255, 255, 255, 255], "show_if": {"key": "popups", "equals": true}},
+		{"key": "colour_critical", "kind": "color", "label": "Critical colour", "default": [255, 196, 64, 255], "show_if": {"key": "popups", "equals": true}},
+		{"key": "colour_heal", "kind": "color", "label": "Recovery colour", "default": [120, 255, 140, 255], "show_if": {"key": "popups", "equals": true}},
+		{"key": "colour_miss", "kind": "color", "label": "Miss colour", "default": [190, 190, 200, 255], "show_if": {"key": "popups", "equals": true}}
+	]
+}

@@ -1,0 +1,57 @@
+{
+	"schema_version": 1,
+	"id": "osr_example",
+	"name": "OSR example",
+	"description": "Small old-school example: six ability scores, ascending armour class, d20 to hit, weapon dice for damage, hit dice per level, experience tables per class.",
+	"capabilities": ["turn_order", "action_selection", "target_choice", "battle_events", "escape", "defeat"],
+	"stats": [
+		{"id": "str", "label": "Strength", "short": "STR", "type": "int", "min": 3, "max": 18},
+		{"id": "dex", "label": "Dexterity", "short": "DEX", "type": "int", "min": 3, "max": 18},
+		{"id": "con", "label": "Constitution", "short": "CON", "type": "int", "min": 3, "max": 18},
+		{"id": "int", "label": "Intelligence", "short": "INT", "type": "int", "min": 3, "max": 18},
+		{"id": "wis", "label": "Wisdom", "short": "WIS", "type": "int", "min": 3, "max": 18},
+		{"id": "cha", "label": "Charisma", "short": "CHA", "type": "int", "min": 3, "max": 18},
+		{"id": "mhp", "label": "Max HP", "short": "MHP", "type": "int", "min": 1, "max": 999},
+		{"id": "ac", "label": "Armour Class", "short": "AC", "type": "int", "min": 0, "max": 30, "formula": "10 + mod(a.dex)"},
+		{"id": "attack_bonus", "label": "Attack bonus", "short": "AB", "type": "int", "min": 0, "max": 20, "formula": "a.level"}
+	],
+	"resources": [
+		{"id": "hp", "label": "HP", "max_stat": "mhp"}
+	],
+	"life_resource": "hp",
+	"death_state": "knockout",
+	"levels": {"min": 1, "max": 10},
+	"growth": "level_up",
+	"exp_curve": {"type": "table"},
+	"snapshot_fields": {
+		"weapon_dice": {"equip_slot": "weapon", "field": "dice", "record_field": "dice", "default": "1d2"},
+		"hit_die": {"class_field": "hit_die", "default": 6}
+	},
+	"on_create": [
+		{"stat": "mhp", "formula": "a.hit_die + mod(a.con)", "min": 1}
+	],
+	"on_level_up": [
+		{"stat": "mhp", "formula": "roll(1, a.hit_die) + mod(a.con)", "min": 1}
+	],
+	"traits": [
+		{"kind": "element_rate", "label": "Damage taken rate", "id_ref": "element", "value": "percent", "default": 100},
+		{"kind": "state_resist", "label": "Immune to", "id_ref": "state"}
+	],
+	"attack": {
+		"name": "Attack",
+		"formula": "roll(a.weapon_dice) + mod(a.str)",
+		"damage_type": "damage",
+		"hit_type": "physical",
+		"variance": 0,
+		"critical": true,
+		"scope": "one_enemy"
+	},
+	"hit_check": {
+		"physical": {"type": "roll", "roll": "1d20", "bonus": "a.attack_bonus + mod(a.str)", "target": "b.ac", "natural_hit": 20, "natural_miss": 1}
+	},
+	"critical": {"on_natural": 20, "multiplier": 2},
+	"damage": {"variance": 0, "min": 1, "guard_percent": 50},
+	"turn_order": {"speed": "roll('1d6') + mod(a.dex)"},
+	"escape": {"chance": 50},
+	"roll_check": {"roll": "1d20", "bonus": "mod(s.value)", "compare": ">=", "natural_success": 20, "natural_failure": 1}
+}

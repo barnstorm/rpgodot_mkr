@@ -1,0 +1,10 @@
+{
+	"schema_version": 1,
+	"project_id": "fixture_door",
+	"name": "Door fixture",
+	"extensions": ["project", "broken_ext"],
+	"disabled_extensions": ["broken_ext"],
+	"extensions_root": "res://tests/fixtures/door_project/extensions",
+	"rules": "classic",
+	"scenes": {}
+}

@@ -1,0 +1,17 @@
+{
+	"schema_version": 1,
+	"id": "house_inside",
+	"display_name": "",
+	"tileset": "",
+	"width": 10,
+	"height": 10,
+	"scroll": "none",
+	"music": null,
+	"bgs": null,
+	"battle_background": "auto",
+	"disable_dash": false,
+	"parallax": null,
+	"encounters": {"steps": 30, "groups": []},
+	"notes": "",
+	"custom": {}
+}

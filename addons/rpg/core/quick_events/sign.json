@@ -1,0 +1,29 @@
+{
+	"schema_version": 1,
+	"name": "Sign",
+	"version": 1,
+	"author": "RPG Kit",
+	"description": "A sign that shows its text when examined or stepped on.",
+	"asks": [
+		{"key": "text", "type": "text", "label": "What does it say?"},
+		{"key": "image", "type": "image", "res": "charset", "label": "Sign image (optional)", "required": false},
+		{"key": "read_by", "type": "choice", "label": "How is it read?", "default": "examined", "options": [
+			{"id": "examined", "label": "Examined", "priority": "same", "trigger": "action_button"},
+			{"id": "stepped_on", "label": "Stepped on", "priority": "below", "trigger": "player_touch"}
+		]}
+	],
+	"event": {
+		"name": "Sign",
+		"pages": [
+			{
+				"conditions": [],
+				"graphic": "{{image}}",
+				"priority": "{{read_by.priority}}",
+				"trigger": "{{read_by.trigger}}",
+				"commands": [
+					{"type": "show_text", "text": "{{text}}"}
+				]
+			}
+		]
+	}
+}

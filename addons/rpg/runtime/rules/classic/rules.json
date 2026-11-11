@@ -1,0 +1,54 @@
+{
+	"schema_version": 1,
+	"id": "classic",
+	"name": "Classic",
+	"description": "XP-style rules. Hit rate then evasion from AGI and DEX; per-skill damage formulas; experience curve per class; escape from party AGI against enemy AGI.",
+	"capabilities": ["turn_order", "action_selection", "target_choice", "battle_events", "escape", "defeat"],
+	"stats": [
+		{"id": "mhp", "label": "Max HP", "short": "MHP", "type": "int", "min": 1, "max": 9999},
+		{"id": "msp", "label": "Max SP", "short": "MSP", "type": "int", "min": 0, "max": 9999},
+		{"id": "str", "label": "Strength", "short": "STR", "type": "int", "min": 1, "max": 999},
+		{"id": "dex", "label": "Dexterity", "short": "DEX", "type": "int", "min": 1, "max": 999},
+		{"id": "agi", "label": "Agility", "short": "AGI", "type": "int", "min": 1, "max": 999},
+		{"id": "int", "label": "Intelligence", "short": "INT", "type": "int", "min": 1, "max": 999},
+		{"id": "atk", "label": "Attack", "short": "ATK", "type": "int", "min": 0, "max": 999},
+		{"id": "pdef", "label": "Physical Defense", "short": "PDEF", "type": "int", "min": 0, "max": 999},
+		{"id": "mdef", "label": "Magic Defense", "short": "MDEF", "type": "int", "min": 0, "max": 999}
+	],
+	"resources": [
+		{"id": "hp", "label": "HP", "max_stat": "mhp"},
+		{"id": "sp", "label": "SP", "max_stat": "msp"}
+	],
+	"life_resource": "hp",
+	"death_state": "knockout",
+	"levels": {"min": 1, "max": 99},
+	"growth": "class",
+	"exp_curve": {"type": "basis_inflation", "basis": 25, "inflation": 30},
+	"traits": [
+		{"kind": "element_rate", "label": "Element rate", "id_ref": "element", "value": "percent", "default": 100},
+		{"kind": "state_rate", "label": "State rate", "id_ref": "state", "value": "percent", "default": 100},
+		{"kind": "state_resist", "label": "State resist", "id_ref": "state"},
+		{"kind": "stat_rate", "label": "Stat rate", "id_ref": "stat", "value": "percent", "default": 100},
+		{"kind": "attack_element", "label": "Attack element", "id_ref": "element"},
+		{"kind": "extra_attack", "label": "Extra attacks", "value": "int", "default": 1}
+	],
+	"attack": {
+		"name": "Attack",
+		"formula": "a.atk + a.str / 2 - b.pdef / 2",
+		"damage_type": "damage",
+		"hit": 95,
+		"hit_type": "physical",
+		"variance": 15,
+		"critical": true,
+		"scope": "one_enemy"
+	},
+	"hit_check": {
+		"physical": {"type": "percent", "steps": ["s.hit", "100 - 8 * b.agi / max(1, a.dex)"]},
+		"magical": {"type": "percent", "steps": ["s.hit"]}
+	},
+	"critical": {"chance": "4 * a.dex / max(1, b.agi)", "multiplier": 2},
+	"damage": {"variance": 15, "min": 0, "guard_percent": 50},
+	"turn_order": {"speed": "a.agi + rand(0, a.agi / 4)"},
+	"escape": {"chance": "clamp(50 * a.agi / max(1, b.agi), 5, 95)"},
+	"roll_check": {"roll": "1d20", "bonus": "s.value / 5", "compare": ">="}
+}

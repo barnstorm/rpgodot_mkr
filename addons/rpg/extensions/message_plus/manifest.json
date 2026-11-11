@@ -1,0 +1,35 @@
+{
+	"schema_version": 1,
+	"id": "message_plus",
+	"name": "Message codes plus",
+	"description": "Word wrap, bigger/smaller text, bold and italic, keywords coloured automatically, text macros and the name box position for Show Text.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["message_plus.gd"],
+	"commands": ["commands/message_style.gd"],
+	"save_sections": [{"namespace": "message_plus", "version": 1}],
+	"settings_schema": [
+		{"key": "word_wrap", "kind": "bool", "label": "Word wrap every message", "default": false,
+			"help": "Line breaks typed in a message become spaces and the text flows to the box edge; <br> starts a new line. <wordwrap> or <nowrap> in a message overrides this for that message."},
+		{"key": "keywords", "kind": "list", "label": "Keywords coloured automatically", "default": [],
+			"help": "Whole words written in this colour wherever a message uses them (upper or lower case).",
+			"item_fields": [
+				{"key": "word", "kind": "text", "label": "Word or phrase"},
+				{"key": "colour", "kind": "color", "label": "Colour", "default": [255, 224, 138, 255]}
+			]},
+		{"key": "colour_actor_names", "kind": "bool", "label": "Colour actor names too", "default": false},
+		{"key": "actor_colour", "kind": "color", "label": "Actor name colour", "default": [138, 180, 255, 255], "show_if": {"key": "colour_actor_names", "equals": true}},
+		{"key": "macros", "kind": "list", "label": "Text macros", "default": [],
+			"help": "\\M[name] in a message is replaced by the text (which may use codes itself).",
+			"item_fields": [
+				{"key": "name", "kind": "text", "label": "Name"},
+				{"key": "text", "kind": "text", "label": "Text"}
+			]},
+		{"key": "name_box", "kind": "choice", "options": ["left", "center", "right"], "option_labels": ["Left", "Centre", "Right"], "default": "left", "label": "Name box position"},
+		{"key": "name_box_window", "kind": "bool", "label": "Draw a window behind the name", "default": true},
+		{"key": "size_step", "kind": "int", "label": "Font size step for \\{ and \\}", "default": 2, "min": 1, "max": 8}
+	]
+}

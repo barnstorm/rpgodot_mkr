@@ -1,0 +1,57 @@
+{
+	"schema_version": 1,
+	"name": "Treasure",
+	"version": 1,
+	"author": "RPG Kit",
+	"description": "A chest that opens once, using self switch A.",
+	"asks": [
+		{"key": "image", "type": "image", "res": "charset", "label": "Chest image"},
+		{"key": "contents.kind", "type": "choice", "label": "What is inside?", "default": "items", "options": [
+			{"id": "gold", "label": "Gold"},
+			{"id": "items", "label": "Item"},
+			{"id": "weapons", "label": "Weapon"},
+			{"id": "armors", "label": "Armour"}
+		]},
+		{"key": "contents.item", "type": "item", "kind_from": "contents.kind", "label": "Which one?", "show_if": {"key": "contents.kind", "not_equals": "gold"}},
+		{"key": "contents.amount", "type": "amount", "label": "How many (or how much gold)?", "default": 1, "min": 1}
+	],
+	"computed": [
+		{"key": "contents.label", "when": {"key": "contents.kind", "equals": "gold"}, "format": "{{contents.amount}} gold"},
+		{"key": "contents.label", "when": {"key": "contents.amount", "equals": 1}, "format": "{{contents.item.name}}"},
+		{"key": "contents.label", "format": "{{contents.amount}} x {{contents.item.name}}"}
+	],
+	"variants": [
+		{"when": {"key": "contents.kind", "equals": "gold"}, "replace_type": "change_items",
+			"with": {"type": "change_gold", "operation": "increase", "amount": "{{contents.amount}}"}}
+	],
+	"event": {
+		"name": "Treasure",
+		"pages": [
+			{
+				"conditions": [],
+				"graphic": {"sheet": "{{image.sheet}}", "index": "{{image.index}}", "facing": "down"},
+				"priority": "same",
+				"trigger": "action_button",
+				"commands": [
+					{"type": "play_sound", "sound": {"role": "chest_open"}},
+					{"type": "move_route", "target": "this", "wait": true, "steps": [
+						{"turn": "left"}, {"wait": 0.05},
+						{"turn": "right"}, {"wait": 0.05},
+						{"turn": "up"}
+					]},
+					{"type": "change_items", "item_kind": "{{contents.kind}}", "item": "{{contents.item}}", "operation": "increase", "amount": "{{contents.amount}}"},
+					{"type": "show_text", "text": "Found {{contents.label}}!"},
+					{"type": "set_self_switch", "switch": "A", "value": true}
+				]
+			},
+			{
+				"conditions": [{"kind": "self_switch", "id": "A"}],
+				"graphic": {"sheet": "{{image.sheet}}", "index": "{{image.index}}", "facing": "up"},
+				"options": {"direction_fix": true},
+				"priority": "same",
+				"trigger": "action_button",
+				"commands": []
+			}
+		]
+	}
+}

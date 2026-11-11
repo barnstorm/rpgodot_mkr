@@ -1,0 +1,18 @@
+{
+	"schema_version": 1,
+	"common_events": [
+		{"id": "count_up", "name": "Count up", "trigger": "none", "switch": "", "commands": [
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1}
+		]},
+		{"id": "recurse", "name": "Recurse forever", "trigger": "none", "switch": "", "commands": [
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+			{"type": "call_common_event", "id": "recurse"}
+		]},
+		{"id": "busy_loop", "name": "Loop without waits", "trigger": "none", "switch": "", "commands": [
+			{"type": "loop", "commands": [
+				{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+				{"type": "if", "condition": {"kind": "variable", "id": "counter", "op": ">=", "value": 2000}, "then": [{"type": "break_loop"}], "else": []}
+			]}
+		]}
+	]
+}

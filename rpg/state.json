@@ -1,0 +1,17 @@
+{
+	"schema_version": 1,
+	"switches": [
+		{"id": "intro_done", "label": "Intro finished", "folder": "story", "description": "The elder has welcomed the hero."},
+		{"id": "door_unlocked", "label": "House door unlocked", "folder": "town", "description": "Set when the hero has the house key."},
+		{"id": "key_given", "label": "Key given", "folder": "town", "description": "The elder handed over the house key."},
+		{"id": "goblin_defeated", "label": "Goblin defeated", "folder": "story", "description": "The goblin in the field is beaten."},
+		{"id": "rain", "label": "Rain is falling", "folder": "weather", "description": "Runs the rain common event."}
+	],
+	"variables": [
+		{"id": "fish_caught", "type": "int", "default": 0, "label": "Fish caught", "folder": "minigames", "description": "Score of the fishing minigame."},
+		{"id": "fishing_result", "type": "string", "default": "", "label": "Fishing result", "folder": "minigames", "description": "Result returned by the fishing scene."},
+		{"id": "door_check", "type": "bool", "default": false, "label": "Forced the door", "folder": "town", "description": "Result of the STR roll check."},
+		{"id": "talks", "type": "int", "default": 0, "label": "Times talked to the child", "folder": "town", "description": ""},
+		{"id": "battle_outcome", "type": "string", "default": "", "label": "Last battle outcome", "folder": "story", "description": ""}
+	]
+}

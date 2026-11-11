@@ -1,0 +1,23 @@
+{
+	"schema_version": 1,
+	"id": "gab",
+	"name": "Gab window",
+	"description": "Short lines (\"Brr, it's cold...\") that slide in, stay a moment and fade, without stopping the player. Queued one after another; also shown over battles.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["gab.gd"],
+	"commands": ["commands/show_gab.gd", "commands/clear_gabs.gd", "commands/wait_for_gabs.gd"],
+	"settings_schema": [
+		{"key": "position", "kind": "choice", "options": ["top", "bottom"], "option_labels": ["Top", "Bottom"], "default": "top", "label": "Position"},
+		{"key": "base_seconds", "kind": "float", "label": "Seconds shown", "default": 1.6, "min": 0.3, "max": 20.0},
+		{"key": "per_char", "kind": "float", "label": "Extra seconds per letter", "default": 0.04, "min": 0.0, "max": 1.0},
+		{"key": "fade", "kind": "float", "label": "Fade in / out (seconds)", "default": 0.3, "min": 0.0, "max": 3.0},
+		{"key": "sound", "kind": "sound", "label": "Sound when a gab appears", "default": {"file": "", "volume": 80, "pitch": 100, "pan": 0}},
+		{"key": "anti_repeat", "kind": "bool", "label": "Skip a gab that repeats the one shown or waiting", "default": true},
+		{"key": "max_queue", "kind": "int", "label": "Most gabs waiting", "default": 6, "min": 1, "max": 50},
+		{"key": "opacity", "kind": "int", "label": "Window opacity (%)", "default": 85, "min": 0, "max": 100}
+	]
+}

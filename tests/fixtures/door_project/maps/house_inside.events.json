@@ -1,0 +1,23 @@
+{
+	"schema_version": 1,
+	"map": "house_inside",
+	"events": [
+		{
+			"id": "blocker",
+			"name": "Blocker",
+			"position": [2, 2],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {"walk_anim": false, "step_anim": false, "direction_fix": false, "through": false},
+					"priority": "same",
+					"trigger": "action_button",
+					"commands": []
+				}
+			]
+		}
+	]
+}

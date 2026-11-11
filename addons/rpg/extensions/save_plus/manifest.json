@@ -1,0 +1,27 @@
+{
+	"schema_version": 1,
+	"id": "save_plus",
+	"name": "Save & autosave plus",
+	"description": "Autosave after battles, on map transfers and when the menu opens (each can be chosen), an Autosave on/off option for the player, an \"Autosaved\" toast, the number of save slots, a save description set by events, and a Request autosave command.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["save_plus.gd"],
+	"commands": ["commands/set_save_description.gd", "commands/request_autosave.gd", "commands/change_autosave.gd"],
+	"save_sections": [{"namespace": "save_plus", "version": 1}],
+	"options": [
+		{"key": "autosave", "kind": "bool", "label": "Autosave", "default": true, "help": "Save automatically to the Auto slot.", "show_method": "player_option_shown"}
+	],
+	"settings_schema": [
+		{"key": "on_transfer", "kind": "bool", "label": "Autosave after a map transfer", "default": true},
+		{"key": "after_battle", "kind": "bool", "label": "Autosave after a battle won or escaped", "default": true},
+		{"key": "on_menu", "kind": "bool", "label": "Autosave when the menu opens", "default": false},
+		{"key": "player_option", "kind": "bool", "label": "Players can turn autosave off (Options)", "default": true},
+		{"key": "toast", "kind": "bool", "label": "Show a note after autosaving", "default": true},
+		{"key": "toast_text", "kind": "text", "label": "Note text", "default": "Autosaved", "show_if": {"key": "toast", "equals": true}},
+		{"key": "toast_seconds", "kind": "float", "label": "Note shown for (seconds)", "default": 1.6, "min": 0.3, "max": 10.0, "show_if": {"key": "toast", "equals": true}},
+		{"key": "max_slots", "kind": "int", "label": "Save slots (the last one is the Auto slot)", "default": 16, "min": 2, "max": 99}
+	]
+}

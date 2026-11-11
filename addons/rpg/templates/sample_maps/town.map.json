@@ -1,0 +1,25 @@
+{
+	"schema_version": 1,
+	"id": "town",
+	"display_name": "Riverside Village",
+	"notes": "",
+	"battle_background": "auto",
+	"bgs": null,
+	"custom": {},
+	"disable_dash": false,
+	"encounters": {
+		"steps": 30,
+		"groups": []
+	},
+	"height": 22,
+	"music": {
+		"file": "town",
+		"pan": 0,
+		"pitch": 100,
+		"volume": 80
+	},
+	"parallax": null,
+	"scroll": "none",
+	"tileset": "town",
+	"width": 30
+}

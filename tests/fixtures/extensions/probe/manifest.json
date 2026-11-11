@@ -1,0 +1,35 @@
+{
+	"schema_version": 1,
+	"id": "probe",
+	"name": "Hook probe (tests)",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["probe.gd"],
+	"commands": ["commands/probe_mark.gd"],
+	"settings_schema": [
+		{"key": "greeting", "kind": "text", "label": "Greeting", "default": "hello"},
+		{"key": "count", "kind": "int", "label": "Count", "default": 3}
+	],
+	"save_sections": [{"namespace": "probe", "version": 1}, {"namespace": "probe_owned", "version": 2}],
+	"menu_entries": [
+		{"id": "probe_method", "label": "Probe", "method": "menu_probe", "after": "status"},
+		{"id": "probe_ce", "label": "Rest", "common_event": "full_heal"},
+		{"id": "probe_hidden", "label": "Secret", "show_switch": "key_given", "method": "menu_probe"},
+		{"id": "probe_off", "label": "Locked", "enable_method": "probe_unlocked", "method": "menu_probe"},
+		{"id": "probe_actor", "label": "Pick", "needs_actor": true, "method": "menu_actor"}
+	],
+	"options": [
+		{"key": "flag", "kind": "bool", "label": "Probe flag", "default": false},
+		{"key": "mode", "kind": "choice", "label": "Probe mode", "options": ["a", "b", "c"], "default": "a"},
+		{"key": "level", "kind": "slider", "label": "Probe level", "min": 0, "max": 10, "step": 2, "default": 4}
+	],
+	"conditions": [
+		{"kind": "probe_flag", "label": "Probe flag", "method": "check_probe", "fields": [{"key": "value", "kind": "bool", "default": true, "label": "is set"}]}
+	],
+	"custom_fields": {
+		"actors": [{"key": "probe_note", "kind": "text", "label": "Probe note", "default": "none"}]
+	}
+}

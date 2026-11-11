@@ -1,0 +1,43 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "hero",
+			"name": "Alex",
+			"notes": "",
+			"base_stats": {},
+			"battler": "",
+			"charset": "hero",
+			"charset_index": 0,
+			"class": "warrior",
+			"custom": {},
+			"equips": {"accessory": "", "body": "leather_armor", "shield": "", "weapon": "bronze_sword"},
+			"face": "hero_face",
+			"face_index": 0,
+			"initial_level": 1,
+			"max_level": 99,
+			"nickname": "",
+			"skills": [],
+			"traits": []
+		},
+		{
+			"id": "mira",
+			"name": "Mira",
+			"notes": "",
+			"base_stats": {},
+			"battler": "",
+			"charset": "hero",
+			"charset_index": 1,
+			"class": "mage",
+			"custom": {},
+			"equips": {"accessory": "", "body": "leather_armor", "shield": "", "weapon": ""},
+			"face": "hero_face",
+			"face_index": 1,
+			"initial_level": 1,
+			"max_level": 99,
+			"nickname": "",
+			"skills": [],
+			"traits": []
+		}
+	]
+}

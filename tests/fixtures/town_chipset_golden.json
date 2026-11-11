@@ -1,0 +1,24 @@
+{
+	"schema_version": 1,
+	"notes": "Regression golden for assets/starter/ChipSet/town.png decoded by RPGChipset2k.decode: SHA-256 (first 16 hex) of every composed variant image of each group/frame, of the 144 lower, 144 upper and animated frames. Regenerate only when the starter art changes on purpose.",
+	"animated": "71c1faf738c7d4fb",
+	"groups": {
+		"terrain_0": "4ed23a73a1317065",
+		"terrain_1": "8919f5fe02dc2644",
+		"terrain_10": "f3fe938c7f0a98da",
+		"terrain_11": "2e9dd957cf0f4f96",
+		"terrain_2": "fd910e6e41f6f7b3",
+		"terrain_3": "2a8bff9b60f8daed",
+		"terrain_4": "d9cc44b8daa7f79e",
+		"terrain_5": "2748f39ac347feb5",
+		"terrain_6": "869ef123c78f481d",
+		"terrain_7": "84793cd9f8427fe9",
+		"terrain_8": "89ec4c29771193c8",
+		"terrain_9": "7172e7899dcd89cc",
+		"water_a": "bf02e528b3db13e0",
+		"water_b": "3fca155ce2cd879b",
+		"water_c": "27e01499cf6fc58f"
+	},
+	"lower": "786a67b9b5a8de93",
+	"upper": "864ffe3e681010cf"
+}

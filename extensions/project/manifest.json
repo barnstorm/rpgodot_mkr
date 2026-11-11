@@ -1,0 +1,13 @@
+{
+	"schema_version": 1,
+	"id": "project",
+	"name": "Sample Quest project code",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"entry_scripts": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"settings_schema": {},
+	"commands": ["commands/shake_camera.gd"]
+}

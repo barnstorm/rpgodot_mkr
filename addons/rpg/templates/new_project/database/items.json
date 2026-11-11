@@ -1,0 +1,61 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "potion",
+			"name": "Potion",
+			"notes": "",
+			"consumable": true,
+			"custom": {},
+			"description": "Restores 50 HP.",
+			"effects": [{"kind": "recover", "amount": 50, "resource": "hp"}],
+			"icon": 64,
+			"key_item": false,
+			"occasion": "always",
+			"price": 50,
+			"scope": "one_ally"
+		},
+		{
+			"id": "hi_potion",
+			"name": "Hi-Potion",
+			"notes": "",
+			"consumable": true,
+			"custom": {},
+			"description": "Restores 150 HP.",
+			"effects": [{"kind": "recover", "amount": 150, "resource": "hp"}],
+			"icon": 70,
+			"key_item": false,
+			"occasion": "always",
+			"price": 150,
+			"scope": "one_ally"
+		},
+		{
+			"id": "antidote",
+			"name": "Antidote",
+			"notes": "",
+			"consumable": true,
+			"custom": {},
+			"description": "Cures poison.",
+			"effects": [{"kind": "remove_state", "id": "poison"}],
+			"icon": 66,
+			"key_item": false,
+			"occasion": "always",
+			"price": 30,
+			"scope": "one_ally"
+		},
+		{
+			"id": "house_key",
+			"name": "House Key",
+			"notes": "",
+			"consumable": false,
+			"custom": {},
+			"description": "Opens the house in town.",
+			"effects": [],
+			"icon": 104,
+			"key_item": true,
+			"occasion": "never",
+			"price": 0,
+			"scope": "none"
+		}
+	]
+}

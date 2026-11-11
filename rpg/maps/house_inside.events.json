@@ -1,0 +1,304 @@
+{
+	"schema_version": 1,
+	"map": "house_inside",
+	"events": [
+		{
+			"id": "exit",
+			"name": "Transfer",
+			"position": [5, 9],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "down",
+							"fade": "black",
+							"to": {
+								"map": "town",
+								"position": [5, 6]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "house_chest",
+			"name": "Treasure",
+			"position": [2, 7],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "chest_open"
+							}
+						},
+						{
+							"type": "move_route",
+							"steps": [
+								{
+									"turn": "left"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "right"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "up"
+								}
+							],
+							"target": "this",
+							"wait": true
+						},
+						{
+							"type": "change_gold",
+							"amount": 100,
+							"operation": "increase"
+						},
+						{
+							"type": "show_text",
+							"text": "Found 100 gold!"
+						},
+						{
+							"type": "set_self_switch",
+							"switch": "A",
+							"value": true
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 1,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				},
+				{
+					"commands": [],
+					"conditions": [
+						{
+							"id": "A",
+							"kind": "self_switch"
+						}
+					],
+					"graphic": {
+						"facing": "up",
+						"index": 1,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "bed",
+			"name": "Bed",
+			"position": [9, 3],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "A soft bed. Rest a while?"
+						},
+						{
+							"type": "show_choices",
+							"choices": [
+								{
+									"label": "Sleep",
+									"then": [
+										{
+											"type": "fade_out",
+											"seconds": 1
+										},
+										{
+											"type": "play_jingle",
+											"sound": {
+												"role": "inn_rest"
+											},
+											"wait": false
+										},
+										{
+											"type": "wait",
+											"seconds": 1.5
+										},
+										{
+											"type": "recover_all",
+											"target": "party"
+										},
+										{
+											"type": "fade_in",
+											"seconds": 1
+										},
+										{
+											"type": "show_text",
+											"face": null,
+											"text": "You feel refreshed."
+										}
+									]
+								},
+								{
+									"label": "Not now",
+									"then": []
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "mira",
+			"name": "Mira",
+			"position": [3, 5],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Mira",
+							"face": {
+								"index": 1,
+								"sheet": "hero_face"
+							},
+							"text": "I'm Mira, the elder's apprentice. You're going after the goblin? Then I'm coming too!"
+						},
+						{
+							"type": "change_party",
+							"actor": "mira",
+							"operation": "add"
+						},
+						{
+							"type": "play_jingle",
+							"sound": {
+								"role": "level_up"
+							}
+						},
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "\\C[3]Mira joined the party!\\C[0]"
+						},
+						{
+							"type": "erase_event"
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 1,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "random",
+						"frequency": 2,
+						"speed": 2
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				},
+				{
+					"commands": [],
+					"conditions": [
+						{
+							"id": "mira",
+							"kind": "actor"
+						}
+					],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "action_button"
+				}
+			]
+		}
+	]
+}

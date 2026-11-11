@@ -1,0 +1,32 @@
+{
+	"schema_version": 1,
+	"id": "letter_sounds",
+	"name": "Letter sounds",
+	"description": "A short blip plays as message text appears, with a little random pitch and volume, so speech sounds like talking. Per-actor sounds, codes to change the sound inside a message, and an option row to turn it off.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["letter_sounds.gd"],
+	"commands": ["commands/letter_sound_settings.gd"],
+	"save_sections": [{"namespace": "letter_sounds", "version": 1}],
+	"custom_fields": {
+		"actors": [
+			{"key": "letter_sound", "kind": "sound", "label": "Letter sound (Letter sounds plugin)", "default": null,
+				"help": "Played while this actor speaks: a message whose face or name is the actor's. Empty: the plugin's sound."}
+		]
+	},
+	"options": [
+		{"key": "enabled", "kind": "bool", "label": "Letter Sounds", "default": true, "help": "A short sound as message text appears."}
+	],
+	"settings_schema": [
+		{"key": "sound", "kind": "sound", "label": "Sound", "default": {"file": "", "volume": 60, "pitch": 100, "pan": 0},
+			"help": "Empty file: a built-in blip."},
+		{"key": "interval", "kind": "int", "label": "Every N letters", "default": 2, "min": 1, "max": 10},
+		{"key": "pitch_variance", "kind": "int", "label": "Pitch variation (%)", "default": 10, "min": 0, "max": 50},
+		{"key": "volume_variance", "kind": "int", "label": "Volume variation (%)", "default": 10, "min": 0, "max": 50},
+		{"key": "silent_chars", "kind": "text", "label": "Silent characters", "default": " .,!?;:-'\"()…"},
+		{"key": "actor_sounds", "kind": "bool", "label": "Use each actor's own sound", "default": true}
+	]
+}

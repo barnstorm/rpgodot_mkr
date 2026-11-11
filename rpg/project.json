@@ -1,0 +1,23 @@
+{
+	"schema_version": 1,
+	"project_id": "sample_quest",
+	"name": "Sample Quest",
+	"custom_fields": {
+		"weapons": [{"key": "fishing_power", "kind": "int", "label": "Fishing power", "default": 0}]
+	},
+	"disabled_extensions": [],
+	"extensions": ["project"],
+	"rules": "classic",
+	"scenes": {
+		"battle": "",
+		"game_over": "",
+		"menu": "",
+		"message_box": "",
+		"name_input": "",
+		"options": "",
+		"save": "",
+		"shop": "",
+		"title": ""
+	},
+	"sound_roles": {}
+}

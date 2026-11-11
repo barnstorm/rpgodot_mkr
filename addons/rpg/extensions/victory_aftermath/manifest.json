@@ -1,0 +1,30 @@
+{
+	"schema_version": 1,
+	"id": "victory_aftermath",
+	"name": "Victory aftermath",
+	"description": "One results screen after a won battle (EXP bars that fill per actor, gold and items found), then a level-up screen per actor with the stat changes, newly learned skills and a quote.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["victory_aftermath.gd"],
+	"commands": [],
+	"custom_fields": {
+		"actors": [
+			{"key": "level_up_quotes", "kind": "multiline", "label": "Level-up quotes (Victory aftermath, one per line)", "default": "",
+				"help": "One is picked at random for this actor's level-up screen. Text codes such as \\N[hero] work."},
+			{"key": "new_skill_quotes", "kind": "multiline", "label": "New skill quotes (Victory aftermath, one per line)", "default": "",
+				"help": "Used instead of a level-up quote when the actor learned a skill. Empty: the level-up quotes."}
+		]
+	},
+	"settings_schema": [
+		{"key": "title", "kind": "text", "label": "Results title", "default": "Victory!"},
+		{"key": "fill_seconds", "kind": "float", "label": "Seconds the EXP bars take to fill", "default": 1.2, "min": 0.0, "max": 10.0,
+			"help": "OK fills them at once."},
+		{"key": "level_up_screens", "kind": "bool", "label": "A level-up screen for each actor who went up", "default": true},
+		{"key": "level_up_text", "kind": "text", "label": "Level-up tag", "default": "LEVEL UP!"},
+		{"key": "music", "kind": "sound", "label": "Music during the results (empty: keep the victory jingle)", "default": {"file": "", "volume": 80, "pitch": 100, "pan": 0}},
+		{"key": "skip_auto", "kind": "bool", "label": "Skip the results in auto battle (the reward messages show instead)", "default": true}
+	]
+}

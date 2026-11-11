@@ -1,0 +1,20 @@
+{
+	"schema_version": 1,
+	"maps": [
+		{
+			"id": "town",
+			"name": "Village",
+			"description": "A village with houses, a pond and paths"
+		},
+		{
+			"id": "field",
+			"name": "Grassland",
+			"description": "Open field with trees"
+		},
+		{
+			"id": "house_inside",
+			"name": "House interior",
+			"description": "A small room"
+		}
+	]
+}

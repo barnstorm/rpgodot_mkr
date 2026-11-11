@@ -1,0 +1,54 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "warrior",
+			"name": "Warrior",
+			"notes": "",
+			"custom": {},
+			"equip": {"armor_types": ["light", "shield"], "weapon_types": ["sword"]},
+			"exp_curve": {"basis": 25, "inflation": 30},
+			"growth": {
+				"agi": {"base": 10, "per_level": 1},
+				"atk": {"base": 4, "per_level": 1},
+				"dex": {"base": 12, "per_level": 1},
+				"int": {"base": 5, "per_level": 1},
+				"mdef": {"base": 4, "per_level": 1},
+				"mhp": {"base": 120, "per_level": 25},
+				"msp": {"base": 10, "per_level": 3},
+				"pdef": {"base": 6, "per_level": 1},
+				"str": {"base": 14, "per_level": 2}
+			},
+			"learnings": [
+				{"level": 3, "skill": "power_strike"}
+			],
+			"traits": [
+				{"kind": "state_rate", "id": "sleep", "value": 50}
+			]
+		},
+		{
+			"id": "mage",
+			"name": "Mage",
+			"notes": "",
+			"custom": {},
+			"equip": {"armor_types": ["light"], "weapon_types": []},
+			"exp_curve": {"basis": 28, "inflation": 35},
+			"growth": {
+				"agi": {"base": 11, "per_level": 1},
+				"atk": {"base": 2, "per_level": 1},
+				"dex": {"base": 10, "per_level": 1},
+				"int": {"base": 16, "per_level": 2},
+				"mdef": {"base": 8, "per_level": 2},
+				"mhp": {"base": 90, "per_level": 18},
+				"msp": {"base": 40, "per_level": 6},
+				"pdef": {"base": 4, "per_level": 1},
+				"str": {"base": 7, "per_level": 1}
+			},
+			"learnings": [
+				{"level": 1, "skill": "heal"},
+				{"level": 1, "skill": "fire"}
+			],
+			"traits": []
+		}
+	]
+}

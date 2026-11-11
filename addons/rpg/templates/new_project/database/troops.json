@@ -1,0 +1,55 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "slimes",
+			"name": "Slime x2",
+			"notes": "",
+			"can_escape": true,
+			"custom": {},
+			"members": [
+				{"enemy": "slime", "hidden": false, "position": [120, 150]},
+				{"enemy": "slime", "hidden": false, "position": [200, 150]}
+			],
+			"pages": []
+		},
+		{
+			"id": "bats",
+			"name": "Bat x2",
+			"notes": "",
+			"can_escape": true,
+			"custom": {},
+			"members": [
+				{"enemy": "bat", "hidden": false, "position": [130, 110]},
+				{"enemy": "bat", "hidden": false, "position": [190, 120]}
+			],
+			"pages": []
+		},
+		{
+			"id": "goblin_boss",
+			"name": "Goblin and Slimes",
+			"notes": "",
+			"can_escape": false,
+			"custom": {},
+			"members": [
+				{"enemy": "goblin", "hidden": false, "position": [160, 130]},
+				{"enemy": "slime", "hidden": false, "position": [90, 160]},
+				{"enemy": "slime", "hidden": false, "position": [230, 160]}
+			],
+			"pages": [
+				{
+					"id": "goblin_snarls",
+					"name": "Goblin snarls",
+					"commands": [
+						{"type": "show_text", "face": null, "text": "The goblin snarls!"}
+					],
+					"conditions": [
+						{"kind": "turn", "every": 0, "n": 2}
+					],
+					"priority": 0,
+					"span": "once_per_battle"
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,57 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "elements",
+			"name": "Elements",
+			"notes": "",
+			"custom": {},
+			"entries": [
+				{"id": "fire", "name": "Fire"},
+				{"id": "ice", "name": "Ice"},
+				{"id": "physical", "name": "Physical"}
+			]
+		},
+		{
+			"id": "skill_types",
+			"name": "Skill types",
+			"notes": "",
+			"custom": {},
+			"entries": [
+				{"id": "magic", "name": "Magic"},
+				{"id": "special", "name": "Special"}
+			]
+		},
+		{
+			"id": "weapon_types",
+			"name": "Weapon types",
+			"notes": "",
+			"custom": {},
+			"entries": [
+				{"id": "sword", "name": "Sword"}
+			]
+		},
+		{
+			"id": "armor_types",
+			"name": "Armor types",
+			"notes": "",
+			"custom": {},
+			"entries": [
+				{"id": "light", "name": "Light armor"},
+				{"id": "shield", "name": "Shield"}
+			]
+		},
+		{
+			"id": "equip_slots",
+			"name": "Equipment slots",
+			"notes": "",
+			"custom": {},
+			"entries": [
+				{"id": "weapon", "name": "Weapon", "kind": "weapon"},
+				{"id": "shield", "name": "Shield", "kind": "armor", "armor_types": ["shield"]},
+				{"id": "body", "name": "Body", "kind": "armor", "armor_types": ["light"]},
+				{"id": "accessory", "name": "Accessory", "kind": "armor", "armor_types": []}
+			]
+		}
+	]
+}

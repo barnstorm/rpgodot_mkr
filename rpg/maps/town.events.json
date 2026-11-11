@@ -1,0 +1,890 @@
+{
+	"schema_version": 1,
+	"map": "town",
+	"events": [
+		{
+			"id": "elder",
+			"name": "Elder",
+			"position": [7, 9],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Elder",
+							"face": {
+								"index": 6,
+								"sheet": "hero_face"
+							},
+							"text": "Ah, you're finally awake! Welcome to Riverside, \\N[hero]."
+						},
+						{
+							"type": "show_text",
+							"name": "Elder",
+							"face": {
+								"index": 6,
+								"sheet": "hero_face"
+							},
+							"text": "A goblin has been seen on the road east of the village.\\.\\. Would you look into it?"
+						},
+						{
+							"type": "show_text",
+							"name": "Elder",
+							"face": {
+								"index": 6,
+								"sheet": "hero_face"
+							},
+							"text": "Here, take the key to my house. Rest there whenever you need."
+						},
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "decision"
+							}
+						},
+						{
+							"type": "change_items",
+							"amount": 1,
+							"item": "house_key",
+							"item_kind": "items",
+							"operation": "increase"
+						},
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "\\C[4]Received the House Key!\\C[0]"
+						},
+						{
+							"type": "set_self_switch",
+							"switch": "A",
+							"value": true
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 6,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "autorun"
+				},
+				{
+					"commands": [
+						{
+							"type": "if",
+							"condition": {
+								"id": "goblin_defeated",
+								"kind": "switch"
+							},
+							"else": [
+								{
+									"type": "show_text",
+									"name": "Elder",
+									"face": {
+										"index": 6,
+										"sheet": "hero_face"
+									},
+									"text": "The goblin is somewhere on the eastern road. Buy potions at the shop first!"
+								}
+							],
+							"then": [
+								{
+									"type": "show_text",
+									"name": "Elder",
+									"face": {
+										"index": 6,
+										"sheet": "hero_face"
+									},
+									"text": "You drove off the goblin! The whole village thanks you, \\N[hero]."
+								}
+							]
+						}
+					],
+					"conditions": [
+						{
+							"id": "A",
+							"kind": "self_switch"
+						}
+					],
+					"graphic": {
+						"facing": "down",
+						"index": 6,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "elder_door",
+			"name": "Door",
+			"position": [5, 5],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "It's locked."
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 0,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				},
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "door_open"
+							}
+						},
+						{
+							"type": "move_route",
+							"steps": [
+								{
+									"turn": "left"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "right"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "up"
+								},
+								{
+									"through": true
+								}
+							],
+							"target": "this",
+							"wait": true
+						},
+						{
+							"type": "move_route",
+							"skip_if_blocked": true,
+							"steps": [
+								{
+									"step": "forward"
+								}
+							],
+							"target": "player",
+							"wait": true
+						},
+						{
+							"type": "transfer_player",
+							"facing": "keep",
+							"fade": "black",
+							"to": {
+								"map": "house_inside",
+								"position": [5, 8]
+							}
+						}
+					],
+					"conditions": [
+						{
+							"id": "house_key",
+							"kind": "item"
+						}
+					],
+					"graphic": {
+						"facing": "down",
+						"index": 0,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "garden_chest",
+			"name": "Treasure",
+			"position": [7, 6],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "chest_open"
+							}
+						},
+						{
+							"type": "move_route",
+							"steps": [
+								{
+									"turn": "left"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "right"
+								},
+								{
+									"wait": 0.05
+								},
+								{
+									"turn": "up"
+								}
+							],
+							"target": "this",
+							"wait": true
+						},
+						{
+							"type": "change_items",
+							"amount": 1,
+							"item": "potion",
+							"item_kind": "items",
+							"operation": "increase"
+						},
+						{
+							"type": "show_text",
+							"text": "Found a Potion!"
+						},
+						{
+							"type": "set_self_switch",
+							"switch": "A",
+							"value": true
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 1,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				},
+				{
+					"commands": [],
+					"conditions": [
+						{
+							"id": "A",
+							"kind": "self_switch"
+						}
+					],
+					"graphic": {
+						"facing": "up",
+						"index": 1,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "village_sign",
+			"name": "Sign",
+			"position": [13, 9],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"text": "Riverside Village\nEast: the Green Field road.\nWest: the elder's house."
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 2,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "shopkeeper",
+			"name": "Shop",
+			"position": [20, 6],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Shopkeeper",
+							"face": {
+								"index": 3,
+								"sheet": "hero_face"
+							},
+							"text": "Welcome! Take a look."
+						},
+						{
+							"type": "shop",
+							"buy_only": false,
+							"goods": [
+								{
+									"id": "potion",
+									"kind": "items",
+									"price": null
+								},
+								{
+									"id": "hi_potion",
+									"kind": "items",
+									"price": null
+								},
+								{
+									"id": "antidote",
+									"kind": "items",
+									"price": null
+								},
+								{
+									"id": "iron_sword",
+									"kind": "weapons",
+									"price": null
+								},
+								{
+									"id": "wooden_shield",
+									"kind": "armors",
+									"price": null
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 3,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "innkeeper",
+			"name": "Inn",
+			"position": [23, 15],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Innkeeper",
+							"face": {
+								"index": 4,
+								"sheet": "hero_face"
+							},
+							"gold_window": true,
+							"text": "Welcome! A night's stay is 20 gold. Would you like to rest?"
+						},
+						{
+							"type": "show_choices",
+							"choices": [
+								{
+									"label": "Yes",
+									"then": [
+										{
+											"type": "if",
+											"condition": {
+												"kind": "gold",
+												"op": ">=",
+												"value": 20
+											},
+											"else": [
+												{
+													"type": "show_text",
+													"text": "Sorry, you don't have enough gold."
+												}
+											],
+											"then": [
+												{
+													"type": "change_gold",
+													"amount": 20,
+													"operation": "decrease"
+												},
+												{
+													"type": "fade_out"
+												},
+												{
+													"type": "play_jingle",
+													"sound": {
+														"role": "inn_rest"
+													}
+												},
+												{
+													"type": "wait",
+													"seconds": 3
+												},
+												{
+													"type": "recover_all",
+													"target": "party"
+												},
+												{
+													"type": "fade_in"
+												},
+												{
+													"type": "show_text",
+													"text": "Good morning! Safe travels."
+												}
+											]
+										}
+									]
+								},
+								{
+									"label": "No",
+									"then": [
+										{
+											"type": "show_text",
+											"text": "Please come again."
+										}
+									]
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 4,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "villager",
+			"name": "Villager",
+			"position": [10, 12],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Villager",
+							"face": {
+								"index": 2,
+								"sheet": "hero_face"
+							},
+							"text": "Lovely weather today, isn't it?"
+						},
+						{
+							"type": "show_text",
+							"name": "Villager",
+							"face": {
+								"index": 2,
+								"sheet": "hero_face"
+							},
+							"text": "They say the old pond is full of fish. Talk to the fisherman!"
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 2,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "random",
+						"frequency": 2,
+						"speed": 2
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "child",
+			"name": "Child",
+			"position": [18, 14],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"id": "talks",
+							"type": "set_variable",
+							"operation": "add",
+							"value": 1
+						},
+						{
+							"type": "if",
+							"condition": {
+								"id": "talks",
+								"kind": "variable",
+								"op": ">=",
+								"value": 3
+							},
+							"else": [
+								{
+									"type": "show_text",
+									"name": "Child",
+									"face": {
+										"index": 7,
+										"sheet": "hero_face"
+									},
+									"text": "Hi! I'm practising my sword moves!"
+								}
+							],
+							"then": [
+								{
+									"type": "show_text",
+									"name": "Child",
+									"face": {
+										"index": 7,
+										"sheet": "hero_face"
+									},
+									"text": "You've talked to me \\V[talks] times! Are you bored?"
+								},
+								{
+									"type": "show_balloon",
+									"balloon": "music",
+									"target": "this"
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 7,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "random",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "fisherman",
+			"name": "Fisherman",
+			"position": [9, 16],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Fisherman",
+							"face": {
+								"index": 5,
+								"sheet": "hero_face"
+							},
+							"text": "Want to try fishing? Press OK when the float is in the green zone."
+						},
+						{
+							"type": "show_choices",
+							"choices": [
+								{
+									"label": "Let's fish!",
+									"then": [
+										{
+											"type": "run_scene",
+											"args": {
+												"rounds": 3,
+												"speed": 1
+											},
+											"on_cancel": [
+												{
+													"type": "show_text",
+													"name": "Fisherman",
+													"face": {
+														"index": 5,
+														"sheet": "hero_face"
+													},
+													"text": "Come back any time."
+												}
+											],
+											"result": "fish_caught",
+											"scene": "res://scenes/fishing/fishing.tscn"
+										},
+										{
+											"type": "if",
+											"condition": {
+												"id": "fish_caught",
+												"kind": "variable",
+												"op": ">=",
+												"value": 2
+											},
+											"else": [
+												{
+													"type": "show_text",
+													"name": "Fisherman",
+													"face": {
+														"index": 5,
+														"sheet": "hero_face"
+													},
+													"text": "Only \\V[fish_caught]. Keep practising!"
+												}
+											],
+											"then": [
+												{
+													"type": "show_text",
+													"name": "Fisherman",
+													"face": {
+														"index": 5,
+														"sheet": "hero_face"
+													},
+													"text": "\\V[fish_caught] fish! Here, take this for your trouble."
+												},
+												{
+													"type": "change_items",
+													"amount": 1,
+													"item": "hi_potion",
+													"item_kind": "items",
+													"operation": "increase"
+												}
+											]
+										}
+									]
+								},
+								{
+									"label": "Not now",
+									"then": []
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "left",
+						"index": 5,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "to_field_a",
+			"name": "Transfer",
+			"position": [29, 10],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "right",
+							"fade": "black",
+							"to": {
+								"map": "field",
+								"position": [1, 10]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "to_field_b",
+			"name": "Transfer",
+			"position": [29, 11],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "right",
+							"fade": "black",
+							"to": {
+								"map": "field",
+								"position": [1, 11]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		}
+	]
+}

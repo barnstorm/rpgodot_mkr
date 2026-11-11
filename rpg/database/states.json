@@ -1,0 +1,45 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "knockout",
+			"name": "Knockout",
+			"notes": "",
+			"custom": {},
+			"icon": 183,
+			"messages": {"added": "%1 falls!", "removed": "%1 is revived!"},
+			"priority": 100,
+			"remove_at_battle_end": false,
+			"restriction": "cannot_act",
+			"traits": []
+		},
+		{
+			"id": "poison",
+			"name": "Poison",
+			"notes": "",
+			"custom": {},
+			"icon": 176,
+			"messages": {"added": "%1 is poisoned!", "removed": "%1 is no longer poisoned."},
+			"priority": 50,
+			"remove_at_battle_end": false,
+			"restriction": "none",
+			"slip": {"can_kill": false, "percent": 10, "resource": "hp"},
+			"traits": []
+		},
+		{
+			"id": "sleep",
+			"name": "Sleep",
+			"notes": "",
+			"custom": {},
+			"icon": 177,
+			"messages": {"added": "%1 falls asleep!", "removed": "%1 wakes up."},
+			"priority": 60,
+			"remove_at_battle_end": true,
+			"remove_on_damage": 100,
+			"restriction": "cannot_act",
+			"traits": [{"kind": "stat_rate", "id": "agi", "value": 50}],
+			"turns_max": 4,
+			"turns_min": 2
+		}
+	]
+}

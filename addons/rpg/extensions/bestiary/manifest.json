@@ -1,0 +1,44 @@
+{
+	"schema_version": 1,
+	"id": "bestiary",
+	"name": "Bestiary",
+	"description": "An enemy book in the main menu that fills in as enemies are seen and defeated: categories and completion, the picture, stats, weaknesses and resistances, drops and lore. Unknown enemies are masked.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["bestiary.gd"],
+	"commands": ["commands/open_bestiary.gd", "commands/reveal_enemy.gd"],
+	"save_sections": [{"namespace": "enemy_records", "version": 1}],
+	"menu_entries": [
+		{"id": "bestiary", "label": "Bestiary", "after": "status", "method": "open_from_menu", "show_method": "menu_entry_shown"}
+	],
+	"custom_fields": {
+		"enemies": [
+			{"key": "category", "kind": "text", "label": "Bestiary category (ID from the plugin settings)", "default": ""},
+			{"key": "lore", "kind": "multiline", "label": "Bestiary lore", "default": ""},
+			{"key": "hide_in_bestiary", "kind": "bool", "label": "Leave out of the bestiary", "default": false}
+		]
+	},
+	"settings_schema": [
+		{"key": "categories", "kind": "list", "label": "Categories", "default": [],
+			"help": "Tabs after \"All\". An enemy's Bestiary category field holds one of these IDs.",
+			"item_fields": [
+				{"key": "id", "kind": "text", "label": "ID"},
+				{"key": "label", "kind": "text", "label": "Label"}
+			]},
+		{"key": "seen_shows", "kind": "choice", "options": ["name", "image", "stats", "all"],
+			"option_labels": ["Name only", "Name and picture", "Name, picture and stats", "Everything"],
+			"default": "image", "label": "An enemy seen but not defeated shows"},
+		{"key": "defeated_shows", "kind": "choice", "options": ["name", "image", "stats", "all"],
+			"option_labels": ["Name only", "Name and picture", "Name, picture and stats", "Everything"],
+			"default": "all", "label": "A defeated enemy shows"},
+		{"key": "mask", "kind": "choice", "options": ["silhouette", "question", "hidden"],
+			"option_labels": ["A dark silhouette and ??????", "?????? only", "Not listed until seen"],
+			"default": "silhouette", "label": "Enemies never seen"},
+		{"key": "menu_entry", "kind": "bool", "label": "Bestiary in the main menu", "default": true},
+		{"key": "menu_label", "kind": "text", "label": "Menu label", "default": "Bestiary"},
+		{"key": "menu_icon", "kind": "icon", "label": "Menu icon (the menu's command column is narrow: with icons, long labels are cut)", "default": 0}
+	]
+}

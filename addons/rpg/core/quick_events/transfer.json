@@ -1,0 +1,26 @@
+{
+	"schema_version": 1,
+	"name": "Transfer",
+	"version": 1,
+	"author": "RPG Kit",
+	"description": "An invisible event that moves the player when touched.",
+	"asks": [
+		{"key": "destination", "type": "map_location", "label": "Where to?"},
+		{"key": "facing", "type": "facing", "label": "Face which way?", "default": "keep"}
+	],
+	"event": {
+		"name": "Transfer",
+		"pages": [
+			{
+				"conditions": [],
+				"graphic": null,
+				"priority": "below",
+				"trigger": "player_touch",
+				"commands": [
+					{"type": "play_sound", "sound": {"role": "step"}},
+					{"type": "transfer_player", "to": "{{destination}}", "facing": "{{facing}}", "fade": "black"}
+				]
+			}
+		]
+	}
+}

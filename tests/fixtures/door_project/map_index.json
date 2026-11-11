@@ -1,0 +1,8 @@
+{
+	"schema_version": 1,
+	"maps": [
+		{"id": "town", "name": "Town", "parent": "", "order": 0, "scene": "res://tests/fixtures/door_project/maps/town.tscn", "properties": "res://tests/fixtures/door_project/maps/town.map.json", "events": "res://tests/fixtures/door_project/maps/town.events.json"},
+		{"id": "house_inside", "name": "House", "parent": "town", "order": 0, "scene": "res://tests/fixtures/door_project/maps/house_inside.tscn", "properties": "res://tests/fixtures/door_project/maps/house_inside.map.json", "events": "res://tests/fixtures/door_project/maps/house_inside.events.json"}
+	],
+	"favourites": []
+}

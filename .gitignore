@@ -1,0 +1,32 @@
+# Godot
+.godot/
+*.tmp
+export_credentials.cfg
+
+# Exported builds
+build/
+
+# Local machine settings
+tools/godot_path.local
+
+# Crash dumps
+*.stackdump
+
+# Kept local only
+Godot as RPG Maker Design Spec.md
+
+# Screenshot with real RPG Maker art (RPG Maker EULA: not ours to distribute)
+tools/shots/rm_real.png
+
+# Never commit RPG Maker files, Windows' gm.dls or third-party soundfonts
+*.dls
+*.sf2
+*.sf3
+*.rpgmvp
+*.rpgmvo
+*.rxdata
+*.rvdata
+*.rvdata2
+*.lmu
+*.ldb
+*.lmt

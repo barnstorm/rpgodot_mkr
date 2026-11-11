@@ -1,0 +1,47 @@
+{
+	"schema_version": 1,
+	"name": "Inn",
+	"version": 1,
+	"author": "RPG Kit",
+	"description": "An innkeeper who asks to stay, takes gold and heals the party.",
+	"asks": [
+		{"key": "image", "type": "image", "res": "charset", "label": "Innkeeper image"},
+		{"key": "price", "type": "amount", "label": "Price for one night", "default": 10, "min": 0}
+	],
+	"event": {
+		"name": "Inn",
+		"pages": [
+			{
+				"conditions": [],
+				"graphic": {"sheet": "{{image.sheet}}", "index": "{{image.index}}", "facing": "down"},
+				"priority": "same",
+				"trigger": "action_button",
+				"commands": [
+					{"type": "show_text", "gold_window": true,
+						"text": "Welcome! A night's stay is {{price}} gold. Would you like to rest?"},
+					{"type": "show_choices", "choices": [
+						{"label": "Yes", "then": [
+							{"type": "if", "condition": {"kind": "gold", "op": ">=", "value": "{{price}}"},
+								"then": [
+									{"type": "change_gold", "operation": "decrease", "amount": "{{price}}"},
+									{"type": "fade_out"},
+									{"type": "play_jingle", "sound": {"role": "inn_rest"}},
+									{"type": "wait", "seconds": 3},
+									{"type": "recover_all", "target": "party"},
+									{"type": "fade_in"},
+									{"type": "show_text", "text": "Good morning! Safe travels."}
+								],
+								"else": [
+									{"type": "show_text", "text": "Sorry, you don't have enough gold."}
+								]
+							}
+						]},
+						{"label": "No", "then": [
+							{"type": "show_text", "text": "Please come again."}
+						]}
+					]}
+				]
+			}
+		]
+	}
+}

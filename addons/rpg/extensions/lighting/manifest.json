@@ -1,0 +1,76 @@
+{
+	"schema_version": 1,
+	"id": "lighting",
+	"name": "Lighting and time of day",
+	"description": "Dark maps (a map property or a command) with soft lights on events, around the player and an optional flashlight; a game clock that tints outdoor maps from dawn to dusk to night, clock commands, a Time of day condition and an optional clock on screen.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["lighting.gd"],
+	"commands": ["commands/set_darkness.gd", "commands/set_player_light.gd", "commands/set_event_light.gd", "commands/set_time.gd", "commands/add_time.gd", "commands/pause_time.gd"],
+	"save_sections": [{"namespace": "lighting", "version": 1}],
+	"custom_fields": {
+		"maps": [
+			{"key": "darkness", "kind": "object", "default": null, "off_value": null, "toggle_label": "Dark map (Lighting plugin)", "label": "Darkness",
+				"help": "The map is dark; lights on events and around the player show through.",
+				"fields": [
+					{"key": "colour", "kind": "color", "default": [8, 8, 24, 255], "label": "Colour"},
+					{"key": "strength", "kind": "int", "default": 85, "min": 0, "max": 100, "label": "Strength (%)"}
+				]},
+			{"key": "indoor", "kind": "bool", "default": false, "label": "Indoor: no time-of-day tint (Lighting plugin)"}
+		],
+		"event_pages": [
+			{"key": "light", "kind": "object", "default": null, "off_value": null, "toggle_label": "Gives off light (Lighting plugin)", "label": "Light",
+				"help": "Seen on dark maps and at night. Each page has its own light, so a torch can be lit by a page change.",
+				"fields": [
+					{"key": "radius", "kind": "float", "default": 3.0, "min": 0.5, "max": 30.0, "label": "Radius (tiles)"},
+					{"key": "colour", "kind": "color", "default": [255, 214, 150, 255], "label": "Colour"},
+					{"key": "intensity", "kind": "int", "default": 100, "min": 0, "max": 100, "label": "Brightness (%)"},
+					{"key": "flicker", "kind": "bool", "default": false, "label": "Flickers (when the player's Light Flicker option is on)"}
+				]}
+		]
+	},
+	"conditions": [
+		{"kind": "time_of_day", "label": "Time of day", "method": "check_condition", "fields": [
+			{"key": "from", "kind": "int", "default": 18, "min": 0, "max": 23, "label": "From hour"},
+			{"key": "to", "kind": "int", "default": 6, "min": 0, "max": 24, "label": "Until hour (not included)", "help": "From 18 until 6 is the night, across midnight."}
+		]}
+	],
+	"options": [
+		{"key": "flicker", "kind": "bool", "label": "Light Flicker", "default": false, "help": "Torches and lamps that are set to flicker do."}
+	],
+	"settings_schema": [
+		{"key": "darkness_colour", "kind": "color", "label": "Darkness colour (commands' default)", "default": [8, 8, 24, 255]},
+		{"key": "player_light", "kind": "bool", "label": "Light around the player", "default": true},
+		{"key": "player_radius", "kind": "float", "label": "Player light radius (tiles)", "default": 3.5, "min": 0.5, "max": 30.0, "show_if": {"key": "player_light", "equals": true}},
+		{"key": "player_colour", "kind": "color", "label": "Player light colour", "default": [255, 240, 210, 255], "show_if": {"key": "player_light", "equals": true}},
+		{"key": "flashlight", "kind": "bool", "label": "Flashlight (a cone in the facing direction)", "default": false},
+		{"key": "flashlight_length", "kind": "float", "label": "Flashlight length (tiles)", "default": 7.0, "min": 1.0, "max": 30.0, "show_if": {"key": "flashlight", "equals": true}},
+		{"key": "flashlight_angle", "kind": "int", "label": "Flashlight width (degrees)", "default": 60, "min": 10, "max": 170, "show_if": {"key": "flashlight", "equals": true}},
+		{"key": "day_night", "kind": "bool", "label": "Time of day (a clock that tints outdoor maps)", "default": false},
+		{"key": "minutes_per_hour", "kind": "float", "label": "Real minutes per game hour", "default": 1.0, "min": 0.05, "max": 120.0, "show_if": {"key": "day_night", "equals": true}},
+		{"key": "start_hour", "kind": "int", "label": "Hour when a new game starts", "default": 8, "min": 0, "max": 23, "show_if": {"key": "day_night", "equals": true}},
+		{"key": "hour_tints", "kind": "list", "label": "Outdoor colour by hour", "show_if": {"key": "day_night", "equals": true},
+			"help": "The colour outdoor maps are tinted with at each listed hour; hours in between blend smoothly. White is no tint.",
+			"default": [
+				{"hour": 0, "colour": [70, 80, 140, 255]},
+				{"hour": 4, "colour": [80, 88, 150, 255]},
+				{"hour": 6, "colour": [235, 170, 150, 255]},
+				{"hour": 8, "colour": [255, 255, 255, 255]},
+				{"hour": 16, "colour": [255, 255, 255, 255]},
+				{"hour": 18, "colour": [255, 165, 110, 255]},
+				{"hour": 20, "colour": [110, 110, 175, 255]},
+				{"hour": 22, "colour": [70, 80, 140, 255]}
+			],
+			"item_fields": [
+				{"key": "hour", "kind": "int", "default": 12, "min": 0, "max": 23, "label": "Hour"},
+				{"key": "colour", "kind": "color", "default": [255, 255, 255, 255], "label": "Colour"}
+			]},
+		{"key": "hour_variable", "kind": "ref", "ref": "variable", "label": "Copy the hour into variable", "default": "", "show_if": {"key": "day_night", "equals": true}},
+		{"key": "pause_in_menus", "kind": "bool", "label": "The clock stops in menus and battles", "default": true, "show_if": {"key": "day_night", "equals": true}},
+		{"key": "clock", "kind": "bool", "label": "Show the clock on the map", "default": false, "show_if": {"key": "day_night", "equals": true}},
+		{"key": "clock_corner", "kind": "choice", "options": ["top_left", "top_right", "bottom_left", "bottom_right"], "option_labels": ["Top left", "Top right", "Bottom left", "Bottom right"], "default": "bottom_right", "label": "Clock corner", "show_if": {"key": "clock", "equals": true}}
+	]
+}

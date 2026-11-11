@@ -1,0 +1,28 @@
+{
+	"schema_version": 1,
+	"id": "party_formation",
+	"name": "Party formation",
+	"description": "Active and reserve party members: a Formation screen (main menu and event command) to swap them, locked and required members, a maximum number of battle members, and only the active members fight.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["party_formation.gd"],
+	"commands": ["commands/open_formation.gd", "commands/formation_member.gd", "commands/formation_size.gd"],
+	"save_sections": [{"namespace": "party_formation", "version": 1}],
+	"menu_entries": [
+		{"id": "formation", "label": "Formation", "after": "status", "method": "open_from_menu", "show_method": "menu_entry_shown"}
+	],
+	"settings_schema": [
+		{"key": "max_battle", "kind": "int", "label": "Battle members", "default": 4, "min": 1, "max": 4,
+			"help": "How many members fight; the others wait in reserve. Events can change it (Change battle members)."},
+		{"key": "allow_remove", "kind": "bool", "label": "Members can be moved to the reserve without a swap", "default": true},
+		{"key": "reserve_exp", "kind": "int", "label": "EXP for reserve members (% of the battle's EXP)", "default": 0, "min": 0, "max": 100},
+		{"key": "menu_entry", "kind": "bool", "label": "Formation in the main menu", "default": true},
+		{"key": "menu_label", "kind": "text", "label": "Menu label", "default": "Formation"},
+		{"key": "menu_icon", "kind": "icon", "label": "Menu icon (the menu's command column is narrow: with icons, long labels are cut)", "default": 0},
+		{"key": "lock_icon", "kind": "icon", "label": "Icon of locked members", "default": 13},
+		{"key": "required_icon", "kind": "icon", "label": "Icon of required members", "default": 4}
+	]
+}

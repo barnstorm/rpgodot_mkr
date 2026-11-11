@@ -1,0 +1,122 @@
+{
+	"schema_version": 1,
+	"map": "town",
+	"events": [
+		{
+			"id": "town_house_door",
+			"name": "House Door",
+			"position": [12, 7],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [],
+					"graphic": {"sheet": "door_wood", "facing": "down"},
+					"movement": {"type": "fixed"},
+					"options": {"walk_anim": false, "step_anim": false, "direction_fix": false, "through": false},
+					"priority": "same",
+					"trigger": "action_button",
+					"commands": [
+						{"type": "show_text", "face": null, "text": "It's locked."}
+					]
+				},
+				{
+					"conditions": [{"kind": "switch", "id": "door_unlocked"}],
+					"graphic": {"sheet": "door_wood", "facing": "down"},
+					"movement": {"type": "fixed"},
+					"options": {"walk_anim": false, "step_anim": false, "direction_fix": false, "through": false},
+					"priority": "same",
+					"trigger": "action_button",
+					"commands": [
+						{"type": "play_sound", "sound": {"role": "door_open"}},
+						{"type": "transfer_player", "to": {"map": "house_inside", "position": [5, 9]}, "facing": "up", "fade": "black"}
+					]
+				}
+			]
+		},
+		{
+			"id": "floor_plate",
+			"name": "Floor plate",
+			"position": [3, 3],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {"walk_anim": false, "step_anim": false, "direction_fix": false, "through": false},
+					"priority": "below",
+					"trigger": "player_touch",
+					"commands": [
+						{"type": "set_variable", "id": "counter", "operation": "add", "value": 1}
+					]
+				}
+			]
+		},
+		{
+			"id": "autorun_evt",
+			"name": "Autorun",
+			"position": [0, 0],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [{"kind": "switch", "id": "autorun_on"}],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {},
+					"priority": "below",
+					"trigger": "autorun",
+					"commands": [
+						{"type": "set_variable", "id": "counter", "operation": "add", "value": 10},
+						{"type": "set_switch", "id": "autorun_on", "value": "off"}
+					]
+				}
+			]
+		},
+		{
+			"id": "parallel_evt",
+			"name": "Parallel",
+			"position": [1, 0],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [{"kind": "switch", "id": "parallel_on"}],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {},
+					"priority": "below",
+					"trigger": "parallel",
+					"commands": [
+						{"type": "set_variable", "id": "ticks", "operation": "add", "value": 1},
+						{"type": "wait", "seconds": 0.05}
+					]
+				}
+			]
+		},
+		{
+			"id": "chest",
+			"name": "Chest",
+			"position": [5, 5],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [],
+					"graphic": null,
+					"priority": "same",
+					"trigger": "action_button",
+					"commands": [
+						{"type": "set_variable", "id": "counter", "operation": "add", "value": 100},
+						{"type": "set_self_switch", "switch": "A", "value": true}
+					]
+				},
+				{
+					"conditions": [{"kind": "self_switch", "id": "A"}],
+					"graphic": null,
+					"options": {"direction_fix": true},
+					"priority": "same",
+					"trigger": "action_button",
+					"commands": []
+				}
+			]
+		}
+	]
+}

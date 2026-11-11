@@ -1,0 +1,25 @@
+{
+	"schema_version": 1,
+	"id": "house_inside",
+	"display_name": "Elder's House",
+	"notes": "",
+	"battle_background": "auto",
+	"bgs": null,
+	"custom": {},
+	"disable_dash": false,
+	"encounters": {
+		"groups": [],
+		"steps": 30
+	},
+	"height": 10,
+	"music": {
+		"file": "inn",
+		"pan": 0,
+		"pitch": 100,
+		"volume": 70
+	},
+	"parallax": null,
+	"scroll": "none",
+	"tileset": "town",
+	"width": 12
+}

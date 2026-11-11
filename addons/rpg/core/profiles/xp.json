@@ -1,0 +1,43 @@
+{
+	"schema_version": 1,
+	"id": "xp",
+	"name": "RPG Maker XP",
+	"version": 1,
+	"status": "supported",
+	"tile_size": 32,
+	"autotile_frame_time": 0.4,
+	"decoders": {
+		"tileset": "RPGTilesheetXP: 8 tiles wide, any height; tile 0 is the eraser",
+		"autotile": "RPGTilesheetXP: 96x128 XP quarter layout (47 variants); wider files animate (96 px per frame, up to 8); 32 px high strips are plain repeating tiles",
+		"charset": "RPGCharset: one character per file, 4 frames x 4 directions",
+		"faceset": "none (XP has no faces)"
+	},
+	"fixtures": "tests/suites/test_profiles.gd (synthetic sheets)",
+	"limitations": [
+		"tile priority and terrain tags are not in the images: imported from a project they come from Data/Tilesets.rxdata; otherwise tiles get documented defaults and a review warning",
+		"an RTP has no Data/Tilesets.rxdata: autotiles are paired with tilesets only where the RTP file names are clear (G_ Grassland, Sn_ Snowfield / SnowTown); the rest are picked by hand"
+	],
+	"layers": ["layer1", "layer2", "layer3"],
+	"extensions": {"image": ["png"], "audio": ["ogg", "wav", "mp3", "mid", "midi"]},
+	"folders": {
+		"autotile": "Graphics/Autotiles",
+		"backdrop": "Graphics/Battlebacks",
+		"battler": "Graphics/Battlers",
+		"charset": "Graphics/Characters",
+		"music": "Audio/BGM",
+		"panorama": "Graphics/Panoramas",
+		"picture": "Graphics/Pictures",
+		"sound": "Audio/SE",
+		"system": "Graphics/Windowskins",
+		"tileset": "Graphics/Tilesets",
+		"title": "Graphics/Titles",
+		"gameover": "Graphics/Gameovers"
+	},
+	"sheets": {
+		"tileset": {"width": 256, "columns": 8},
+		"autotile": {"size": [96, 128], "animated_width_multiple": 96},
+		"charset": {"characters": [1, 1], "frames": 4, "idle_frame": 0, "walk_pattern": [0, 1, 2, 3], "directions": ["down", "left", "right", "up"]},
+		"system": {"size": [192, 128]}
+	},
+	"sound_roles": {}
+}

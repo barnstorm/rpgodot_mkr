@@ -1,0 +1,27 @@
+{
+	"schema_version": 1,
+	"name": "Shop",
+	"version": 1,
+	"author": "RPG Kit",
+	"description": "A shopkeeper who opens the shop with the chosen goods.",
+	"asks": [
+		{"key": "image", "type": "image", "res": "charset", "label": "Shopkeeper image"},
+		{"key": "goods", "type": "goods", "label": "Items for sale"},
+		{"key": "buy_only", "type": "bool", "label": "Buy only (no selling)", "default": false}
+	],
+	"event": {
+		"name": "Shop",
+		"pages": [
+			{
+				"conditions": [],
+				"graphic": {"sheet": "{{image.sheet}}", "index": "{{image.index}}", "facing": "down"},
+				"priority": "same",
+				"trigger": "action_button",
+				"commands": [
+					{"type": "show_text", "text": "Welcome! Take a look."},
+					{"type": "shop", "goods": "{{goods}}", "buy_only": "{{buy_only}}"}
+				]
+			}
+		]
+	}
+}

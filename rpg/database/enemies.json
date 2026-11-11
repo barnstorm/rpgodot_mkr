@@ -1,0 +1,60 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "slime",
+			"name": "Slime",
+			"notes": "",
+			"actions": [
+				{"condition": {"kind": "always"}, "rating": 5, "skill": "attack"}
+			],
+			"battler": "slime",
+			"battler_hue": 0,
+			"custom": {},
+			"drops": [{"kind": "item", "id": "potion", "chance": 10}],
+			"exp": 6,
+			"gold": 8,
+			"level": 1,
+			"stats": {"agi": 6, "atk": 8, "dex": 6, "int": 2, "mdef": 2, "mhp": 40, "msp": 0, "pdef": 4, "str": 8},
+			"traits": [{"kind": "element_rate", "id": "fire", "value": 150}]
+		},
+		{
+			"id": "bat",
+			"name": "Bat",
+			"notes": "",
+			"actions": [
+				{"condition": {"kind": "always"}, "rating": 5, "skill": "attack"}
+			],
+			"battler": "bat",
+			"battler_hue": 0,
+			"custom": {},
+			"drops": [{"kind": "item", "id": "antidote", "chance": 10}],
+			"exp": 5,
+			"gold": 6,
+			"level": 1,
+			"stats": {"agi": 14, "atk": 9, "dex": 10, "int": 2, "mdef": 3, "mhp": 30, "msp": 0, "pdef": 2, "str": 6},
+			"traits": []
+		},
+		{
+			"id": "goblin",
+			"name": "Goblin",
+			"notes": "",
+			"actions": [
+				{"condition": {"kind": "always"}, "rating": 5, "skill": "attack"},
+				{"condition": {"kind": "turn", "every": 3, "n": 3}, "rating": 6, "skill": "power_strike"}
+			],
+			"battler": "goblin",
+			"battler_hue": 0,
+			"custom": {},
+			"drops": [
+				{"kind": "item", "id": "potion", "chance": 50},
+				{"kind": "weapon", "id": "iron_sword", "chance": 5}
+			],
+			"exp": 30,
+			"gold": 50,
+			"level": 3,
+			"stats": {"agi": 9, "atk": 14, "dex": 10, "int": 4, "mdef": 4, "mhp": 150, "msp": 10, "pdef": 8, "str": 16},
+			"traits": [{"kind": "element_rate", "id": "fire", "value": 120}]
+		}
+	]
+}

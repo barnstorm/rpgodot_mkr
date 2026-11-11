@@ -1,0 +1,26 @@
+{
+	"schema_version": 1,
+	"system": {
+		"currency": "G",
+		"default_battle_scene": "res://addons/rpg/runtime/ui/battle/battle_scene.gd",
+		"music": {
+			"battle": "battle",
+			"defeat": "",
+			"title": "title",
+			"victory": "victory"
+		},
+		"start": {
+			"map": "town",
+			"position": [14, 12],
+			"facing": "up"
+		},
+		"starting_gold": 100,
+		"starting_items": {
+			"potion": 2
+		},
+		"starting_party": ["hero"],
+		"title": "Sample Quest",
+		"title_image": "title",
+		"window_skin": "system"
+	}
+}

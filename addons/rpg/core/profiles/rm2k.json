@@ -1,0 +1,74 @@
+{
+	"schema_version": 1,
+	"id": "rm2k",
+	"name": "RPG Maker 2000/2003",
+	"version": 1,
+	"status": "supported",
+	"tile_size": 16,
+	"layers": ["lower", "upper"],
+	"extensions": {
+		"image": ["png"],
+		"audio": ["wav", "ogg", "mp3", "mid", "midi"]
+	},
+	"folders": {
+		"backdrop": "Backdrop",
+		"battler": "Monster",
+		"charset": "CharSet",
+		"chipset": "ChipSet",
+		"faceset": "FaceSet",
+		"gameover": "GameOver",
+		"music": "Music",
+		"panorama": "Panorama",
+		"picture": "Picture",
+		"sound": "Sound",
+		"system": "System",
+		"title": "Title"
+	},
+	"sheets": {
+		"chipset": {"size": [480, 256], "decoder": "rm2k_chipset"},
+		"charset": {
+			"size": [288, 256],
+			"cell": [24, 32],
+			"characters": [4, 2],
+			"frames": 3,
+			"idle_frame": 1,
+			"walk_pattern": [0, 1, 2, 1],
+			"directions": ["up", "right", "down", "left"],
+			"single_prefix": ""
+		},
+		"faceset": {"size": [192, 192], "cell": [48, 48]},
+		"system": {"size": [160, 80]},
+		"battler": {"max_size": [320, 160]},
+		"backdrop": {"size": [320, 160], "alt_sizes": [[320, 240]]},
+		"panorama": {"max_size": [640, 480]},
+		"title": {"size": [320, 240]},
+		"gameover": {"size": [320, 240]}
+	},
+	"sound_roles": {
+		"step": "step",
+		"door_open": "door_open",
+		"chest_open": "chest_open",
+		"inn_rest": "inn_rest",
+		"cursor": "cursor",
+		"decision": "decision",
+		"cancel": "cancel",
+		"buzzer": "buzzer",
+		"save": "save",
+		"battle_start": "battle_start",
+		"attack": "attack",
+		"damage": "damage",
+		"heal": "heal",
+		"escape": "escape",
+		"level_up": "level_up",
+		"victory": "victory",
+		"game_over": "game_over"
+	},
+	"music_roles": {
+		"title": "title",
+		"town": "town",
+		"field": "field",
+		"battle": "battle",
+		"victory": "victory",
+		"inn": "inn"
+	}
+}

@@ -1,0 +1,60 @@
+{
+	"schema_version": 1,
+	"id": "quests",
+	"name": "Quest journal",
+	"description": "Quests in the Database (objectives, rewards, icon), commands to start, finish or fail them and their objectives, a Quests journal in the main menu, a tracker on the map for the chosen quest, a note when a quest changes, and a Quest condition for event pages and Conditional Branch.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["quests.gd"],
+	"commands": ["commands/set_quest_status.gd", "commands/set_objective_state.gd", "commands/track_quest.gd", "commands/open_quest_journal.gd"],
+	"save_sections": [{"namespace": "quests", "version": 1}],
+	"database_types": [
+		{"type": "quests", "label": "Quests", "ref": "quest", "fields": [
+			{"key": "name", "kind": "text", "default": "", "label": "Name"},
+			{"key": "category", "kind": "text", "default": "", "label": "Category",
+				"help": "Main, Side ... The journal lists quests in the order of the plugin's Categories setting, then by name."},
+			{"key": "icon", "kind": "icon", "default": 0, "label": "Icon"},
+			{"key": "giver", "kind": "text", "default": "", "label": "Given by"},
+			{"key": "location", "kind": "text", "default": "", "label": "Location"},
+			{"key": "description", "kind": "multiline", "default": "", "label": "Description", "help": "Shown in the journal. Text codes work (\\C[n], \\N[actor] ...)."},
+			{"key": "objectives", "kind": "list", "default": [], "label": "Objectives",
+				"help": "Each objective has its own state: hidden, shown, completed or failed. Change it with Set objective state.",
+				"item_fields": [
+					{"key": "id", "kind": "text", "default": "", "label": "ID", "help": "Lowercase letters, digits and _ (used by commands and conditions)."},
+					{"key": "text", "kind": "text", "default": "", "label": "Text"},
+					{"key": "hidden", "kind": "bool", "default": false, "label": "Hidden until shown by an event"}
+				]},
+			{"key": "rewards", "kind": "multiline", "default": "", "label": "Rewards (text)", "help": "What the journal says the quest gives. Give the rewards themselves with event commands."}
+		]}
+	],
+	"menu_entries": [
+		{"id": "quests", "label": "Quests", "scene": "res://addons/rpg/extensions/quests/quest_journal.gd", "show_method": "menu_entry_shown"}
+	],
+	"conditions": [
+		{"kind": "quest", "label": "Quest", "method": "check_condition", "fields": [
+			{"key": "quest", "kind": "ref", "ref": "quest", "label": "Quest", "required": true},
+			{"key": "check", "kind": "choice", "options": ["status", "objective"], "option_labels": ["Quest status", "Objective state"], "default": "status", "label": "Check"},
+			{"key": "status", "kind": "choice", "options": ["unknown", "active", "completed", "failed"], "option_labels": ["Not started", "Active", "Completed", "Failed"], "default": "active", "label": "Status is", "show_if": {"key": "check", "equals": ["status", null]}},
+			{"key": "objective", "kind": "text", "default": "", "label": "Objective ID", "show_if": {"key": "check", "equals": "objective"}},
+			{"key": "state", "kind": "choice", "options": ["hidden", "shown", "completed", "failed"], "option_labels": ["Hidden", "Shown (open)", "Completed", "Failed"], "default": "completed", "label": "State is", "show_if": {"key": "check", "equals": "objective"}}
+		]}
+	],
+	"settings_schema": [
+		{"key": "menu_entry", "kind": "bool", "label": "Quests entry in the main menu", "default": true},
+		{"key": "menu_label", "kind": "text", "label": "Menu entry label", "default": "Quests", "show_if": {"key": "menu_entry", "equals": true}},
+		{"key": "categories", "kind": "list", "label": "Categories (journal order)", "default": [{"name": "Main"}, {"name": "Side"}],
+			"help": "Quests are listed by category in this order; categories not listed come after.",
+			"item_fields": [{"key": "name", "kind": "text", "label": "Category"}]},
+		{"key": "tracker", "kind": "bool", "label": "Tracker on the map (players can turn it off in Options)", "default": true},
+		{"key": "tracker_corner", "kind": "choice", "options": ["top_right", "top_left", "bottom_right", "bottom_left"], "option_labels": ["Top right", "Top left", "Bottom right", "Bottom left"], "default": "top_right", "label": "Tracker corner"},
+		{"key": "tracker_lines", "kind": "int", "label": "Objectives shown in the tracker (most)", "default": 4, "min": 1, "max": 8},
+		{"key": "tracker_fade", "kind": "bool", "label": "Tracker fades while the player walks under it", "default": true},
+		{"key": "auto_track", "kind": "bool", "label": "Track a quest when it starts (if none is tracked)", "default": true},
+		{"key": "toast", "kind": "bool", "label": "Show a note when a quest or objective changes", "default": true},
+		{"key": "toast_seconds", "kind": "float", "label": "Note shown for (seconds)", "default": 2.2, "min": 0.3, "max": 10.0, "show_if": {"key": "toast", "equals": true}},
+		{"key": "toast_sound", "kind": "sound", "label": "Note sound", "default": {"file": "", "volume": 80, "pitch": 100, "pan": 0}, "show_if": {"key": "toast", "equals": true}}
+	]
+}

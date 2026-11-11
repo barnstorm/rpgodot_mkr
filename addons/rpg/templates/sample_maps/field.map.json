@@ -1,0 +1,25 @@
+{
+	"schema_version": 1,
+	"id": "field",
+	"display_name": "Green Field",
+	"notes": "",
+	"battle_background": "grass",
+	"bgs": null,
+	"custom": {},
+	"disable_dash": false,
+	"encounters": {
+		"steps": 30,
+		"groups": []
+	},
+	"height": 20,
+	"music": {
+		"file": "field",
+		"pan": 0,
+		"pitch": 100,
+		"volume": 80
+	},
+	"parallax": null,
+	"scroll": "none",
+	"tileset": "town",
+	"width": 32
+}

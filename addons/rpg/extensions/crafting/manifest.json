@@ -1,0 +1,64 @@
+{
+	"schema_version": 1,
+	"id": "crafting",
+	"name": "Item crafting",
+	"description": "Recipes on items, weapons and armour (ingredients and amounts, an optional switch), a Crafting screen in the main menu and from events (all recipes or some categories), how many the party has and needs, a quantity, a sound, and recipes masked until their ingredients have been seen.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["crafting.gd"],
+	"commands": ["commands/open_crafting.gd"],
+	"save_sections": [{"namespace": "crafting", "version": 1}],
+	"custom_fields": {
+		"items": [
+			{"key": "recipe", "kind": "object", "default": null, "off_value": null, "toggle_label": "Can be crafted (Crafting plugin)", "label": "Recipe", "fields": [
+				{"key": "ingredients", "kind": "list", "default": [], "label": "Ingredients", "item_fields": [
+					{"key": "kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"},
+					{"key": "id", "kind": "ref", "ref": "item", "ref_from": "kind", "label": "Which one"},
+					{"key": "count", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Amount"}
+				]},
+				{"key": "yield", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Made each time"},
+				{"key": "category", "kind": "text", "default": "", "label": "Crafting category", "help": "Open crafting can list only some categories (a forge, a kitchen...)."},
+				{"key": "switch", "kind": "ref", "ref": "switch", "default": "", "label": "Listed only while switch is ON"}
+			]}
+		],
+		"weapons": [
+			{"key": "recipe", "kind": "object", "default": null, "off_value": null, "toggle_label": "Can be crafted (Crafting plugin)", "label": "Recipe", "fields": [
+				{"key": "ingredients", "kind": "list", "default": [], "label": "Ingredients", "item_fields": [
+					{"key": "kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"},
+					{"key": "id", "kind": "ref", "ref": "item", "ref_from": "kind", "label": "Which one"},
+					{"key": "count", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Amount"}
+				]},
+				{"key": "yield", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Made each time"},
+				{"key": "category", "kind": "text", "default": "", "label": "Crafting category"},
+				{"key": "switch", "kind": "ref", "ref": "switch", "default": "", "label": "Listed only while switch is ON"}
+			]}
+		],
+		"armors": [
+			{"key": "recipe", "kind": "object", "default": null, "off_value": null, "toggle_label": "Can be crafted (Crafting plugin)", "label": "Recipe", "fields": [
+				{"key": "ingredients", "kind": "list", "default": [], "label": "Ingredients", "item_fields": [
+					{"key": "kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"},
+					{"key": "id", "kind": "ref", "ref": "item", "ref_from": "kind", "label": "Which one"},
+					{"key": "count", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Amount"}
+				]},
+				{"key": "yield", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Made each time"},
+				{"key": "category", "kind": "text", "default": "", "label": "Crafting category"},
+				{"key": "switch", "kind": "ref", "ref": "switch", "default": "", "label": "Listed only while switch is ON"}
+			]}
+		]
+	},
+	"menu_entries": [
+		{"id": "crafting", "label": "Crafting", "scene": "res://addons/rpg/extensions/crafting/crafting_screen.gd", "show_method": "menu_entry_shown"}
+	],
+	"settings_schema": [
+		{"key": "menu_entry", "kind": "bool", "label": "Crafting entry in the main menu", "default": true},
+		{"key": "menu_label", "kind": "text", "label": "Menu entry label", "default": "Crafting", "show_if": {"key": "menu_entry", "equals": true}},
+		{"key": "unknown", "kind": "choice", "options": ["mask", "grey", "hide", "show"], "option_labels": ["Shown as ??????", "Greyed out (name shown)", "Not listed", "Shown like the others"], "default": "mask",
+			"label": "Recipes whose ingredients the party has never had",
+			"help": "A recipe is known once the party has held every ingredient, or has made it before."},
+		{"key": "sound", "kind": "sound", "label": "Sound when something is made", "default": {"file": "", "volume": 90, "pitch": 100, "pan": 0}, "help": "Empty: the chest sound."},
+		{"key": "max_quantity", "kind": "int", "label": "Most made at once", "default": 99, "min": 1, "max": 99}
+	]
+}

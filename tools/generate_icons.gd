@@ -1,0 +1,1471 @@
+extends SceneTree
+## Generates the starter icon sheets (CC0) procedurally:
+##   godot --headless --path <project> --script res://tools/generate_icons.gd
+## then run `--import`. Writes, into the starter pack (assets/starter/):
+##   System/IconSet24.png  24x24 icons (RPG Maker VX / VX Ace; 2000/2003 and XP projects use it)
+##   System/IconSet32.png  32x32 icons (RPG Maker MV / MZ)
+##   icons.json            index -> {name, category}, for editors and makers to find icons by name
+## 16 icons per row, like RPG Maker's IconSet; index 0 is blank ("no icon").
+## Both sizes are drawn from the same shape descriptions, rasterised at their own resolution (one
+## is never scaled from the other): hard-edged shapes on a 32-unit design grid, shaded in two tones
+## lit from the upper left, with highlights and a 1-px dark outline.
+## `-- --preview` also writes tools/shots/iconset_preview.png: both sheets enlarged 4x on a grey
+## background, to judge them by eye.
+## Everything here is original, authored by this project (CC0-1.0).
+
+const OUT := "res://assets/starter"
+const PREVIEW := "res://tools/shots/iconset_preview.png"
+const COLS := 16
+const SIZES := [24, 32]
+## Direction towards the light (upper left).
+const LIGHT := Vector2(-0.6, -0.8)
+
+const INK := Color("1a1424")
+const WHITE := Color("ffffff")
+
+## Colour ramps: [shadow, base, light, highlight].
+var R := {
+	"steel": _ramp("525a78", "8e98b4", "c8d0e2", "f6f8ff"),
+	"iron": _ramp("363a4c", "5c627a", "8a92a8", "c4cad8"),
+	"gold": _ramp("8c5818", "d0942c", "f2c850", "fff2a8"),
+	"silver": _ramp("687088", "a6aec4", "d8dee8", "ffffff"),
+	"bronze": _ramp("6c3c1c", "a86430", "d08c48", "f0c080"),
+	"wood": _ramp("5c3418", "8e5a2c", "ba843e", "e0b468"),
+	"dwood": _ramp("3c2010", "643c1c", "8c5a2c", "b48048"),
+	"leather": _ramp("5a2c18", "8c4c28", "b87040", "dc9c64"),
+	"red": _ramp("701828", "b82e36", "e8584a", "ffa890"),
+	"blue": _ramp("1e2a6c", "2e5cb8", "4e9ae6", "b0e4ff"),
+	"green": _ramp("1a5226", "2e8a3a", "5ec452", "c0f08a"),
+	"purple": _ramp("401c60", "70369c", "a660d2", "e0b0f6"),
+	"yellow": _ramp("8a6a10", "d4b020", "f6de4c", "fffcc4"),
+	"orange": _ramp("7c3010", "c8601c", "f0982e", "ffd890"),
+	"cyan": _ramp("0e5060", "1e94a6", "4cd0d8", "c4fff8"),
+	"pink": _ramp("7c2450", "c84c88", "f08cb8", "ffd6ea"),
+	"white": _ramp("8a8ea6", "c2c6d6", "eaecf4", "ffffff"),
+	"black": _ramp("1e1a2a", "383450", "5c5878", "9490b0"),
+	"paper": _ramp("9c8458", "d0bc8c", "efe0b8", "fffaee"),
+	"stone": _ramp("4e4a50", "7c7880", "aaa6ac", "d6d2d6"),
+	"earth": _ramp("4e3220", "7e5634", "a88050", "d0b07c"),
+	"meat": _ramp("7a2c20", "b8523a", "e08a60", "f8c49c"),
+	"bread": _ramp("7a4418", "b47430", "dca450", "f6d68c"),
+	"glass": _ramp("5c7090", "98b0c8", "d4e4f0", "ffffff"),
+	"bone": _ramp("8a8070", "c4bca8", "ece6d4", "ffffff"),
+	"ice": _ramp("3a74b0", "74b4e4", "b8e4fc", "ffffff"),
+	"fire": _ramp("a01c10", "e04418", "f89430", "fff070"),
+	"skin": _ramp("a0603c", "d49a74", "f2c8a0", "fff0e0"),
+	"navy": _ramp("141a40", "24306c", "3c4c98", "7088c8"),
+	"teal": _ramp("0c4038", "1a7462", "2eaa88", "8ce8c8"),
+	"dark": _ramp("120e1c", "241c34", "3c3054", "6c5c8c"),
+	"cream": _ramp("a88c5c", "dcc490", "f6e6bc", "ffffff"),
+}
+
+var S := 32
+var K := 1.0
+var img: Image
+## Offset and scale applied to everything drawn (see _at): parts reused at another size or place.
+var xo := Vector2.ZERO
+var xs := 1.0
+## [[name, category, Callable]], in sheet order.
+var icons: Array = []
+
+
+static func _ramp(a: String, b: String, c: String, d: String) -> Array:
+	return [Color(a), Color(b), Color(c), Color(d)]
+
+
+static func V(x: float, y: float) -> Vector2:
+	return Vector2(x, y)
+
+
+func _initialize() -> void:
+	_register()
+	if icons.size() % COLS != 0:
+		push_warning("%d icons: the last row is not full (keep rows of %d so indices stay stable)" % [icons.size(), COLS])
+	DirAccess.make_dir_recursive_absolute(OUT.path_join("System"))
+	var sheets := {}
+	for size in SIZES:
+		var sheet := _sheet(size)
+		sheets[size] = sheet
+		var err := sheet.save_png(OUT.path_join("System/IconSet%d.png" % size))
+		if err != OK:
+			push_error("save failed IconSet%d: %d" % [size, err])
+	_write_index()
+	if OS.get_cmdline_user_args().has("--preview"):
+		_preview(sheets)
+	print("Icon sheets written to %s/System (%d icons)" % [OUT, icons.size()])
+	quit()
+
+
+func _sheet(size: int) -> Image:
+	S = size
+	K = float(size) / 32.0
+	var rows := int(ceil(float(icons.size()) / COLS))
+	var sheet := Image.create_empty(COLS * S, rows * S, false, Image.FORMAT_RGBA8)
+	for i in icons.size():
+		img = Image.create_empty(S, S, false, Image.FORMAT_RGBA8)
+		var fn: Callable = icons[i][2]
+		if fn.is_valid():
+			fn.call()
+			_outline()
+		sheet.blit_rect(img, Rect2i(0, 0, S, S), Vector2i((i % COLS) * S, (i / COLS) * S))
+	return sheet
+
+
+func _write_index() -> void:
+	# One icon per line, so the file reads (and diffs) as a list.
+	var head := {
+		"schema_version": 1,
+		"license": "CC0-1.0",
+		"source": "Generated by tools/generate_icons.gd (procedural, original work)",
+		"columns": COLS,
+		"sheets": {"24": "IconSet24", "32": "IconSet32"},
+	}
+	var lines := []
+	for k in head:
+		lines.append("\t%s: %s," % [JSON.stringify(k), JSON.stringify(head[k], "", false)])
+	var rows := []
+	for i in icons.size():
+		rows.append("\t\t" + JSON.stringify({"index": i, "name": icons[i][0], "category": icons[i][1]}, "", false))
+	var text := "{\n%s\n\t\"icons\": [\n%s\n\t]\n}\n" % ["\n".join(lines), ",\n".join(rows)]
+	assert(JSON.parse_string(text) is Dictionary)
+	var f := FileAccess.open(OUT.path_join("icons.json"), FileAccess.WRITE)
+	f.store_string(text)
+
+
+## Both sheets 4x on a grey background, side by side, with index labels every row.
+func _preview(sheets: Dictionary) -> void:
+	var z := 4
+	var gap := 16
+	var a: Image = sheets[24]
+	var b: Image = sheets[32]
+	var w := a.get_width() * z + gap * 3 + b.get_width() * z
+	var h := maxi(a.get_height(), b.get_height()) * z + gap * 2
+	var out := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+	out.fill(Color("50546a"))
+	var x0 := gap
+	for sheet: Image in [a, b]:
+		var cell := sheet.get_width() / COLS
+		for y in sheet.get_height():
+			for x in sheet.get_width():
+				var c := sheet.get_pixel(x, y)
+				var bg := Color("5a5e76") if ((x / cell) + (y / cell)) % 2 == 0 else Color("4a4e64")
+				var px := bg.blend(c)
+				for dy in z:
+					for dx in z:
+						out.set_pixel(x0 + x * z + dx, gap + y * z + dy, px)
+		x0 += sheet.get_width() * z + gap
+	DirAccess.make_dir_recursive_absolute(PREVIEW.get_base_dir())
+	out.save_png(PREVIEW)
+	print("Preview: ", ProjectSettings.globalize_path(PREVIEW))
+
+
+# =================================================================================================
+# Raster primitives. Coordinates are on a 32-unit design grid; a pixel is inside a shape when its
+# centre is. Shading modes: flat, light, dark, hi, edge (light top/left rim, dark bottom/right rim),
+# radial (a ball lit from the upper left, with a highlight), cyl (across an axis: the side facing
+# the light is lit), vgrad / hgrad (lit top / left third, dark bottom / right third).
+# `sep` first draws a 1-px dark ring around the shape, to set it off from what is under it.
+# =================================================================================================
+
+func _shape(inside: Callable, r: Array, shade := "edge", sep := false, info := {}) -> void:
+	var m := PackedByteArray()
+	m.resize(S * S)
+	var lo := Vector2(1e9, 1e9)
+	var hi := Vector2(-1e9, -1e9)
+	var any := false
+	for j in S:
+		for i in S:
+			var p := _design(i, j)
+			if inside.call(p):
+				m[j * S + i] = 1
+				lo = lo.min(p)
+				hi = hi.max(p)
+				any = true
+	if not any:
+		return
+	if sep:
+		_ring(m)
+	var half := 0.5 / K
+	lo -= Vector2(half, half)
+	hi += Vector2(half, half)
+	var c := (lo + hi) / 2.0
+	var h := ((hi - lo) / 2.0).max(Vector2(0.5, 0.5))
+	var axis_n := Vector2.ZERO
+	var axis_a := Vector2.ZERO
+	var hw := 1.0
+	if shade == "cyl":
+		axis_a = info.get("a", c)
+		var b: Vector2 = info.get("b", c + Vector2(0, 1))
+		axis_n = (b - axis_a).normalized().orthogonal()
+		if axis_n.dot(LIGHT) < 0.0:
+			axis_n = -axis_n
+		hw = float(info.get("hw", 2.0))
+	for j in S:
+		for i in S:
+			if m[j * S + i] == 0:
+				continue
+			var p := _design(i, j)
+			var t := 1
+			match shade:
+				"flat":
+					t = 1
+				"light":
+					t = 2
+				"dark":
+					t = 0
+				"hi":
+					t = 3
+				"edge":
+					if not _in(m, i + 1, j) or not _in(m, i, j + 1):
+						t = 0
+					elif not _in(m, i - 1, j) or not _in(m, i, j - 1):
+						t = 2
+				"radial":
+					var dx := (p.x - c.x) / h.x
+					var dy := (p.y - c.y) / h.y
+					var lit := -(dx * 0.55 + dy * 0.75)
+					var r2 := dx * dx + dy * dy
+					var gx := dx + 0.4
+					var gy := dy + 0.45
+					if gx * gx + gy * gy < 0.05:
+						t = 3
+					elif lit > 0.22:
+						t = 2
+					elif lit < -0.42 or (r2 > 0.7 and lit < -0.05):
+						t = 0
+				"cyl":
+					var d := (p - axis_a).dot(axis_n) / hw
+					if d > 0.34:
+						t = 2
+					elif d < -0.34:
+						t = 0
+				"vgrad":
+					var ty := (p.y - c.y) / h.y
+					t = 2 if ty < -0.34 else (0 if ty > 0.34 else 1)
+				"hgrad":
+					var tx := (p.x - c.x) / h.x
+					t = 2 if tx < -0.34 else (0 if tx > 0.34 else 1)
+			img.set_pixel(i, j, r[t])
+
+
+## Design point of pixel (i, j)'s centre, before the _at transform.
+func _design(i: int, j: int) -> Vector2:
+	return (Vector2((i + 0.5) / K, (j + 0.5) / K) - xo - V(16, 16)) / xs + V(16, 16)
+
+
+## A design point after the _at transform.
+func _fwd(p: Vector2) -> Vector2:
+	return (p - V(16, 16)) * xs + V(16, 16) + xo
+
+
+## Draws `fn` moved by `o` and scaled by `s` around the icon centre.
+func _at(o: Vector2, s: float, fn: Callable) -> void:
+	var po := xo
+	var ps := xs
+	xo = po + o
+	xs = ps * s
+	fn.call()
+	xo = po
+	xs = ps
+
+
+func _in(m: PackedByteArray, i: int, j: int) -> bool:
+	return i >= 0 and j >= 0 and i < S and j < S and m[j * S + i] == 1
+
+
+func _ring(m: PackedByteArray) -> void:
+	for j in S:
+		for i in S:
+			if m[j * S + i] == 1:
+				continue
+			if _in(m, i + 1, j) or _in(m, i - 1, j) or _in(m, i, j + 1) or _in(m, i, j - 1):
+				img.set_pixel(i, j, INK)
+
+
+## Every transparent pixel next to an opaque one (4-neighbour) becomes the outline colour.
+func _outline() -> void:
+	var src := img.duplicate() as Image
+	for j in S:
+		for i in S:
+			if src.get_pixel(i, j).a > 0.0:
+				continue
+			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var q: Vector2i = Vector2i(i, j) + o
+				if q.x >= 0 and q.y >= 0 and q.x < S and q.y < S and src.get_pixelv(q).a > 0.5:
+					img.set_pixel(i, j, INK)
+					break
+
+
+func _poly(pts: Array, r: Array, shade := "edge", sep := false, info := {}) -> void:
+	var pv := PackedVector2Array(pts)
+	_shape(func(p: Vector2) -> bool: return Geometry2D.is_point_in_polygon(p, pv), r, shade, sep, info)
+
+
+func _rect(x: float, y: float, w: float, h: float, r: Array, shade := "edge", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return p.x >= x and p.x < x + w and p.y >= y and p.y < y + h, r, shade, sep,
+		{"a": V(x, y + h / 2.0), "b": V(x + w, y + h / 2.0), "hw": h / 2.0})
+
+
+## Rounded rectangle.
+func _rrect(x: float, y: float, w: float, h: float, rad: float, r: Array, shade := "edge", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return _in_rrect(p, x, y, w, h, rad), r, shade, sep)
+
+
+static func _in_rrect(p: Vector2, x: float, y: float, w: float, h: float, rad: float) -> bool:
+	if p.x < x or p.y < y or p.x >= x + w or p.y >= y + h:
+		return false
+	var q := Vector2(clampf(p.x, x + rad, x + w - rad), clampf(p.y, y + rad, y + h - rad))
+	return p.distance_squared_to(q) <= rad * rad
+
+
+func _ell(cx: float, cy: float, rx: float, ry: float, r: Array, shade := "radial", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return _in_ell(p, cx, cy, rx, ry), r, shade, sep)
+
+
+static func _in_ell(p: Vector2, cx: float, cy: float, rx: float, ry: float) -> bool:
+	var dx := (p.x - cx) / rx
+	var dy := (p.y - cy) / ry
+	return dx * dx + dy * dy <= 1.0
+
+
+## Thick segment with round ends.
+func _seg(a: Vector2, b: Vector2, w: float, r: Array, shade := "cyl", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return _dist_seg(p, a, b) <= w / 2.0, r, shade, sep, {"a": a, "b": b, "hw": w / 2.0})
+
+
+## Thick segment with square ends.
+func _bar(a: Vector2, b: Vector2, w: float, r: Array, shade := "cyl", sep := false) -> void:
+	var n := (b - a).normalized().orthogonal() * (w / 2.0)
+	_poly([a + n, b + n, b - n, a - n], r, shade, sep, {"a": a, "b": b, "hw": w / 2.0})
+
+
+static func _dist_seg(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+## Elliptical band from angle a0 to a1 (degrees, 0 = right, 90 = down), `thick` units wide.
+func _band(cx: float, cy: float, rx: float, ry: float, thick: float, a0: float, a1: float, r: Array, shade := "radial", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return _in_band(p, cx, cy, rx, ry, thick, a0, a1), r, shade, sep)
+
+
+static func _in_band(p: Vector2, cx: float, cy: float, rx: float, ry: float, thick: float, a0: float, a1: float) -> bool:
+	if not _in_ell(p, cx, cy, rx, ry) or _in_ell(p, cx, cy, maxf(rx - thick, 0.01), maxf(ry - thick, 0.01)):
+		return false
+	var ang := rad_to_deg(atan2(p.y - cy, p.x - cx))
+	while ang < a0:
+		ang += 360.0
+	while ang >= a0 + 360.0:
+		ang -= 360.0
+	return ang <= a1
+
+
+## Pixel-exact 1-px line (scaled end points).
+func _line(a: Vector2, b: Vector2, c: Color) -> void:
+	a = _fwd(a)
+	b = _fwd(b)
+	var p0 := Vector2i(floori(a.x * K), floori(a.y * K))
+	var p1 := Vector2i(floori(b.x * K), floori(b.y * K))
+	var dx := absi(p1.x - p0.x)
+	var dy := -absi(p1.y - p0.y)
+	var sx := 1 if p0.x < p1.x else -1
+	var sy := 1 if p0.y < p1.y else -1
+	var err := dx + dy
+	var p := p0
+	while true:
+		_pix(p.x, p.y, c)
+		if p == p1:
+			break
+		var e2 := 2 * err
+		if e2 >= dy:
+			err += dy
+			p.x += sx
+		if e2 <= dx:
+			err += dx
+			p.y += sy
+
+
+func _pix(x: int, y: int, c: Color) -> void:
+	if x >= 0 and y >= 0 and x < S and y < S:
+		img.set_pixel(x, y, c)
+
+
+## One pixel at a design point.
+func _dot(x: float, y: float, c: Color) -> void:
+	var q := _fwd(V(x, y))
+	_pix(floori(q.x * K), floori(q.y * K), c)
+
+
+## Clears a 1-px line (a notch; the outline pass then inks its rim).
+func _cut(a: Vector2, b: Vector2) -> void:
+	_line(a, b, Color(0, 0, 0, 0))
+
+
+## A small 4-point sparkle (centre pixel plus arms), in white.
+func _sparkle(x: float, y: float, arm := 1, c := WHITE) -> void:
+	var q := _fwd(V(x, y))
+	var cx := floori(q.x * K)
+	var cy := floori(q.y * K)
+	_pix(cx, cy, c)
+	for k in range(1, arm + 1):
+		for o in [Vector2i(k, 0), Vector2i(-k, 0), Vector2i(0, k), Vector2i(0, -k)]:
+			_pix(cx + o.x, cy + o.y, c)
+
+
+static func _star_pts(c: Vector2, ro: float, ri: float, n: int, rot := -90.0) -> Array:
+	var out := []
+	for k in n * 2:
+		var a := deg_to_rad(rot + 180.0 * k / n)
+		var rr := ro if k % 2 == 0 else ri
+		out.append(c + Vector2(cos(a), sin(a)) * rr)
+	return out
+
+
+static func _in_heart(p: Vector2, c: Vector2, s: float) -> bool:
+	var q := (p - c) / s + V(16, 16)
+	return _in_ell(q, 11, 12, 6.2, 6.2) or _in_ell(q, 21, 12, 6.2, 6.2) \
+		or Geometry2D.is_point_in_polygon(q, PackedVector2Array([V(5.2, 14), V(26.8, 14), V(16, 27)]))
+
+
+func _heart(c: Vector2, s: float, r: Array, shade := "radial", sep := false) -> void:
+	_shape(func(p: Vector2) -> bool: return _in_heart(p, c, s), r, shade, sep)
+
+
+## Points of a closed polygon after moving by `o` and scaling by `s` around `c`.
+static func _xf(pts: Array, o := Vector2.ZERO, s := 1.0, c := V(16, 16)) -> Array:
+	var out := []
+	for p: Vector2 in pts:
+		out.append(c + (p - c) * s + o)
+	return out
+
+
+# =================================================================================================
+# Shared parts
+# =================================================================================================
+
+## A blade from `a` (hilt end) to `tip`, `w` wide, with a pointed tip.
+func _blade(a: Vector2, tip: Vector2, w: float, tip_len: float, r: Array, sep := false) -> void:
+	var d := (tip - a).normalized()
+	var n := d.orthogonal() * (w / 2.0)
+	var s := tip - d * tip_len
+	_poly([a + n, s + n, tip, s - n, a - n], r, "cyl", sep, {"a": a, "b": tip, "hw": w / 2.0})
+
+
+## A sword: blade, grip, pommel and cross guard. `base` is where blade meets guard.
+func _sword(base: Vector2, tip: Vector2, w: float, blade: Array, guard: Array, grip: Array, guard_len := 5.0, grip_len := 5.0) -> void:
+	var d := (tip - base).normalized()
+	var n := d.orthogonal()
+	_blade(base, tip, w, w * 1.15, blade)
+	_bar(base, base - d * grip_len, 2.6, grip)
+	_ell((base - d * (grip_len + 1.4)).x, (base - d * (grip_len + 1.4)).y, 2.0, 2.0, guard)
+	_bar(base + n * guard_len, base - n * guard_len, 2.8, guard, "cyl", true)
+
+
+## Up (green) or down (red) arrow in the lower right corner, for stat changes.
+func _arrow_badge(up: bool) -> void:
+	if up:
+		_poly([V(24, 15), V(30.5, 22), V(27, 22), V(27, 30), V(21, 30), V(21, 22), V(17.5, 22)], R.green, "edge", true)
+	else:
+		_poly([V(24, 30.5), V(30.5, 23.5), V(27, 23.5), V(27, 16), V(21, 16), V(21, 23.5), V(17.5, 23.5)], R.red, "edge", true)
+
+
+## A tall potion bottle (cork, neck, round-shouldered body) with coloured liquid.
+func _bottle(liq: Array) -> void:
+	_rect(12.5, 2.5, 7, 4, R.wood, "edge")
+	_rect(13.5, 6.5, 5, 4, R.glass, "hgrad")
+	_rrect(7.5, 10, 17, 19.5, 5, R.glass, "radial")
+	_shape(func(p: Vector2) -> bool: return _in_rrect(p, 8.5, 11, 15, 17.5, 4) and p.y >= 16.5, liq, "radial")
+	_line(V(9.5, 16.5), V(22.5, 16.5), liq[2])
+	_seg(V(11, 13), V(11, 20), 1.6, [WHITE, WHITE, WHITE, WHITE], "flat")
+
+
+## A round flask with a long neck.
+func _flask(liq: Array) -> void:
+	_rect(12.5, 2, 7, 3.5, R.wood, "edge")
+	_rect(13.5, 5.5, 5, 7, R.glass, "hgrad")
+	_ell(16, 20, 10.5, 9.5, R.glass, "radial")
+	_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 20, 9.5, 8.5) and p.y >= 17.0, liq, "radial")
+	_line(V(7, 17), V(25, 17), liq[2])
+	_sparkle(11, 15, 1)
+
+
+## A cut gem (crown, table and pavilion facets).
+func _gem(r: Array, o := Vector2.ZERO, s := 1.0) -> void:
+	var outline := _xf([V(4, 13), V(10, 6), V(22, 6), V(28, 13), V(16, 28)], o, s)
+	_poly(outline, r, "flat")
+	_poly(_xf([V(4, 13), V(10, 6), V(22, 6), V(28, 13)], o, s), r, "light")
+	_poly(_xf([V(10, 13), V(13, 6.5), V(19, 6.5), V(22, 13)], o, s), r, "hi")
+	_poly(_xf([V(16, 13), V(28, 13), V(16, 28)], o, s), r, "dark")
+	_poly(_xf([V(10, 13), V(16, 13), V(16, 28)], o, s), r, "flat")
+	_sparkle(o.x + 16 + (11 - 16) * s, o.y + 16 + (9 - 16) * s, 1)
+
+
+## An upright crystal with two smaller ones.
+func _crystal(r: Array) -> void:
+	for c: Array in [[V(9, 17), 0.55], [V(23, 19), 0.5], [V(16, 16), 1.0]]:
+		var o: Vector2 = c[0]
+		var s: float = c[1]
+		var pts := [V(0, -13), V(5, -7), V(5, 9), V(0, 13), V(-5, 9), V(-5, -7)]
+		var full := []
+		var left := []
+		var right := []
+		for p: Vector2 in pts:
+			full.append(o + p * s)
+		for p: Vector2 in [V(0, -13), V(0, 13), V(-5, 9), V(-5, -7)]:
+			left.append(o + p * s)
+		for p: Vector2 in [V(0, -13), V(5, -7), V(5, 9), V(0, 13)]:
+			right.append(o + p * s)
+		_poly(full, r, "flat", true)
+		_poly(left, r, "light")
+		_poly(right, r, "flat")
+		_poly([o + V(1.5, -8) * s, o + V(5, -7) * s, o + V(5, 9) * s, o + V(1.5, 11) * s], r, "dark")
+		_line(o + V(-2.5, -6) * s, o + V(-2.5, 4) * s, r[3])
+
+
+func _ring_item(band: Array, gem: Array) -> void:
+	_band(16, 20, 10, 8.5, 3.2, 0, 360, band, "radial")
+	_poly([V(12, 9), V(20, 9), V(18, 13), V(14, 13)], band, "edge")
+	_ell(16, 8, 4.6, 4.2, gem, "radial", true)
+
+
+func _amulet(gem: Array) -> void:
+	_band(16, 13, 9, 10.5, 1.6, 180, 360, R.gold, "flat")
+	_band(16, 13, 9, 10.5, 1.6, 0, 40, R.gold, "flat")
+	_band(16, 13, 9, 10.5, 1.6, 140, 180, R.gold, "flat")
+	_ell(16, 21.5, 7.2, 7.5, R.gold, "radial")
+	_ell(16, 21.5, 4.6, 4.8, gem, "radial", true)
+
+
+func _book(cover: Array, trim: Array) -> void:
+	# Pages (right and bottom edge), then the cover with its spine on the left.
+	_poly([V(9, 5), V(26, 5), V(26, 27), V(9, 27)], R.paper, "flat")
+	_rect(7, 4, 18, 22, cover, "edge")
+	_rect(7, 4, 3.5, 22, cover, "dark")
+	_line(V(10.5, 26.5), V(25.5, 26.5), R.paper[2])
+	_rect(13, 9, 9, 6, trim, "edge", true)
+	_line(V(7.5, 8), V(9.5, 8), trim[2])
+	_line(V(7.5, 21), V(9.5, 21), trim[2])
+
+
+func _key(r: Array) -> void:
+	_band(10, 10, 7, 7, 3, 0, 360, r, "radial")
+	_bar(V(14.5, 14.5), V(27, 27), 3.6, r)
+	_bar(V(21, 21), V(18.5, 23.5 + 2), 3, r, "edge")
+	_bar(V(25, 25), V(22, 28.5), 3, r, "edge")
+
+
+func _coin(r: Array, cx := 16.0, cy := 16.0, rad := 11.0) -> void:
+	_ell(cx, cy, rad, rad, r, "radial")
+	_band(cx, cy, rad * 0.72, rad * 0.72, maxf(1.3, rad * 0.14), 0, 360, [r[0], r[0], r[0], r[0]], "flat")
+
+
+func _boot(r: Array, cuff: Array) -> void:
+	_poly([V(9, 4), V(19, 4), V(19, 18), V(27, 20), V(28, 25), V(28, 28), V(8, 28), V(8, 17)], r, "edge")
+	_rect(7.5, 25.5, 21, 3, R.dwood, "flat")
+	_rect(8, 3.5, 12, 3.5, cuff, "edge", true)
+
+
+func _winged_boot() -> void:
+	_boot(R.teal, R.white)
+	_poly([V(9, 9), V(1, 5), V(3, 10), V(0.5, 12), V(3, 15), V(1.5, 18), V(9, 16)], R.white, "edge", true)
+
+
+func _glove(r: Array, cuff: Array) -> void:
+	for f: Array in [[V(10, 12), V(10, 4)], [V(14, 11), V(14.5, 3)], [V(18, 11), V(19, 4)], [V(21.5, 12), V(23, 6.5)]]:
+		_seg(f[0], f[1], 3.6, r)
+	_rrect(8, 10, 16, 12, 3, r, "edge")
+	_seg(V(9, 19), V(4.5, 13), 3.6, r, "cyl", true)
+	_rect(8.5, 21, 15, 7, cuff, "edge", true)
+
+
+func _torso() -> Array:
+	return [V(4, 8), V(11, 5), V(13, 5), V(16, 9), V(19, 5), V(21, 5), V(28, 8), V(28, 14), V(24, 15), V(24, 28), V(8, 28), V(8, 15), V(4, 14)]
+
+
+func _shield_shape() -> Array:
+	return [V(5, 5), V(16, 3), V(27, 5), V(27, 14), V(22, 23), V(16, 29), V(10, 23), V(5, 14)]
+
+
+## Letter Z (for sleep), top-left at (x, y), w wide.
+func _zed(x: float, y: float, w: float, r: Array) -> void:
+	var t := maxf(2.2, w * 0.28)
+	_poly([V(x, y), V(x + w, y), V(x + w, y + t), V(x + t * 1.1, y + w - t), V(x + w, y + w - t), V(x + w, y + w), V(x, y + w), V(x, y + w - t), V(x + w - t * 1.1, y + t), V(x, y + t)], r, "edge", true)
+
+
+func _skull(r: Array, eyes: Array) -> void:
+	_ell(16, 13, 11, 10, r, "radial")
+	_rrect(10, 18, 12, 9, 2.5, r, "edge")
+	_ell(11.5, 14, 3, 3.3, eyes, "flat")
+	_ell(20.5, 14, 3, 3.3, eyes, "flat")
+	_poly([V(16, 17), V(18, 21), V(14, 21)], eyes, "flat")
+	_line(V(13, 24), V(13, 27), eyes[1])
+	_line(V(16, 24), V(16, 27), eyes[1])
+	_line(V(19, 24), V(19, 27), eyes[1])
+
+
+func _eye(iris: Array) -> void:
+	_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 25, 15, 16) and _in_ell(p, 16, 7, 15, 16), R.white, "flat")
+	_ell(16, 16, 5, 5, iris, "radial")
+	_ell(16, 16, 2.2, 2.2, R.dark, "flat")
+	_dot(14, 14, WHITE)
+
+
+func _clock() -> void:
+	_ell(16, 16, 12.5, 12.5, R.gold, "radial")
+	_ell(16, 16, 9.5, 9.5, R.cream, "flat")
+	_bar(V(16, 16.5), V(16, 9), 2, R.dark, "flat")
+	_bar(V(15.5, 16), V(21, 16), 2, R.dark, "flat")
+	for a in [0, 90, 180, 270]:
+		var v := Vector2.from_angle(deg_to_rad(a)) * 7.8
+		_dot(16 + v.x, 16 + v.y, R.dark[0])
+
+
+func _music_note(r: Array) -> void:
+	_ell(10, 24, 5, 4, r, "radial")
+	_ell(23, 21, 5, 4, r, "radial")
+	_bar(V(13.6, 23.5), V(13.6, 6), 2.6, r, "hgrad")
+	_bar(V(26.6, 20.5), V(26.6, 3), 2.6, r, "hgrad")
+	_poly([V(12.3, 5), V(27.9, 2), V(27.9, 6.5), V(12.3, 9.5)], r, "edge")
+
+
+func _flame(o: Vector2, s: float) -> void:
+	var outer := [V(16, 2), V(21, 8), V(26, 14), V(26, 21), V(22, 28), V(16, 30), V(10, 28), V(6, 21), V(7, 13), V(11, 16), V(12, 9)]
+	_poly(_xf(outer, o, s), R.red, "flat")
+	_poly(_xf([V(17, 9), V(22, 16), V(23, 22), V(20, 27), V(16, 28.5), V(12, 27), V(9.5, 22), V(11, 18), V(14, 20), V(15, 14)], o, s), R.orange, "flat")
+	_poly(_xf([V(16.5, 16), V(20, 21), V(19, 26), V(16, 27), V(13, 25.5), V(13, 22)], o, s), R.yellow, "light")
+
+
+func _drop(r: Array, o := Vector2.ZERO, s := 1.0) -> void:
+	_shape(func(p: Vector2) -> bool:
+		var q := (p - o - V(16, 16)) / s + V(16, 16)
+		return _in_ell(q, 16, 20, 9, 9) or Geometry2D.is_point_in_polygon(q, PackedVector2Array([V(16, 2), V(24.6, 17.5), V(7.4, 17.5)])), r, "radial")
+
+
+func _lightning(r: Array, o := Vector2.ZERO, s := 1.0) -> void:
+	_poly(_xf([V(19, 2), V(8, 17), V(15, 17), V(11, 30), V(25, 12), V(17.5, 12), V(23, 2)], o, s), r, "edge")
+
+
+func _shield_icon(field: Array, rim: Array) -> void:
+	_poly(_shield_shape(), rim, "edge")
+	_poly(_xf(_shield_shape(), V(0, 0.6), 0.76), field, "edge")
+	_bar(V(16, 8), V(16, 24), 3, R.gold, "cyl")
+	_bar(V(9.5, 13), V(22.5, 13), 3, R.gold, "cyl")
+
+
+# =================================================================================================
+# The icons, in sheet order
+# =================================================================================================
+
+func _add(icon_name: String, category: String, fn: Callable) -> void:
+	icons.append([icon_name, category, fn])
+
+
+func _register() -> void:
+	# --- row 0: blank and general symbols ---------------------------------------------------
+	_add("none", "general", Callable())
+	_add("crate", "general", func() -> void:
+		_rect(4, 6, 24, 22, R.wood, "edge")
+		_rect(4, 6, 24, 3, R.dwood, "flat")
+		_line(V(4, 16), V(27, 16), R.wood[0])
+		_line(V(6, 10), V(26, 26), R.wood[0])
+		_line(V(7, 10), V(27, 26), R.wood[2])
+		for p in [V(6, 11), V(25, 11), V(6, 25), V(25, 25)]:
+			_dot(p.x, p.y, R.iron[2]))
+	_add("question", "general", func() -> void:
+		_band(16, 11, 8, 7.5, 4, 170, 405, R.yellow, "radial")
+		_bar(V(16, 15), V(16, 21), 4, R.yellow, "hgrad")
+		_ell(16, 26, 2.6, 2.6, R.yellow, "radial"))
+	_add("exclamation", "general", func() -> void:
+		_poly([V(12, 3), V(20, 3), V(18, 20), V(14, 20)], R.red, "edge")
+		_ell(16, 25.5, 3, 3, R.red, "radial"))
+	_add("star", "general", func() -> void:
+		_poly(_star_pts(V(16, 17), 14, 6, 5), R.yellow, "radial")
+		_sparkle(12, 13))
+	_add("heart", "general", func() -> void:
+		_heart(V(16, 16), 1.05, R.red))
+	_add("orb", "general", func() -> void:
+		_ell(16, 16, 12, 12, R.blue, "radial")
+		_sparkle(11, 10, 1))
+	_add("check", "general", func() -> void:
+		_seg(V(5, 16), V(12, 24), 5, R.green, "cyl")
+		_seg(V(12, 24), V(27, 7), 5, R.green, "cyl"))
+	_add("cross", "general", func() -> void:
+		_seg(V(7, 7), V(25, 25), 5, R.red, "cyl")
+		_seg(V(25, 7), V(7, 25), 5, R.red, "cyl"))
+	_add("arrow_up", "general", func() -> void:
+		_poly([V(16, 3), V(28, 16), V(21, 16), V(21, 29), V(11, 29), V(11, 16), V(4, 16)], R.green, "edge"))
+	_add("arrow_down", "general", func() -> void:
+		_poly([V(16, 29), V(28, 16), V(21, 16), V(21, 3), V(11, 3), V(11, 16), V(4, 16)], R.red, "edge"))
+	_add("plus", "general", func() -> void:
+		_poly([V(12, 4), V(20, 4), V(20, 12), V(28, 12), V(28, 20), V(20, 20), V(20, 28), V(12, 28), V(12, 20), V(4, 20), V(4, 12), V(12, 12)], R.green, "edge"))
+	_add("minus", "general", func() -> void:
+		_rect(4, 12, 24, 8, R.red, "edge"))
+	_add("lock", "general", func() -> void:
+		_band(16, 13, 7.5, 9, 3, 180, 360, R.silver, "radial")
+		_rect(13.5 - 5, 12, 3, 3, R.silver, "hgrad")
+		_rect(20.5, 12, 3, 3, R.silver, "hgrad")
+		_rrect(6, 14, 20, 15, 2, R.gold, "edge")
+		_ell(16, 19.5, 2.2, 2.2, R.dark, "flat")
+		_rect(15, 20, 2, 5, R.dark, "flat"))
+	_add("hourglass", "general", func() -> void:
+		_poly([V(9, 6), V(23, 6), V(17, 16), V(23, 26), V(9, 26), V(15, 16)], R.glass, "edge")
+		_poly([V(11, 8), V(21, 8), V(16, 14)], R.yellow, "light")
+		_poly([V(16, 19), V(21, 25), V(11, 25)], R.yellow, "flat")
+		_rect(6, 3, 20, 3.5, R.wood, "edge")
+		_rect(6, 25.5, 20, 3.5, R.wood, "edge"))
+	_add("flag", "general", func() -> void:
+		_bar(V(7, 3), V(7, 29), 2.8, R.wood, "hgrad")
+		_poly([V(8.5, 4), V(27, 7), V(22, 12), V(27, 18), V(8.5, 17)], R.red, "edge"))
+
+	# --- row 1: weapons -------------------------------------------------------------------------
+	_add("sword", "weapon", func() -> void:
+		_sword(V(10.5, 21.5), V(28, 4), 4.2, R.steel, R.gold, R.leather))
+	_add("broadsword", "weapon", func() -> void:
+		_sword(V(11, 21), V(28.5, 3.5), 6.4, R.steel, R.iron, R.dwood, 6.5, 5.5)
+		_line(V(13.5, 18.5), V(25, 7), R.steel[0]))
+	_add("dagger", "weapon", func() -> void:
+		_sword(V(13, 19), V(25, 7), 4.2, R.steel, R.bronze, R.leather, 4.0, 5.5))
+	_add("katana", "weapon", func() -> void:
+		var pts := []
+		var back := []
+		for k in 13:
+			var t := k / 12.0
+			var c := V(10, 22).lerp(V(28.5, 3.5), t) + V(1.4, 1.4) * sin(t * PI)
+			var hw := 1.7 if t < 0.86 else 1.7 * (1.0 - t) / 0.14
+			var n := V(1, 1).normalized() * hw
+			pts.append(c + n)
+			back.push_front(c - n)
+		_poly(pts + back, R.steel, "cyl", false, {"a": V(10, 22), "b": V(28.5, 3.5), "hw": 1.7})
+		_line(V(12, 21), V(27, 6), R.steel[3])
+		_bar(V(10, 22), V(4, 28), 3, R.dark, "cyl")
+		for k in 3:
+			_dot(5.5 + k * 1.8, 26.5 - k * 1.8, R.white[2])
+		_ell(10.5, 21.5, 3, 3, R.gold, "radial", true))
+	_add("axe", "weapon", func() -> void:
+		_bar(V(8, 29), V(21, 4), 3.2, R.wood)
+		_poly([V(18, 7.5), V(13, 5), V(9, 2), V(5.5, 5), V(3.5, 10), V(4, 15), V(6, 19), V(11, 15), V(19.5, 12)], R.steel, "edge", true)
+		_line(V(5.5, 6), V(4.5, 15), R.steel[3])
+		_bar(V(20.5, 5), V(21.5, 3), 3.4, R.wood, "cyl"))
+	_add("spear", "weapon", func() -> void:
+		_bar(V(4, 28), V(21, 11), 2.8, R.wood)
+		_poly([V(18.5, 13.5), V(23, 7), V(29, 3), V(25, 9), V(18.5, 13.5)], R.steel, "flat")
+		_blade(V(19.5, 12.5), V(29, 3), 5, 6, R.steel, true)
+		_bar(V(17, 12.5), V(19.5, 15), 3.6, R.gold, "cyl", true))
+	_add("bow", "weapon", func() -> void:
+		_line(V(5.5, 5.5), V(26.5, 26.5), R.white[2])
+		_band(5, 5, 22, 22, 3.2, -2, 92, R.wood, "radial")
+		_bar(V(19, 18), V(20.5, 15.5), 4.4, R.leather, "flat"))
+	_add("crossbow", "weapon", func() -> void:
+		_bar(V(16, 30), V(16, 7), 4.4, R.wood, "cyl")
+		_line(V(4, 15), V(16, 20), R.white[2])
+		_line(V(28, 15), V(16, 20), R.white[2])
+		_band(16, 23, 14, 14, 3.2, 205, 335, R.steel, "radial", true)
+		_bar(V(16, 21), V(16, 6), 1.6, R.steel, "flat")
+		_poly([V(16, 1.5), V(19, 6.5), V(13, 6.5)], R.steel, "edge", true)
+		_rect(14, 24, 4, 2.5, R.iron, "flat"))
+	_add("staff", "weapon", func() -> void:
+		_bar(V(5, 29), V(20, 12), 3, R.wood)
+		_band(23, 9, 6.5, 6.5, 2.2, 90, 400, R.gold, "radial")
+		_ell(23, 9, 4.6, 4.6, R.red, "radial", true))
+	_add("wand", "weapon", func() -> void:
+		_bar(V(7, 27), V(19, 15), 2.6, R.dwood)
+		_bar(V(7, 27), V(9.5, 24.5), 2.8, R.gold)
+		_poly(_star_pts(V(22, 11), 9, 3.6, 4, -90), R.yellow, "radial", true)
+		_sparkle(27, 21, 1, R.yellow[3])
+		_sparkle(11, 6, 1, R.yellow[3]))
+	_add("mace", "weapon", func() -> void:
+		_bar(V(5, 28), V(17, 16), 3.2, R.wood)
+		_poly(_star_pts(V(21, 11), 10.5, 5.5, 8, -90), R.iron, "edge")
+		_ell(21, 11, 6.5, 6.5, R.steel, "radial", true))
+	_add("whip", "weapon", func() -> void:
+		_band(17, 15, 11, 9, 2.4, 160, 520, R.leather, "radial")
+		_band(16, 14, 6, 5, 2.2, 0, 300, R.leather, "radial")
+		_bar(V(4, 29), V(9, 22), 3.4, R.dark, "cyl", true))
+	_add("claw", "weapon", func() -> void:
+		for k in 3:
+			var o := V(k * 4.5, k * 4.5) - V(4.5, 4.5)
+			_poly([V(10, 18) + o, V(20, 6) + o, V(26, 3) + o, V(22, 10) + o, V(13, 21) + o], R.steel, "cyl", k > 0, {"a": V(10, 20) + o, "b": V(25, 4) + o, "hw": 2})
+		_bar(V(5, 15), V(17, 27), 6, R.leather, "cyl", true))
+	_add("gun", "weapon", func() -> void:
+		_rect(10, 8, 19, 5, R.steel, "edge")
+		_rect(7, 7, 10, 8, R.iron, "edge")
+		_poly([V(7, 13), V(15, 13), V(12, 27), V(4, 26), V(5, 18)], R.wood, "edge", true)
+		_band(14.5, 15, 3.5, 3.5, 1.3, 0, 180, R.iron, "flat")
+		_rect(6, 4.5, 3, 3, R.iron, "edge"))
+	_add("hammer", "weapon", func() -> void:
+		_bar(V(5, 28), V(19, 14), 3.2, R.wood)
+		_bar(V(14.5, 5.5), V(26.5, 17.5), 9, R.iron, "edge", true))
+	_add("shuriken", "weapon", func() -> void:
+		_poly(_star_pts(V(16, 16), 14, 4.2, 4, -45), R.steel, "radial")
+		_ell(16, 16, 2.4, 2.4, R.dark, "flat"))
+
+	# --- row 2: armour ---------------------------------------------------------------------------
+	_add("shield_round", "armor", func() -> void:
+		_ell(16, 16, 13, 13, R.iron, "radial")
+		_ell(16, 16, 10.5, 10.5, R.wood, "radial")
+		_line(V(10, 7), V(10, 25), R.wood[0])
+		_line(V(16, 5.5), V(16, 26.5), R.wood[0])
+		_line(V(22, 7), V(22, 25), R.wood[0])
+		_ell(16, 16, 4, 4, R.steel, "radial", true))
+	_add("shield_heater", "armor", func() -> void:
+		_shield_icon(R.blue, R.steel))
+	_add("shield_tower", "armor", func() -> void:
+		_rrect(7, 3, 18, 26, 3, R.iron, "edge")
+		_rect(10, 6, 12, 20, R.red, "edge")
+		_rect(14.5, 6, 3, 20, R.gold, "hgrad")
+		for p in [V(8.5, 4.5), V(23, 4.5), V(8.5, 27), V(23, 27)]:
+			_dot(p.x, p.y, R.iron[3]))
+	_add("helmet", "armor", func() -> void:
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 16, 11.5, 12) and p.y < 26.0, R.steel, "radial")
+		_rect(8, 14, 16, 3, R.dark, "flat")
+		_rect(14.5, 14, 3, 10, R.dark, "flat")
+		_bar(V(16, 3.5), V(16, 13), 2.2, R.steel, "hgrad"))
+	_add("helmet_horned", "armor", func() -> void:
+		_poly([V(8, 16), V(3, 11), V(2, 4), V(6, 9), V(10, 12)], R.bone, "edge", false)
+		_poly([V(24, 16), V(29, 11), V(30, 4), V(26, 9), V(22, 12)], R.bone, "edge", false)
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 19, 10.5, 12) and p.y < 21.0, R.steel, "radial", true)
+		_rect(5, 20, 22, 4.5, R.bronze, "edge", true)
+		for x in [9, 16, 23]:
+			_dot(x, 22, R.bronze[3]))
+	_add("hat_wizard", "armor", func() -> void:
+		_poly([V(17, 2), V(23, 8), V(22, 21), V(10, 21), V(14, 9), V(9, 6)], R.purple, "edge")
+		_ell(16, 23, 14, 5, R.purple, "radial", true)
+		_rect(10.5, 17, 11.5, 3.5, R.gold, "edge", true)
+		_poly(_star_pts(V(17, 11), 3.5, 1.5, 5), R.yellow, "light"))
+	_add("hat_feather", "armor", func() -> void:
+		_poly([V(20, 12), V(26, 3), V(28, 4), V(23, 14)], R.red, "edge")
+		_ell(16, 21, 14, 5, R.green, "radial")
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 20, 9, 11) and p.y < 20.0, R.green, "radial", true)
+		_rect(7, 16.5, 18, 3, R.leather, "edge", true))
+	_add("circlet", "armor", func() -> void:
+		_band(16, 17, 13, 7, 2.6, 0, 360, R.silver, "radial")
+		_poly([V(12, 11), V(16, 4), V(20, 11)], R.silver, "edge", true)
+		_ell(16, 10, 3, 3, R.blue, "radial", true))
+	_add("armor_plate", "armor", func() -> void:
+		_poly(_torso(), R.steel, "edge")
+		_line(V(16, 10), V(16, 27), R.steel[0])
+		_line(V(10, 17), V(22, 17), R.steel[0])
+		_rect(8, 25, 16, 3, R.gold, "edge", true)
+		_rect(4, 8, 6, 6, R.iron, "edge")
+		_rect(22, 8, 6, 6, R.iron, "edge"))
+	_add("armor_leather", "armor", func() -> void:
+		_poly(_torso(), R.leather, "edge")
+		for y in [12, 16, 20, 24]:
+			_dot(15, y, R.leather[3])
+			_dot(17, y, R.leather[3])
+		_rect(8, 20, 16, 3, R.dwood, "edge", true)
+		_rect(14.5, 20, 3, 3, R.gold, "flat"))
+	_add("armor_chain", "armor", func() -> void:
+		_poly(_torso(), R.iron, "edge")
+		for j in range(2, S - 2):
+			for i in range(2, S - 2):
+				var c := img.get_pixel(i, j)
+				if c == R.iron[1] and (i + j) % 2 == 0:
+					img.set_pixel(i, j, R.iron[2])
+		_rect(8, 25, 16, 3, R.steel, "edge", true))
+	_add("robe", "armor", func() -> void:
+		_poly([V(11, 3), V(21, 3), V(28, 12), V(25, 15), V(23, 13), V(26, 29), V(6, 29), V(9, 13), V(7, 15), V(4, 12)], R.white, "edge")
+		_poly([V(13, 3), V(19, 3), V(16, 9)], R.red, "flat")
+		_bar(V(16, 9), V(16, 29), 3, R.red, "cyl")
+		_rect(10, 14, 12, 2.5, R.gold, "flat"))
+	_add("cloak", "armor", func() -> void:
+		_poly([V(12, 4), V(20, 4), V(26, 18), V(28, 28), V(22, 26), V(16, 29), V(10, 26), V(4, 28), V(6, 18)], R.red, "edge")
+		_poly([V(13, 5), V(19, 5), V(16, 14)], R.dark, "flat")
+		_ell(16, 6, 3, 3, R.gold, "radial", true))
+	_add("gloves", "armor", func() -> void:
+		_glove(R.leather, R.dwood))
+	_add("gauntlets", "armor", func() -> void:
+		_glove(R.steel, R.gold))
+	_add("boots", "armor", func() -> void:
+		_boot(R.leather, R.dwood))
+
+	# --- row 3: accessories ----------------------------------------------------------------------
+	_add("ring_ruby", "accessory", func() -> void:
+		_ring_item(R.gold, R.red))
+	_add("ring_sapphire", "accessory", func() -> void:
+		_ring_item(R.silver, R.blue))
+	_add("ring_emerald", "accessory", func() -> void:
+		_ring_item(R.gold, R.green))
+	_add("amulet_red", "accessory", func() -> void:
+		_amulet(R.red))
+	_add("amulet_blue", "accessory", func() -> void:
+		_amulet(R.blue))
+	_add("amulet_green", "accessory", func() -> void:
+		_amulet(R.green))
+	_add("bracelet", "accessory", func() -> void:
+		_band(16, 16, 13, 8, 4, 0, 360, R.gold, "radial")
+		for x in [7, 16, 25]:
+			_ell(x, 23.5 if x == 16 else 20.5, 2, 2, R.red, "radial", true))
+	_add("crown", "accessory", func() -> void:
+		_poly([V(4, 10), V(10, 16), V(16, 6), V(22, 16), V(28, 10), V(26, 26), V(6, 26)], R.gold, "edge")
+		_rect(6, 21, 20, 5, R.gold, "vgrad", true)
+		for x in [11, 16, 21]:
+			_ell(x, 23.5, 1.8, 1.8, R.red if x == 16 else R.blue, "flat")
+		for p in [V(4, 9), V(16, 5), V(28, 9)]:
+			_ell(p.x, p.y, 2, 2, R.gold, "radial"))
+	_add("brooch", "accessory", func() -> void:
+		_poly(_star_pts(V(16, 16), 13, 9, 8, -90), R.gold, "radial")
+		_ell(16, 16, 7, 7, R.purple, "radial", true))
+	_add("belt", "accessory", func() -> void:
+		_rect(2, 12, 28, 8, R.leather, "vgrad")
+		_rect(11, 9.5, 10, 13, R.gold, "edge", true)
+		_rect(14, 12.5, 4, 7, R.leather, "flat")
+		_bar(V(16, 16), V(22, 16), 1.6, R.steel, "flat"))
+	_add("boots_iron", "accessory", func() -> void:
+		_boot(R.steel, R.gold))
+	_add("ribbon", "accessory", func() -> void:
+		_poly([V(16, 14), V(9, 26), V(13, 27), V(16, 20), V(19, 27), V(23, 26)], R.pink, "edge")
+		_poly([V(16, 13), V(3, 6), V(3, 21)], R.pink, "edge")
+		_poly([V(16, 13), V(29, 6), V(29, 21)], R.pink, "edge")
+		_ell(16, 13.5, 3.5, 3.5, R.pink, "radial", true))
+	_add("medal", "accessory", func() -> void:
+		_poly([V(8, 2), V(14, 2), V(18, 14), V(13, 15)], R.blue, "edge")
+		_poly([V(24, 2), V(18, 2), V(14, 14), V(19, 15)], R.red, "edge")
+		_ell(16, 21, 8.5, 8.5, R.gold, "radial", true)
+		_poly(_star_pts(V(16, 21.5), 5, 2.2, 5), R.gold, "dark"))
+	_add("talisman", "accessory", func() -> void:
+		_rect(9, 3, 14, 26, R.paper, "edge")
+		_line(V(16, 6), V(16, 25), R.red[1])
+		_line(V(12, 9), V(20, 9), R.red[1])
+		_ell(16, 16, 3.5, 3.5, R.red, "flat")
+		_line(V(12, 21), V(20, 23), R.red[1]))
+	_add("glasses", "accessory", func() -> void:
+		_band(9, 17, 6.5, 6, 2.2, 0, 360, R.gold, "radial")
+		_band(23, 17, 6.5, 6, 2.2, 0, 360, R.gold, "radial")
+		_ell(9, 17, 4.4, 3.9, R.glass, "radial")
+		_ell(23, 17, 4.4, 3.9, R.glass, "radial")
+		_bar(V(14, 15), V(18, 15), 2, R.gold, "flat"))
+	_add("bell", "accessory", func() -> void:
+		_band(16, 5, 3, 3, 1.4, 0, 360, R.gold, "flat")
+		_poly([V(16, 6), V(22, 9), V(24, 20), V(28, 24), V(4, 24), V(8, 20), V(10, 9)], R.gold, "radial")
+		_ell(16, 26, 3, 3, R.gold, "radial", true))
+
+	# --- row 4: potions and medicine --------------------------------------------------------------
+	_add("potion_red", "item", func() -> void: _bottle(R.red))
+	_add("potion_blue", "item", func() -> void: _bottle(R.blue))
+	_add("potion_green", "item", func() -> void: _bottle(R.green))
+	_add("potion_yellow", "item", func() -> void: _bottle(R.yellow))
+	_add("potion_purple", "item", func() -> void: _bottle(R.purple))
+	_add("potion_orange", "item", func() -> void: _bottle(R.orange))
+	_add("flask_red", "item", func() -> void: _flask(R.red))
+	_add("ether", "item", func() -> void: _flask(R.blue))
+	_add("elixir", "item", func() -> void:
+		_rect(13, 2, 6, 3.5, R.gold, "edge")
+		_rect(14, 5.5, 4, 4, R.glass, "hgrad")
+		_poly([V(16, 8), V(27, 19), V(16, 30), V(5, 19)], R.glass, "radial")
+		_poly([V(16, 12), V(24.5, 20), V(16, 28), V(7.5, 20)], R.yellow, "radial")
+		_sparkle(16, 19, 2)
+		_sparkle(26, 7, 1, R.yellow[3]))
+	_add("vial", "item", func() -> void:
+		_rect(12.5, 3, 7, 3.5, R.wood, "edge")
+		_rrect(12, 6, 8, 23, 3.5, R.glass, "hgrad")
+		_rrect(13, 13, 6, 15, 2.5, R.cyan, "hgrad")
+		_line(V(13.5, 8), V(13.5, 12), WHITE))
+	_add("herb", "item", func() -> void:
+		_bar(V(16, 29), V(16, 12), 2, R.green, "flat")
+		_poly([V(16, 22), V(6, 18), V(4, 11), V(11, 13)], R.green, "edge")
+		_poly([V(16, 18), V(26, 14), V(28, 7), V(21, 9)], R.green, "edge")
+		_poly([V(16, 14), V(12, 7), V(16, 1.5), V(20, 7)], R.green, "edge")
+		_line(V(7, 14), V(15, 21), R.green[0])
+		_line(V(25, 10), V(17, 17), R.green[0]))
+	_add("flower", "item", func() -> void:
+		_bar(V(16, 29), V(16, 16), 2, R.green, "flat")
+		_poly([V(16, 25), V(23, 19), V(26, 21), V(19, 25)], R.green, "edge")
+		for a in [0, 72, 144, 216, 288]:
+			var v := Vector2.from_angle(deg_to_rad(a - 90)) * 6.5
+			_ell(16 + v.x, 12 + v.y, 4.5, 4.5, R.red, "radial")
+		_ell(16, 12, 3, 3, R.yellow, "radial", true))
+	_add("mushroom", "item", func() -> void:
+		_rrect(12, 15, 8, 13, 3, R.cream, "hgrad")
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 17, 14, 13) and p.y < 17.0, R.red, "radial", true)
+		for p in [V(10, 10), V(17, 7), V(22, 12)]:
+			_ell(p.x, p.y, 2, 2, R.white, "light"))
+	_add("first_aid", "item", func() -> void:
+		_band(16, 9, 6, 5, 2.2, 180, 360, R.iron, "flat")
+		_rrect(3, 9, 26, 19, 3, R.white, "edge")
+		_rect(13.5, 12, 5, 13, R.red, "edge")
+		_rect(9.5, 16, 13, 5, R.red, "edge"))
+	_add("feather", "item", func() -> void:
+		_bar(V(3, 29), V(10, 22), 1.8, R.cream, "flat")
+		_shape(func(p: Vector2) -> bool:
+			var q := p - V(17, 15)
+			var u := (q.x - q.y) / sqrt(2.0)
+			var w := (q.x + q.y) / sqrt(2.0) + 0.8
+			return absf(w) < 6.0 * sqrt(maxf(0.0, 1.0 - pow(u / 13.0, 2))) and u > -9.0, R.orange, "radial")
+		_line(V(9, 23), V(27, 5), R.yellow[3])
+		_cut(V(11, 15), V(14, 18))
+		_cut(V(19, 21), V(17, 17))
+		_cut(V(19, 7), V(21, 10)))
+	_add("tent", "item", func() -> void:
+		_poly([V(16, 4), V(30, 27), V(2, 27)], R.green, "edge")
+		_poly([V(16, 12), V(21, 27), V(11, 27)], R.dark, "flat")
+		_bar(V(16, 3), V(16, 6), 1.6, R.wood, "flat")
+		_line(V(16, 5), V(2, 27), R.green[2]))
+
+	# --- row 5: food and supplies -------------------------------------------------------------------
+	_add("bread", "food", func() -> void:
+		_ell(16, 17, 13.5, 9, R.bread, "radial")
+		for x in [10, 16, 22]:
+			_line(V(x - 1.5, 12), V(x + 1.5, 16), R.bread[0]))
+	_add("apple", "food", func() -> void:
+		_ell(16, 18, 12, 11, R.red, "radial")
+		_bar(V(16, 9), V(18, 3), 2, R.dwood, "flat")
+		_poly([V(18, 7), V(24, 3), V(27, 5), V(22, 8)], R.green, "edge"))
+	_add("meat", "food", func() -> void:
+		_bar(V(6, 26), V(14, 18), 3.4, R.bone)
+		_ell(5, 25, 2.2, 2.2, R.bone, "radial")
+		_ell(7, 28, 2.2, 2.2, R.bone, "radial")
+		_ell(19, 13, 10.5, 9, R.meat, "radial", true))
+	_add("fish", "food", func() -> void:
+		_poly([V(27, 16), V(31, 9), V(31, 23)], R.blue, "edge")
+		_ell(15, 16, 13, 7.5, R.blue, "radial")
+		_poly([V(11, 9), V(17, 6), V(20, 10)], R.blue, "dark")
+		_ell(8, 14, 1.6, 1.6, R.dark, "flat")
+		_line(V(12, 12), V(12, 20), R.blue[0]))
+	_add("cheese", "food", func() -> void:
+		_poly([V(3, 21), V(26, 9), V(29, 14), V(29, 26), V(3, 26)], R.yellow, "edge")
+		_poly([V(3, 21), V(26, 9), V(29, 14), V(3, 21)], R.yellow, "light")
+		for p in [V(10, 23), V(19, 19), V(24, 23)]:
+			_ell(p.x, p.y, 1.8, 1.6, R.yellow, "dark"))
+	_add("egg", "food", func() -> void:
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 18, 10, 11) or (_in_ell(p, 16, 14, 8, 11) and p.y < 18), R.cream, "radial"))
+	_add("carrot", "food", func() -> void:
+		_poly([V(4, 28), V(18, 10), V(24, 16)], R.orange, "edge")
+		_line(V(12, 18), V(15, 20), R.orange[0])
+		_line(V(9, 23), V(11, 25), R.orange[0])
+		for d in [V(20, 3), V(26, 5), V(28, 11)]:
+			_seg(V(21, 11), d, 2.4, R.green, "flat"))
+	_add("grapes", "food", func() -> void:
+		_bar(V(16, 7), V(18, 2), 1.8, R.dwood, "flat")
+		_poly([V(17, 6), V(25, 3), V(24, 8)], R.green, "edge")
+		for p in [V(10, 11), V(16, 10), V(22, 11), V(13, 16), V(19, 16), V(10, 21) + V(3, 0), V(19, 21), V(16, 26)]:
+			_ell(p.x, p.y, 3.6, 3.6, R.purple, "radial", true))
+	_add("cherries", "food", func() -> void:
+		_line(V(10, 20), V(18, 5), R.green[1])
+		_line(V(22, 22), V(18, 5), R.green[1])
+		_poly([V(18, 5), V(26, 3), V(24, 8)], R.green, "edge")
+		_ell(9, 22, 6, 6, R.red, "radial")
+		_ell(22, 23, 6, 6, R.red, "radial", true))
+	_add("mug", "food", func() -> void:
+		_band(23, 17, 5, 6, 2.2, -100, 100, R.wood, "radial")
+		_rect(6, 8, 17, 21, R.wood, "hgrad")
+		_line(V(6, 14), V(22, 14), R.wood[0])
+		_line(V(6, 23), V(22, 23), R.wood[0])
+		_ell(14.5, 7, 9.5, 4.5, R.cream, "radial"))
+	_add("wine", "food", func() -> void:
+		_rect(14, 2, 4, 9, R.green, "hgrad")
+		_rect(13.5, 2, 5, 3, R.red, "edge")
+		_rrect(9, 10, 14, 20, 4, R.green, "radial")
+		_rect(10, 17, 12, 7, R.paper, "edge"))
+	_add("cake", "food", func() -> void:
+		_poly([V(4, 18), V(22, 10), V(28, 14), V(28, 27), V(4, 27)], R.cream, "edge")
+		_poly([V(4, 18), V(22, 10), V(28, 14), V(10, 22)], R.white, "light")
+		_rect(4, 21, 24, 2, R.pink, "flat")
+		_ell(21, 9, 3, 3, R.red, "radial", true))
+	_add("candy", "food", func() -> void:
+		_poly([V(9, 16), V(2, 9), V(3, 23)], R.yellow, "edge")
+		_poly([V(23, 16), V(30, 9), V(29, 23)], R.yellow, "edge")
+		_ell(16, 16, 8, 7, R.pink, "radial", true)
+		_line(V(12, 12), V(19, 21), R.white[2]))
+	_add("torch", "food", func() -> void:
+		_bar(V(9, 29), V(17, 16), 3.4, R.wood)
+		_bar(V(15.5, 18.5), V(18, 14.5), 4.6, R.iron, "cyl", true)
+		_flame(V(4, -4), 0.48))
+	_add("rope", "food", func() -> void:
+		for k in 3:
+			_band(16, 13 + k * 3.5, 12, 8, 2.6, 0, 360, R.bread, "radial", k > 0)
+		_bar(V(24, 25), V(29, 30), 2.4, R.bread))
+	_add("lantern", "food", func() -> void:
+		_band(16, 7, 4, 4, 1.4, 180, 360, R.iron, "flat")
+		_rect(9, 7, 14, 3, R.iron, "edge")
+		_rect(10, 10, 12, 15, R.yellow, "radial")
+		_line(V(13, 10), V(13, 24), R.iron[1])
+		_line(V(18.5, 10), V(18.5, 24), R.iron[1])
+		_rect(8, 25, 16, 4, R.iron, "edge"))
+
+	# --- row 6: documents, keys, money ------------------------------------------------------------
+	_add("scroll", "document", func() -> void:
+		_rect(7, 7, 18, 18, R.paper, "hgrad")
+		for y in [11, 14, 17, 20]:
+			_line(V(10, y), V(22, y), R.paper[0])
+		_bar(V(5, 6), V(27, 6), 4.5, R.paper, "cyl")
+		_bar(V(5, 26), V(27, 26), 4.5, R.paper, "cyl")
+		_ell(4.5, 6, 2, 2.5, R.wood, "flat")
+		_ell(27.5, 26, 2, 2.5, R.wood, "flat"))
+	_add("scroll_sealed", "document", func() -> void:
+		_bar(V(4, 22), V(22, 4), 9, R.paper, "cyl")
+		_ell(5, 21, 3, 3, R.paper, "dark")
+		_bar(V(12, 9), V(23, 20), 2.8, R.red, "flat")
+		_ell(19, 19, 4.5, 4.5, R.red, "radial", true))
+	_add("book_brown", "document", func() -> void: _book(R.leather, R.gold))
+	_add("book_blue", "document", func() -> void: _book(R.blue, R.silver))
+	_add("book_red", "document", func() -> void: _book(R.red, R.gold))
+	_add("book_green", "document", func() -> void: _book(R.green, R.gold))
+	_add("letter", "document", func() -> void:
+		_rect(3, 8, 26, 17, R.paper, "edge")
+		_poly([V(3.5, 8.5), V(28.5, 8.5), V(16, 18)], R.paper, "light")
+		_line(V(3.5, 8.5), V(16, 18), R.paper[0])
+		_line(V(28.5, 8.5), V(16, 18), R.paper[0])
+		_ell(16, 17.5, 3, 3, R.red, "radial", true))
+	_add("map", "document", func() -> void:
+		_poly([V(3, 7), V(11, 4), V(21, 7), V(29, 4), V(29, 25), V(21, 28), V(11, 25), V(3, 28)], R.paper, "edge")
+		_line(V(11, 5), V(11, 24), R.paper[0])
+		_line(V(21, 8), V(21, 27), R.paper[0])
+		_ell(8, 13, 3, 3, R.green, "flat")
+		_ell(24, 20, 3, 2.5, R.blue, "flat")
+		_seg(V(23, 11), V(27, 15), 1.5, R.red, "flat")
+		_seg(V(27, 11), V(23, 15), 1.5, R.red, "flat")
+		_line(V(8, 17), V(14, 22), R.red[1])
+		_line(V(15, 21), V(22, 13), R.red[1]))
+	_add("key_gold", "document", func() -> void: _key(R.gold))
+	_add("key_silver", "document", func() -> void: _key(R.silver))
+	_add("key_iron", "document", func() -> void: _key(R.iron))
+	_add("bag", "treasure", func() -> void:
+		_ell(16, 20, 12, 10, R.leather, "radial")
+		_poly([V(10, 11), V(13, 7), V(19, 7), V(22, 11)], R.leather, "edge")
+		_poly([V(10, 4), V(16, 7), V(22, 4), V(21, 8), V(11, 8)], R.leather, "edge")
+		_bar(V(10, 10), V(22, 10), 2.4, R.gold, "flat")
+		_ell(16, 20, 3.5, 3.5, R.gold, "radial"))
+	_add("coin_gold", "treasure", func() -> void: _coin(R.gold))
+	_add("coins", "treasure", func() -> void:
+		for k in 4:
+			_ell(11, 26 - k * 3, 8, 3, R.gold, "edge", k > 0)
+		_coin(R.gold, 22, 17, 7.5))
+	_add("coin_silver", "treasure", func() -> void: _coin(R.silver))
+	_add("chest", "treasure", func() -> void:
+		_rect(3, 15, 26, 13, R.wood, "edge")
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 15, 13, 9) and p.y < 15, R.wood, "radial")
+		_rect(3, 13.5, 26, 3, R.gold, "edge")
+		_rect(6, 6.5, 3, 21.5, R.gold, "hgrad")
+		_rect(23, 6.5, 3, 21.5, R.gold, "hgrad")
+		_rect(13.5, 13, 5, 6, R.gold, "edge", true)
+		_dot(16, 16, R.dark[0]))
+	_add("gold_bar", "treasure", func() -> void:
+		_poly([V(2, 24), V(8, 13), V(24, 13), V(30, 24)], R.gold, "edge")
+		_poly([V(8, 13), V(24, 13), V(22, 17), V(10, 17)], R.gold, "light")
+		_poly([V(4, 26), V(9, 20), V(23, 20), V(28, 26)], R.gold, "edge", true)
+		_sparkle(10, 21, 1))
+
+	# --- row 7: gems and treasures -------------------------------------------------------------------
+	_add("ruby", "treasure", func() -> void: _gem(R.red))
+	_add("sapphire", "treasure", func() -> void: _gem(R.blue))
+	_add("emerald", "treasure", func() -> void: _gem(R.green))
+	_add("topaz", "treasure", func() -> void: _gem(R.yellow))
+	_add("amethyst", "treasure", func() -> void: _gem(R.purple))
+	_add("diamond", "treasure", func() -> void: _gem(R.white))
+	_add("crystal_blue", "treasure", func() -> void: _crystal(R.cyan))
+	_add("crystal_red", "treasure", func() -> void: _crystal(R.red))
+	_add("crystal_green", "treasure", func() -> void: _crystal(R.green))
+	_add("crystal_ball", "treasure", func() -> void:
+		_poly([V(8, 28), V(11, 22), V(21, 22), V(24, 28)], R.gold, "edge")
+		_ell(16, 14, 11, 11, R.purple, "radial", true)
+		_ell(13, 11, 3, 3, R.purple, "light"))
+	_add("pearl", "treasure", func() -> void:
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 16, 17, 14, 12) and p.y >= 17.0, R.pink, "radial")
+		for x in [8, 12, 16, 20, 24]:
+			_line(V(16, 28), V(x, 18), R.pink[0])
+		_ell(16, 14, 6.5, 6.5, R.white, "radial", true))
+	_add("ore", "treasure", func() -> void:
+		_poly([V(3, 22), V(8, 10), V(18, 6), V(28, 13), V(29, 24), V(18, 28), V(8, 27)], R.stone, "edge")
+		_poly([V(9, 15), V(13, 13), V(14, 18), V(10, 19)], R.gold, "light")
+		_poly([V(19, 15), V(24, 16), V(22, 21), V(18, 19)], R.gold, "flat")
+		_dot(16, 23, R.gold[2]))
+	_add("star_shard", "treasure", func() -> void:
+		_poly(_star_pts(V(16, 16), 14, 5.5, 4, -90), R.yellow, "radial")
+		_poly(_star_pts(V(16, 16), 8, 3, 4, -45), R.white, "light")
+		_sparkle(16, 16, 1))
+	_add("bone", "treasure", func() -> void:
+		_bar(V(9, 23), V(23, 9), 4, R.bone)
+		for p in [V(5.5, 23.5), V(8.5, 26.5), V(23.5, 5.5), V(26.5, 8.5)]:
+			_ell(p.x, p.y, 3.5, 3.5, R.bone, "radial")
+		_bar(V(9, 23), V(23, 9), 4, R.bone))
+	_add("rune_stone", "treasure", func() -> void:
+		_rrect(6, 3, 20, 26, 6, R.stone, "radial")
+		_line(V(16, 8), V(16, 24), R.cyan[2])
+		_line(V(16, 10), V(21, 14), R.cyan[2])
+		_line(V(16, 15), V(11, 19), R.cyan[2]))
+
+	# --- row 8: elements ---------------------------------------------------------------------------
+	_add("fire", "element", func() -> void: _flame(Vector2.ZERO, 1.0))
+	_add("ice", "element", func() -> void:
+		for a in [0, 60, 120]:
+			var v := Vector2.from_angle(deg_to_rad(a + 90)) * 13
+			_seg(V(16, 16) - v, V(16, 16) + v, 3.4, R.ice, "flat")
+		for a in [0, 60, 120, 180, 240, 300]:
+			var d := Vector2.from_angle(deg_to_rad(a + 90))
+			var p := V(16, 16) + d * 9
+			_seg(p, p + d.rotated(0.9) * 4, 2.2, R.ice, "light")
+			_seg(p, p + d.rotated(-0.9) * 4, 2.2, R.ice, "light")
+		_ell(16, 16, 3.5, 3.5, R.ice, "hi"))
+	_add("thunder", "element", func() -> void: _lightning(R.yellow))
+	_add("water", "element", func() -> void:
+		_drop(R.blue)
+		_band(16, 20, 6, 6, 1.6, 100, 170, [WHITE, WHITE, WHITE, WHITE], "flat"))
+	_add("earth", "element", func() -> void:
+		_poly([V(2, 28), V(9, 12), V(14, 18), V(20, 5), V(30, 28)], R.earth, "edge")
+		_poly([V(20, 5), V(24, 13), V(21, 12), V(18, 15), V(16, 13)], R.white, "light")
+		_poly([V(2, 28), V(9, 12), V(13, 20), V(9, 28)], R.earth, "light"))
+	_add("wind", "element", func() -> void:
+		for w: Array in [[V(3, 11), V(18, 11), 4.0], [V(2, 19), V(24, 19), 4.5], [V(7, 27), V(19, 27), 3.5]]:
+			var a: Vector2 = w[0]
+			var b: Vector2 = w[1]
+			var r: float = w[2]
+			_bar(a, b, 2.6, R.teal, "cyl")
+			_band(b.x, b.y - r + 1.3, r, r, 2.6, 180, 450, R.teal, "radial"))
+	_add("light", "element", func() -> void:
+		_poly(_star_pts(V(16, 16), 15, 5, 8, -90), R.yellow, "radial")
+		_ell(16, 16, 6.5, 6.5, R.white, "radial"))
+	_add("dark", "element", func() -> void:
+		_poly(_star_pts(V(16, 16), 14, 9, 8, -67.5), R.purple, "radial")
+		_ell(16, 16, 10, 10, R.dark, "radial", true)
+		_band(16, 16, 6, 6, 1.6, 200, 330, R.purple, "light"))
+	_add("physical", "element", func() -> void:
+		_rect(10, 21, 12, 8, R.skin, "edge")
+		_rrect(5, 5, 22, 17, 4, R.skin, "edge")
+		for x in [10.5, 16, 21.5]:
+			_line(V(x, 6), V(x, 12), R.skin[0])
+		_rrect(5, 12.5, 15, 6, 2.5, R.skin, "light", true))
+	_add("slash", "element", func() -> void:
+		for k in 3:
+			var o := V(k * 6 - 6, k * 3 - 3)
+			_poly([V(8, 26) + o, V(24, 4) + o, V(13, 26) + o], R.white, "flat", k > 0)
+			_line(V(10, 25) + o, V(23, 6) + o, WHITE))
+	_add("pierce", "element", func() -> void:
+		_bar(V(4, 28), V(22, 10), 2.4, R.wood)
+		_poly([V(29, 3), V(25, 14), V(18, 7)], R.steel, "edge", true)
+		_poly([V(4, 28), V(3, 21), V(7, 25)], R.red, "flat")
+		_poly([V(4, 28), V(11, 29), V(7, 25)], R.red, "flat"))
+	_add("impact", "element", func() -> void:
+		_poly(_star_pts(V(16, 16), 15, 7, 9, -80), R.orange, "radial")
+		_poly(_star_pts(V(16, 16), 8, 4, 9, -60), R.yellow, "light"))
+	_add("plant", "element", func() -> void:
+		_bar(V(16, 29), V(16, 15), 2.4, R.green, "flat")
+		_poly([V(16, 18), V(4, 14), V(2, 5), V(12, 8)], R.green, "radial")
+		_poly([V(16, 16), V(28, 10), V(30, 2), V(20, 4)], R.green, "radial")
+		_rect(8, 26, 16, 4, R.earth, "edge"))
+	_add("moon", "element", func() -> void:
+		_shape(func(p: Vector2) -> bool: return _in_ell(p, 15, 16, 13, 13) and not _in_ell(p, 21, 12, 10, 10), R.yellow, "radial")
+		_sparkle(25, 22, 1, R.yellow[3]))
+	_add("sun", "element", func() -> void:
+		for k in 8:
+			var d := Vector2.from_angle(deg_to_rad(k * 45))
+			_seg(V(16, 16) + d * 10, V(16, 16) + d * 14, 3, R.orange, "flat")
+		_ell(16, 16, 8.5, 8.5, R.yellow, "radial"))
+	_add("sparkle", "element", func() -> void:
+		_poly(_star_pts(V(13, 15), 12, 3, 4, -90), R.cyan, "radial")
+		_poly(_star_pts(V(25, 7), 5, 1.6, 4, -90), R.cyan, "light")
+		_poly(_star_pts(V(24, 25), 4.5, 1.5, 4, -90), R.cyan, "light"))
+
+	# --- row 9: skills (support) -------------------------------------------------------------------
+	_add("heal", "skill", func() -> void:
+		_poly([V(12, 4), V(20, 4), V(20, 12), V(28, 12), V(28, 20), V(20, 20), V(20, 28), V(12, 28), V(12, 20), V(4, 20), V(4, 12), V(12, 12)], R.green, "radial")
+		_sparkle(26, 5, 1)
+		_sparkle(6, 27, 1))
+	_add("heal_all", "skill", func() -> void:
+		var cross := [V(12, 4), V(20, 4), V(20, 12), V(28, 12), V(28, 20), V(20, 20), V(20, 28), V(12, 28), V(12, 20), V(4, 20), V(4, 12), V(12, 12)]
+		_poly(_xf(cross, V(-3, 3), 0.78), R.green, "radial")
+		_poly(_xf(cross, V(8.5, -8.5), 0.4), R.green, "radial", true)
+		_sparkle(4, 5, 1)
+		_sparkle(28, 27, 1))
+	_add("revive", "skill", func() -> void:
+		_band(16, 9, 5.5, 6, 3, 0, 360, R.gold, "radial")
+		_bar(V(16, 14), V(16, 30), 4, R.gold, "cyl")
+		_bar(V(6, 17), V(26, 17), 4, R.gold, "cyl")
+		_sparkle(26, 6, 1)
+		_sparkle(6, 26, 1))
+	_add("cure", "skill", func() -> void:
+		_drop(R.cyan)
+		_rect(14.5, 15, 3, 10, R.white, "light")
+		_rect(11, 18.5, 10, 3, R.white, "light"))
+	_add("attack_up", "skill", func() -> void:
+		_sword(V(8, 18), V(20, 4), 3.6, R.steel, R.gold, R.leather, 4.0, 4.0)
+		_arrow_badge(true))
+	_add("attack_down", "skill", func() -> void:
+		_sword(V(8, 18), V(20, 4), 3.6, R.steel, R.gold, R.leather, 4.0, 4.0)
+		_arrow_badge(false))
+	_add("defense_up", "skill", func() -> void:
+		_poly(_xf(_shield_shape(), V(-5, -4), 0.75), R.blue, "edge")
+		_arrow_badge(true))
+	_add("defense_down", "skill", func() -> void:
+		_poly(_xf(_shield_shape(), V(-5, -4), 0.75), R.blue, "edge")
+		_arrow_badge(false))
+	_add("magic_up", "skill", func() -> void:
+		_poly(_star_pts(V(12, 12), 10, 4, 4), R.purple, "radial")
+		_arrow_badge(true))
+	_add("magic_down", "skill", func() -> void:
+		_poly(_star_pts(V(12, 12), 10, 4, 4), R.purple, "radial")
+		_arrow_badge(false))
+	_add("speed_up", "skill", func() -> void:
+		_at(V(-3, -3), 0.75, _winged_boot)
+		_arrow_badge(true))
+	_add("speed_down", "skill", func() -> void:
+		_at(V(-3, -3), 0.75, _winged_boot)
+		_arrow_badge(false))
+	_add("magic", "skill", func() -> void:
+		_band(16, 16, 13, 13, 2, 0, 360, R.purple, "radial")
+		_poly(_star_pts(V(16, 16), 10.5, 4.2, 5), R.purple, "radial")
+		_ell(16, 16, 2.4, 2.4, R.white, "light"))
+	_add("steal", "skill", func() -> void:
+		_coin(R.gold, 22, 9, 7.5)
+		_at(V(-6, 5), 0.72, func() -> void: _glove(R.purple, R.dark)))
+	_add("guard", "skill", func() -> void:
+		_band(16, 16, 15, 15, 2, 200, 340, R.cyan, "light")
+		_band(16, 16, 15, 15, 2, 20, 160, R.cyan, "light")
+		_shield_icon(R.blue, R.silver))
+	_add("escape", "skill", func() -> void:
+		_rect(3, 4, 14, 25, R.dwood, "flat")
+		_rect(5, 6, 10, 23, R.dark, "flat")
+		_poly([V(30, 17), V(21, 8), V(21, 13), V(11, 13), V(11, 21), V(21, 21), V(21, 26)], R.green, "edge", true))
+
+	# --- row 10: more skills -------------------------------------------------------------------------
+	_add("barrier", "skill", func() -> void:
+		_band(16, 16, 13.5, 13.5, 2.6, 0, 360, R.cyan, "radial")
+		_band(16, 16, 9, 9, 1.3, 190, 260, [WHITE, WHITE, WHITE, WHITE], "flat")
+		_sparkle(22, 22, 1, R.cyan[3]))
+	_add("reflect", "skill", func() -> void:
+		_bar(V(22, 24), V(28, 30), 3.6, R.gold)
+		_ell(14, 14, 11, 11, R.gold, "radial")
+		_ell(14, 14, 8.5, 8.5, R.glass, "radial")
+		_line(V(10, 16), V(16, 10), WHITE)
+		_line(V(11, 19), V(19, 11), WHITE))
+	_add("drain", "skill", func() -> void:
+		_heart(V(18, 18), 0.8, R.red)
+		_band(14, 14, 11, 11, 2.4, 160, 290, R.purple, "radial", true)
+		_poly([V(1, 13), V(8, 13), V(4.5, 19)], R.purple, "edge", true))
+	_add("scan", "skill", func() -> void:
+		_bar(V(19, 19), V(28, 28), 4.6, R.dwood)
+		_band(13, 13, 10, 10, 3, 0, 360, R.silver, "radial")
+		_ell(13, 13, 7, 7, R.glass, "radial"))
+	_add("target", "skill", func() -> void:
+		_ell(16, 16, 13.5, 13.5, R.red, "radial")
+		_ell(16, 16, 10, 10, R.white, "flat")
+		_ell(16, 16, 6.5, 6.5, R.red, "flat")
+		_ell(16, 16, 3, 3, R.white, "light"))
+	_add("luck", "skill", func() -> void:
+		_bar(V(16, 18), V(21, 30), 2.2, R.green, "flat")
+		for c in [V(10, 11), V(22, 11), V(10, 22) + V(0, -1), V(22, 22) + V(0, -1)]:
+			_heart(c, 0.42, R.green, "radial", true))
+	_add("song", "skill", func() -> void: _music_note(R.blue))
+	_add("double_attack", "skill", func() -> void:
+		_sword(V(9, 22), V(27, 4), 3.6, R.steel, R.gold, R.leather, 4.2, 4.5)
+		var pts := [V(23, 22), V(5, 4)]
+		_blade(pts[0], pts[1], 3.6, 4, R.steel, true)
+		_bar(V(23, 22), V(26.5, 25.5), 2.6, R.leather)
+		_bar(V(20, 25), V(26, 19), 2.8, R.gold, "cyl", true))
+	_add("counter", "skill", func() -> void:
+		_band(16, 16, 12, 12, 3.4, 200, 340, R.orange, "radial")
+		_poly([V(27, 9), V(30, 17), V(22, 16)], R.orange, "edge")
+		_band(16, 16, 12, 12, 3.4, 20, 160, R.blue, "radial")
+		_poly([V(5, 23), V(2, 15), V(10, 16)], R.blue, "edge"))
+	_add("summon", "skill", func() -> void:
+		_band(16, 16, 14, 14, 1.8, 0, 360, R.cyan, "flat")
+		_band(16, 16, 9.5, 9.5, 1.4, 0, 360, R.cyan, "flat")
+		for k in 6:
+			var d := Vector2.from_angle(deg_to_rad(k * 60 - 90))
+			_ell(16 + d.x * 12, 16 + d.y * 12, 1.8, 1.8, R.white, "light")
+		_poly(_star_pts(V(16, 16), 7, 3, 6), R.cyan, "light"))
+	_add("magic_guard", "skill", func() -> void:
+		_poly(_shield_shape(), R.silver, "edge")
+		_poly(_xf(_shield_shape(), V(0, 0.6), 0.76), R.purple, "edge")
+		_poly(_star_pts(V(16, 15), 7, 3, 5), R.yellow, "radial"))
+	_add("charge", "skill", func() -> void:
+		_poly(_star_pts(V(16, 16), 15, 9, 12, -90), R.yellow, "flat")
+		_rrect(8, 9, 16, 12, 4, R.skin, "edge", true)
+		for x in [12, 16, 20]:
+			_line(V(x, 10), V(x, 15), R.skin[0])
+		_bar(V(12, 21), V(20, 21), 6, R.skin, "edge"))
+	_add("mp_up", "skill", func() -> void:
+		_drop(R.blue, V(-4, -3), 0.8)
+		_arrow_badge(true))
+	_add("hp_up", "skill", func() -> void:
+		_heart(V(12, 12), 0.75, R.red)
+		_arrow_badge(true))
+	_add("poison_attack", "skill", func() -> void:
+		_sword(V(9, 21), V(26, 4), 3.8, R.green, R.purple, R.dark, 4.5, 4.5)
+		_ell(25, 23, 4, 4, R.purple, "radial", true)
+		_ell(19, 28, 2.2, 2.2, R.purple, "radial"))
+	_add("fire_attack", "skill", func() -> void:
+		_flame(V(5, 5), 0.6)
+		_sword(V(9, 21), V(26, 4), 3.8, R.steel, R.gold, R.leather, 4.5, 4.5))
+
+	# --- row 11: states -------------------------------------------------------------------------------
+	_add("poison", "state", func() -> void:
+		_drop(R.purple, V(-2, 1), 0.92)
+		_ell(24, 8, 3.5, 3.5, R.purple, "radial", true)
+		_ell(26.5, 17, 2.2, 2.2, R.purple, "radial")
+		_ell(11, 19, 2, 2, R.green, "light"))
+	_add("sleep", "state", func() -> void:
+		_zed(3, 15, 14, R.blue)
+		_zed(17, 8, 10, R.blue)
+		_zed(25, 2, 6, R.blue))
+	_add("silence", "state", func() -> void:
+		_ell(16, 14, 13, 10, R.white, "radial")
+		_poly([V(8, 21), V(6, 29), V(14, 23)], R.white, "flat")
+		_seg(V(9, 8), V(23, 20), 3.4, R.red, "cyl")
+		_seg(V(23, 8), V(9, 20), 3.4, R.red, "cyl"))
+	_add("confusion", "state", func() -> void:
+		_shape(func(p: Vector2) -> bool:
+			var v := p - V(16, 16)
+			var r := v.length()
+			var th := atan2(v.y, v.x)
+			if th < 0.0:
+				th += TAU
+			for k in 3:
+				var tt := th + TAU * k
+				if tt > TAU * 2.4:
+					break
+				if absf(r - (1.5 + 1.0 * tt)) <= 1.45:
+					return true
+			return false, R.yellow, "radial"))
+	_add("blind", "state", func() -> void:
+		_eye(R.blue)
+		_seg(V(5, 27), V(27, 5), 3.4, R.dark, "cyl", true))
+	_add("paralysis", "state", func() -> void:
+		_lightning(R.yellow, V(0, 0), 0.92)
+		_band(16, 16, 14, 7, 2, 10, 170, R.cyan, "light", true)
+		_sparkle(4, 8, 1, R.yellow[3])
+		_sparkle(28, 26, 1, R.yellow[3]))
+	_add("stun", "state", func() -> void:
+		_band(16, 18, 14, 6, 1.6, 0, 360, R.orange, "flat")
+		for p in [V(6, 13), V(17, 22), V(26, 12)]:
+			_poly(_star_pts(p, 6, 2.6, 5), R.yellow, "radial", true))
+	_add("knockout", "state", func() -> void: _skull(R.bone, R.dark))
+	_add("regen", "state", func() -> void:
+		_heart(V(12, 13), 0.78, R.green)
+		_arrow_badge(true))
+	_add("berserk", "state", func() -> void:
+		for a in [45, 135, 225, 315]:
+			var d := Vector2.from_angle(deg_to_rad(a)) * 20
+			_band(16 + d.x, 16 + d.y, 12.5, 12.5, 3.8, a + 180 - 38, a + 180 + 38, R.red, "radial"))
+	_add("charm", "state", func() -> void:
+		_heart(V(16, 17), 0.95, R.pink)
+		_heart(V(26, 7), 0.32, R.pink, "radial", true)
+		_sparkle(6, 6, 1))
+	_add("petrify", "state", func() -> void:
+		_ell(16, 15, 11.5, 13, R.stone, "radial")
+		_rect(9, 24, 14, 5, R.stone, "edge")
+		_line(V(10.5, 13), V(14, 13), R.stone[0])
+		_line(V(18, 13), V(21.5, 13), R.stone[0])
+		_line(V(13, 20), V(19, 20), R.stone[0])
+		_line(V(20, 3), V(17, 8), R.dark[0])
+		_line(V(17, 8), V(20, 11), R.dark[0]))
+	_add("slow", "state", func() -> void:
+		_poly([V(2, 27), V(7, 20), V(9, 13), V(12, 22), V(28, 23), V(30, 28)], R.cream, "edge")
+		_line(V(9, 13), V(7, 8), R.cream[0])
+		_line(V(10, 14), V(12, 9), R.cream[0])
+		_ell(19, 16, 9, 8.5, R.earth, "radial", true)
+		_band(19, 16, 5.5, 5, 1.6, 0, 270, R.earth, "dark"))
+	_add("haste", "state", func() -> void:
+		_clock()
+		_poly([V(3, 6), V(9, 3), V(8, 9)], R.green, "edge", true))
+	_add("frozen", "state", func() -> void:
+		_rrect(4, 4, 24, 24, 3, R.ice, "edge")
+		_poly([V(4.5, 4.5), V(27.5, 4.5), V(4.5, 27.5)], R.ice, "flat")
+		_line(V(7, 12), V(12, 7), WHITE)
+		_line(V(7, 17), V(17, 7), WHITE)
+		_line(V(19, 26), V(26, 19), R.ice[0]))
+	_add("curse", "state", func() -> void:
+		_skull(R.purple, R.dark)
+		_sparkle(4, 4, 1, R.purple[3])
+		_sparkle(28, 6, 1, R.purple[3]))

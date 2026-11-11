@@ -1,0 +1,54 @@
+{
+	"schema_version": 1,
+	"id": "vx",
+	"name": "RPG Maker VX / VX Ace",
+	"version": 1,
+	"status": "supported",
+	"tile_size": 32,
+	"autotile_frame_time": 0.5,
+	"decoders": {
+		"tileset_a1": "RPGTilesheetVX: animated water (floor layout, frames 0,1,2,1) and waterfalls (frames 0,1,2)",
+		"tileset_a2": "RPGTilesheetVX: 32 floor autotiles (2x3 blocks, 47 variants)",
+		"tileset_a3": "RPGTilesheetVX: 32 wall autotiles (2x2 blocks, 16 shapes)",
+		"tileset_a4": "RPGTilesheetVX: 48 wall-top (floor layout) and wall-side (wall layout) autotiles",
+		"tileset_a5": "RPGTilesheetVX: 128 plain lower tiles",
+		"tileset_b": "RPGTilesheetVX: B-E, 256 plain upper tiles each; B 0 is the eraser",
+		"charset": "RPGCharset: 4x2 characters per sheet; a $ prefix (also after !) means one character",
+		"faceset": "RPGCharset.face_rect: 96x96 faces, 4x2 per sheet"
+	},
+	"fixtures": "tests/suites/test_profiles.gd (synthetic sheets)",
+	"limitations": [
+		"A2 table tiles are drawn without legs",
+		"A1 deep sea and decorations and the transparent A2 kinds get a hidden base (sea / the ground) only when painted on Layer 1; on other layers they are drawn as they are",
+		"A2 overlays are found from transparent pixels, not from the tileset mode (field / area)",
+		"roof and wall connections across different kinds",
+		"passability stored in the original database files is not read"
+	],
+	"layers": ["layer1", "layer2", "layer3", "layer4"],
+	"extensions": {"image": ["png"], "audio": ["ogg", "wav", "mp3", "mid", "midi"]},
+	"folders": {
+		"backdrop": "Graphics/Battlebacks1",
+		"battler": "Graphics/Battlers",
+		"charset": "Graphics/Characters",
+		"faceset": "Graphics/Faces",
+		"music": "Audio/BGM",
+		"panorama": "Graphics/Parallaxes",
+		"picture": "Graphics/Pictures",
+		"sound": "Audio/SE",
+		"system": "Graphics/System",
+		"tileset": "Graphics/Tilesets",
+		"title": "Graphics/Titles1"
+	},
+	"sheets": {
+		"tileset_a1": {"size": [512, 384]},
+		"tileset_a2": {"size": [512, 384]},
+		"tileset_a3": {"size": [512, 256]},
+		"tileset_a4": {"size": [512, 480]},
+		"tileset_a5": {"size": [256, 512]},
+		"tileset_b": {"size": [512, 512]},
+		"charset": {"characters": [4, 2], "frames": 3, "idle_frame": 1, "walk_pattern": [0, 1, 2, 1], "directions": ["down", "left", "right", "up"], "single_prefix": "$"},
+		"faceset": {"cell": [96, 96], "columns": 4, "rows": 2},
+		"system": {"size": [128, 128]}
+	},
+	"sound_roles": {}
+}

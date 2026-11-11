@@ -1,0 +1,46 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "bronze_sword",
+			"name": "Bronze Sword",
+			"notes": "",
+			"animation": "slash",
+			"custom": {},
+			"description": "A plain bronze blade.",
+			"icon": 16,
+			"params": {
+				"atk": 10
+			},
+			"price": 100,
+			"traits": [
+				{
+					"kind": "attack_element",
+					"id": "physical"
+				}
+			],
+			"weapon_type": "sword"
+		},
+		{
+			"id": "iron_sword",
+			"name": "Iron Sword",
+			"notes": "",
+			"animation": "slash",
+			"custom": {},
+			"description": "A sturdy iron blade.",
+			"icon": 17,
+			"params": {
+				"atk": 22,
+				"dex": 2
+			},
+			"price": 300,
+			"traits": [
+				{
+					"kind": "attack_element",
+					"id": "physical"
+				}
+			],
+			"weapon_type": "sword"
+		}
+	]
+}

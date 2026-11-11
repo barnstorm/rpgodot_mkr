@@ -1,0 +1,31 @@
+{
+	"schema_version": 1,
+	"records": [
+		{
+			"id": "leather_armor",
+			"name": "Leather Armor",
+			"notes": "",
+			"armor_type": "light",
+			"custom": {},
+			"description": "Tough boiled leather.",
+			"icon": 41,
+			"params": {"mdef": 1, "pdef": 4},
+			"price": 80,
+			"slot": "body",
+			"traits": []
+		},
+		{
+			"id": "wooden_shield",
+			"name": "Wooden Shield",
+			"notes": "",
+			"armor_type": "shield",
+			"custom": {},
+			"description": "A round shield of oak planks.",
+			"icon": 32,
+			"params": {"pdef": 3},
+			"price": 60,
+			"slot": "shield",
+			"traits": []
+		}
+	]
+}

@@ -1,0 +1,40 @@
+{
+	"schema_version": 1,
+	"notes": "Hand-derived from the documented 2000/2003 layout (see rpg_chipset_2k.gd header). Synthetic sheet: every 8x8 quarter at quarter coords (qx, qy) is filled with Color8(qx, qy, 77). Each case lists the source quarter coords expected for the composed tile's TL, TR, BL, BR quarters. mask = 8-bit neighbour mask N=1 NE=2 E=4 SE=8 S=16 SW=32 W=64 NW=128; variant 47 = preview.",
+	"cases": [
+		{"name": "terrain_0 full", "group": "terrain_0", "mask": 255, "frame": 0, "quarters": [[2, 20], [3, 20], [2, 21], [3, 21]]},
+		{"name": "terrain_0 isolated", "group": "terrain_0", "mask": 0, "frame": 0, "quarters": [[0, 18], [5, 18], [0, 23], [5, 23]]},
+		{"name": "terrain_0 vertical corridor", "group": "terrain_0", "mask": 17, "frame": 0, "quarters": [[0, 20], [5, 20], [0, 21], [5, 21]]},
+		{"name": "terrain_0 horizontal corridor", "group": "terrain_0", "mask": 68, "frame": 0, "quarters": [[2, 18], [3, 18], [2, 23], [3, 23]]},
+		{"name": "terrain_0 cross, no diagonals", "group": "terrain_0", "mask": 85, "frame": 0, "quarters": [[4, 16], [5, 16], [4, 17], [5, 17]]},
+		{"name": "terrain_0 full minus NE", "group": "terrain_0", "mask": 253, "frame": 0, "quarters": [[2, 20], [5, 16], [2, 21], [3, 21]]},
+		{"name": "terrain_0 top-left corner of a block (E,S,SE)", "group": "terrain_0", "mask": 28, "frame": 0, "quarters": [[0, 18], [3, 18], [0, 21], [3, 21]]},
+		{"name": "terrain_0 preview", "group": "terrain_0", "variant": 47, "frame": 0, "quarters": [[0, 16], [1, 16], [0, 17], [1, 17]]},
+		{"name": "terrain_3 full", "group": "terrain_3", "mask": 255, "frame": 0, "quarters": [[8, 28], [9, 28], [8, 29], [9, 29]]},
+		{"name": "terrain_4 full", "group": "terrain_4", "mask": 255, "frame": 0, "quarters": [[14, 4], [15, 4], [14, 5], [15, 5]]},
+		{"name": "terrain_5 full", "group": "terrain_5", "mask": 255, "frame": 0, "quarters": [[20, 4], [21, 4], [20, 5], [21, 5]]},
+		{"name": "terrain_11 isolated", "group": "terrain_11", "mask": 0, "frame": 0, "quarters": [[18, 26], [23, 26], [18, 31], [23, 31]]},
+		{"name": "water_a isolated f1", "group": "water_a", "mask": 0, "frame": 1, "quarters": [[2, 0], [3, 0], [2, 1], [3, 1]]},
+		{"name": "water_a full f1 (shallow fill from block C row 0)", "group": "water_a", "mask": 255, "frame": 1, "quarters": [[2, 8], [3, 8], [2, 9], [3, 9]]},
+		{"name": "water_a vertical f0", "group": "water_a", "mask": 17, "frame": 0, "quarters": [[0, 2], [1, 2], [0, 3], [1, 3]]},
+		{"name": "water_a horizontal f2", "group": "water_a", "mask": 68, "frame": 2, "quarters": [[4, 4], [5, 4], [4, 5], [5, 5]]},
+		{"name": "water_a inner f0", "group": "water_a", "mask": 85, "frame": 0, "quarters": [[0, 6], [1, 6], [0, 7], [1, 7]]},
+		{"name": "water_b isolated f0", "group": "water_b", "mask": 0, "frame": 0, "quarters": [[6, 0], [7, 0], [6, 1], [7, 1]]},
+		{"name": "water_c full f2 (deep fill)", "group": "water_c", "mask": 255, "frame": 2, "quarters": [[4, 14], [5, 14], [4, 15], [5, 15]]},
+		{"name": "water_c isolated f0 (water A border)", "group": "water_c", "mask": 0, "frame": 0, "quarters": [[0, 0], [1, 0], [0, 1], [1, 1]]}
+	],
+	"tiles": [
+		{"key": "lower_0", "rect": [192, 0, 16, 16]},
+		{"key": "lower_95", "rect": [272, 240, 16, 16]},
+		{"key": "lower_96", "rect": [288, 0, 16, 16]},
+		{"key": "lower_143", "rect": [368, 112, 16, 16]},
+		{"key": "upper_0", "rect": [288, 128, 16, 16]},
+		{"key": "upper_47", "rect": [368, 240, 16, 16]},
+		{"key": "upper_48", "rect": [384, 0, 16, 16]},
+		{"key": "upper_143", "rect": [464, 240, 16, 16]}
+	],
+	"anim": [
+		{"index": 0, "frame": 0, "rect": [48, 64, 16, 16]},
+		{"index": 2, "frame": 3, "rect": [80, 112, 16, 16]}
+	]
+}

@@ -1,0 +1,48 @@
+{
+	"schema_version": 1,
+	"common_events": [
+		{
+			"id": "rain",
+			"name": "Rain",
+			"commands": [
+				{
+					"type": "set_weather",
+					"power": 6,
+					"weather": "rain"
+				},
+				{
+					"type": "tint_screen",
+					"blue": 100,
+					"green": 85,
+					"red": 80,
+					"seconds": 1,
+					"wait": true
+				},
+				{
+					"type": "wait",
+					"seconds": 5
+				}
+			],
+			"switch": "rain",
+			"trigger": "parallel"
+		},
+		{
+			"id": "full_heal",
+			"name": "Full heal",
+			"commands": [
+				{
+					"type": "play_sound",
+					"sound": {
+						"role": "heal"
+					}
+				},
+				{
+					"type": "recover_all",
+					"target": "party"
+				}
+			],
+			"switch": "",
+			"trigger": "none"
+		}
+	]
+}

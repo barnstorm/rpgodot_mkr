@@ -1,0 +1,16 @@
+{
+	"schema_version": 1,
+	"id": "battle_probe",
+	"name": "Battle hook probe (tests)",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["battle_probe.gd"],
+	"commands": [],
+	"conditions": [
+		{"kind": "probe_battle_flag", "label": "Probe battle flag", "method": "check_flag", "battle": true, "fields": []},
+		{"kind": "probe_map_flag", "label": "Probe map flag", "method": "check_flag", "fields": []}
+	]
+}

@@ -1,0 +1,17 @@
+{
+	"schema_version": 1,
+	"switches": [
+		{"id": "door_unlocked", "label": "Door unlocked", "folder": "", "description": ""},
+		{"id": "autorun_on", "label": "Autorun on", "folder": "", "description": ""},
+		{"id": "parallel_on", "label": "Parallel on", "folder": "", "description": ""},
+		{"id": "touched", "label": "Touched", "folder": "", "description": ""}
+	],
+	"variables": [
+		{"id": "counter", "type": "int", "default": 0, "label": "Counter"},
+		{"id": "ratio", "type": "float", "default": 0.5, "label": "Ratio"},
+		{"id": "flag", "type": "bool", "default": false, "label": "Flag"},
+		{"id": "hero_name", "type": "string", "default": "Alex", "label": "Hero name"},
+		{"id": "ticks", "type": "int", "default": 0, "label": "Parallel ticks"},
+		{"id": "scene_result", "type": "string", "default": "", "label": "Scene result"}
+	]
+}

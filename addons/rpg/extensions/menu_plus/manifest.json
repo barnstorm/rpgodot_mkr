@@ -1,0 +1,51 @@
+{
+	"schema_version": 1,
+	"id": "menu_plus",
+	"name": "Menu & options plus",
+	"description": "Main menu layout (order, hidden commands, extra entries that run a common event or open a scene), Skills/Equip/Status without choosing an actor when the party has one member, and extra rows on the options screen.",
+	"version": "1.0.0",
+	"api_versions": [1],
+	"dependencies": [],
+	"error_policy": "fail_event",
+	"requires_capabilities": [],
+	"entry_scripts": ["menu_plus.gd"],
+	"commands": ["commands/menu_entry_access.gd"],
+	"save_sections": [{"namespace": "menu_plus", "version": 1}],
+	"settings_schema": [
+		{"key": "order", "kind": "list", "label": "Command order", "default": [],
+			"help": "Command IDs listed first, in this order; the others follow. Built-in IDs: item, skill, equip, status, options, save, game_end; extra entries use their own ID.",
+			"item_fields": [{"key": "id", "kind": "text", "label": "Command ID"}]},
+		{"key": "hidden", "kind": "list", "label": "Hidden commands", "default": [],
+			"help": "Command IDs that are not shown.",
+			"item_fields": [{"key": "id", "kind": "text", "label": "Command ID"}]},
+		{"key": "entries", "kind": "list", "label": "Extra menu entries", "default": [],
+			"help": "Each entry runs a common event (the menu closes first) or opens a scene over the menu.",
+			"item_fields": [
+				{"key": "id", "kind": "text", "label": "ID"},
+				{"key": "label", "kind": "text", "label": "Label"},
+				{"key": "icon", "kind": "icon", "label": "Icon", "default": null},
+				{"key": "common_event", "kind": "ref", "ref": "common_event", "label": "Common event", "default": ""},
+				{"key": "scene", "kind": "resource", "res": "scene", "label": "Scene", "default": ""},
+				{"key": "after", "kind": "text", "label": "Placed after (command ID)", "default": ""},
+				{"key": "show_switch", "kind": "ref", "ref": "switch", "label": "Shown only while switch is ON", "default": ""},
+				{"key": "enable_switch", "kind": "ref", "ref": "switch", "label": "Usable only while switch is ON", "default": ""}
+			]},
+		{"key": "skip_single_actor", "kind": "bool", "label": "Party of one: skip choosing the actor", "default": true,
+			"help": "Skills, Equip and Status open for the only party member straight away."},
+		{"key": "option_rows", "kind": "list", "label": "Extra option rows", "default": [],
+			"help": "Rows added to the options screen. The player's choice is saved with the options; it can also be copied into a switch (on/off rows) or a variable (other rows) when the game starts or the value changes.",
+			"item_fields": [
+				{"key": "key", "kind": "text", "label": "Key (letters, digits, _)"},
+				{"key": "label", "kind": "text", "label": "Label"},
+				{"key": "kind", "kind": "choice", "options": ["bool", "choice", "slider"], "option_labels": ["On / off", "Choice", "Slider"], "default": "bool", "label": "Kind"},
+				{"key": "choices", "kind": "text", "label": "Choices (comma separated)", "default": "", "show_if": {"key": "kind", "equals": "choice"}},
+				{"key": "min", "kind": "int", "label": "Lowest", "default": 0, "show_if": {"key": "kind", "equals": "slider"}},
+				{"key": "max", "kind": "int", "label": "Highest", "default": 100, "show_if": {"key": "kind", "equals": "slider"}},
+				{"key": "step", "kind": "int", "label": "Step", "default": 10, "min": 1, "show_if": {"key": "kind", "equals": "slider"}},
+				{"key": "default", "kind": "text", "label": "Default value", "default": ""},
+				{"key": "help", "kind": "text", "label": "Help line", "default": ""},
+				{"key": "switch", "kind": "ref", "ref": "switch", "label": "Copy into switch", "default": "", "show_if": {"key": "kind", "equals": "bool"}},
+				{"key": "variable", "kind": "ref", "ref": "variable", "label": "Copy into variable", "default": ""}
+			]}
+	]
+}

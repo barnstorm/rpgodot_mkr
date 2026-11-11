@@ -1,0 +1,325 @@
+{
+	"schema_version": 1,
+	"map": "field",
+	"events": [
+		{
+			"id": "to_town_a",
+			"name": "Transfer",
+			"position": [0, 10],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "left",
+							"fade": "black",
+							"to": {
+								"map": "town",
+								"position": [28, 10]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "to_town_b",
+			"name": "Transfer",
+			"position": [0, 11],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "left",
+							"fade": "black",
+							"to": {
+								"map": "town",
+								"position": [28, 11]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "field_sign",
+			"name": "Sign",
+			"position": [3, 9],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"text": "Green Field\nBats nest in the dark grass to the north."
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 2,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "goblin",
+			"name": "Goblin",
+			"position": [26, 10],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "shake_camera",
+							"seconds": 0.4,
+							"strength": 3,
+							"wait": true
+						},
+						{
+							"type": "show_text",
+							"name": "Goblin",
+							"face": null,
+							"text": "Hah! Nobody passes the Goblin of the Green Field!"
+						},
+						{
+							"type": "battle",
+							"can_escape": false,
+							"can_lose": false,
+							"on_win": [
+								{
+									"id": "goblin_defeated",
+									"type": "set_switch",
+									"value": "on"
+								},
+								{
+									"type": "show_text",
+									"face": null,
+									"text": "The goblin drops its stolen armour and runs away!"
+								}
+							],
+							"result": "battle_outcome",
+							"troop": "goblin_boss"
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "left",
+						"index": 5,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "approach",
+						"frequency": 2,
+						"speed": 2
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "event_touch"
+				},
+				{
+					"commands": [],
+					"conditions": [
+						{
+							"id": "goblin_defeated",
+							"kind": "switch"
+						}
+					],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "action_button"
+				}
+			]
+		},
+		{
+			"id": "boulder",
+			"name": "Heavy pot",
+			"position": [14, 11],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "A huge pot blocks part of the road. Push it?"
+						},
+						{
+							"type": "roll_check",
+							"actor": "leader",
+							"dc": 12,
+							"result": "door_check",
+							"stat": "str"
+						},
+						{
+							"type": "if",
+							"condition": {
+								"id": "door_check",
+								"kind": "variable",
+								"op": "==",
+								"value": true
+							},
+							"else": [
+								{
+									"type": "show_text",
+									"face": null,
+									"text": "It won't budge. (A strength check: try again!)"
+								}
+							],
+							"then": [
+								{
+									"type": "move_route",
+									"skip_if_blocked": true,
+									"steps": [
+										{
+											"step": "up"
+										}
+									],
+									"target": "this",
+									"wait": true
+								},
+								{
+									"type": "show_text",
+									"face": null,
+									"text": "With a mighty shove, the pot slides aside!"
+								},
+								{
+									"type": "set_self_switch",
+									"switch": "A",
+									"value": true
+								}
+							]
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 3,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				},
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"face": null,
+							"text": "The pot is out of the way."
+						}
+					],
+					"conditions": [
+						{
+							"id": "A",
+							"kind": "self_switch"
+						}
+					],
+					"graphic": {
+						"facing": "down",
+						"index": 3,
+						"sheet": "objects"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": true,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": false
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		}
+	]
+}

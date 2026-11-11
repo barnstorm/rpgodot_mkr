@@ -1,0 +1,91 @@
+{
+	"schema_version": 1,
+	"id": "vx_ace",
+	"name": "VX Ace style",
+	"description": "Rules in the style of RPG Maker VX Ace. Eight parameters (MHP, MMP, ATK, DEF, MAT, MDF, AGI, LUK), HP/MP/TP, class parameter curves from level 1 to 99, damage formulas such as a.atk * 4 - b.def * 2 with 20% variance and x3 criticals, HIT/EVA/CRI ex-parameters, Features (Add Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen, Element Rate, State Rate) and the basis/extra/acceleration experience curve.",
+	"capabilities": ["turn_order", "action_selection", "target_choice", "battle_events", "escape", "defeat"],
+	"stats": [
+		{"id": "mhp", "label": "Max HP", "short": "MHP", "type": "int", "min": 1, "max": 999999},
+		{"id": "mmp", "label": "Max MP", "short": "MMP", "type": "int", "min": 0, "max": 9999},
+		{"id": "atk", "label": "Attack", "short": "ATK", "type": "int", "min": 1, "max": 9999},
+		{"id": "def", "label": "Defense", "short": "DEF", "type": "int", "min": 1, "max": 9999},
+		{"id": "mat", "label": "M.Attack", "short": "MAT", "type": "int", "min": 1, "max": 9999},
+		{"id": "mdf", "label": "M.Defense", "short": "MDF", "type": "int", "min": 1, "max": 9999},
+		{"id": "agi", "label": "Agility", "short": "AGI", "type": "int", "min": 1, "max": 9999},
+		{"id": "luk", "label": "Luck", "short": "LUK", "type": "int", "min": 1, "max": 9999}
+	],
+	"resources": [
+		{"id": "hp", "label": "HP", "max_stat": "mhp", "regen": "a.max_hp * a.hrg / 100"},
+		{"id": "mp", "label": "MP", "max_stat": "mmp", "regen": "a.max_mp * a.mrg / 100"},
+		{"id": "tp", "label": "TP", "max": 100, "full_on_recover": false,
+			"battle_start": "rand(0, 25)", "battle_end": 0, "keep_trait": "preserve_tp",
+			"gain_on_damage": "50 * s.damage * a.tcr / (100 * max(1, s.max))",
+			"gain_on_use": "s.tp_gain * a.tcr / 100",
+			"regen": "a.max_tp * a.trg / 100"}
+	],
+	"life_resource": "hp",
+	"death_state": "knockout",
+	"levels": {"min": 1, "max": 99},
+	"growth": "class",
+	"growth_shapes": {"linear": 1.0, "fast": 0.75, "slow": 1.5, "very_fast": 0.5, "very_slow": 2.0, "early": 0.75, "late": 1.5},
+	"exp_curve": {"type": "basis_extra_acceleration", "basis": 30, "extra": 20, "acc_a": 30, "acc_b": 30},
+	"snapshot_traits": {
+		"hit": {"kind": "hit_rate", "mode": "sum", "default": 95},
+		"eva": {"kind": "evasion_rate", "mode": "sum", "default": 5},
+		"cri": {"kind": "critical_rate", "mode": "sum", "default": 4, "enemy_default": 0},
+		"cev": {"kind": "critical_evasion_rate", "mode": "sum", "default": 0},
+		"mev": {"kind": "magic_evasion_rate", "mode": "sum", "default": 0},
+		"hrg": {"kind": "hp_regen", "mode": "sum", "default": 0},
+		"mrg": {"kind": "mp_regen", "mode": "sum", "default": 0},
+		"trg": {"kind": "tp_regen", "mode": "sum", "default": 0},
+		"tcr": {"kind": "tp_charge_rate", "mode": "rate", "default": 100}
+	},
+	"usable_defaults": {"tp_gain": 0},
+	"traits": [
+		{"kind": "element_rate", "label": "Element Rate", "id_ref": "element", "value": "percent", "default": 100},
+		{"kind": "state_rate", "label": "State Rate", "id_ref": "state", "value": "percent", "default": 100},
+		{"kind": "state_resist", "label": "State Resist", "id_ref": "state"},
+		{"kind": "stat_rate", "label": "Parameter", "id_ref": "stat", "value": "percent", "default": 100},
+		{"kind": "hit_rate", "label": "Ex-Parameter: Hit Rate", "value": "percent", "default": 95},
+		{"kind": "evasion_rate", "label": "Ex-Parameter: Evasion Rate", "value": "percent", "default": 5},
+		{"kind": "critical_rate", "label": "Ex-Parameter: Critical Rate", "value": "percent", "default": 4},
+		{"kind": "critical_evasion_rate", "label": "Ex-Parameter: Critical Evasion", "value": "percent", "default": 0},
+		{"kind": "magic_evasion_rate", "label": "Ex-Parameter: Magic Evasion", "value": "percent", "default": 0},
+		{"kind": "hp_regen", "label": "Ex-Parameter: HP Regen Rate", "value": "percent", "default": 0},
+		{"kind": "mp_regen", "label": "Ex-Parameter: MP Regen Rate", "value": "percent", "default": 0},
+		{"kind": "tp_regen", "label": "Ex-Parameter: TP Regen Rate", "value": "percent", "default": 0},
+		{"kind": "tp_charge_rate", "label": "Sp-Parameter: TP Charge Rate", "value": "percent", "default": 100},
+		{"kind": "attack_element", "label": "Attack Element", "id_ref": "element"},
+		{"kind": "extra_attack", "label": "Attack Times+", "value": "int", "default": 1},
+		{"kind": "action_times", "label": "Action Times+", "value": "percent", "default": 100},
+		{"kind": "add_skill_type", "label": "Add Skill Type", "id_ref": "skill_type"},
+		{"kind": "seal_skill_type", "label": "Seal Skill Type", "id_ref": "skill_type"},
+		{"kind": "dual_wield", "label": "Dual Wield (slot becomes a weapon slot)", "id_ref": "equip_slot"},
+		{"kind": "seal_equip", "label": "Seal Equip", "id_ref": "equip_slot"},
+		{"kind": "preserve_tp", "label": "Preserve TP"}
+	],
+	"attack": {
+		"name": "Attack",
+		"formula": "a.atk * 4 - b.def * 2",
+		"damage_type": "damage",
+		"hit": 100,
+		"hit_type": "physical",
+		"variance": 20,
+		"critical": true,
+		"scope": "one_enemy"
+	},
+	"formula_examples": [
+		{"id": "attack", "label": "Normal attack", "formula": "a.atk * 4 - b.def * 2", "damage_type": "damage", "hit_type": "physical", "variance": 20, "critical": true},
+		{"id": "magic", "label": "Attack magic (Fire)", "formula": "100 + a.mat * 2 - b.mdf * 2", "damage_type": "damage", "hit_type": "magical", "variance": 20, "critical": false},
+		{"id": "heal", "label": "Heal", "formula": "200 + a.mat", "damage_type": "recover", "hit_type": "certain", "variance": 20, "critical": false}
+	],
+	"hit_check": {
+		"physical": {"type": "percent", "steps": ["s.hit * a.hit / 100", "100 - b.eva"]},
+		"magical": {"type": "percent", "steps": ["s.hit", "100 - b.mev"]}
+	},
+	"critical": {"chance": "a.cri * (100 - b.cev) / 100", "multiplier": 3},
+	"damage": {"variance": 20, "min": 0, "guard_percent": 50},
+	"turn_order": {"speed": "a.agi + rand(0, a.agi / 4)"},
+	"escape": {"chance": "clamp(150 - 100 * b.agi / max(1, a.agi), 0, 100)"},
+	"roll_check": {"roll": "1d100", "bonus": "s.value / 10", "compare": ">="}
+}

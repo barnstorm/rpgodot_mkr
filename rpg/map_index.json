@@ -1,0 +1,32 @@
+{
+	"schema_version": 1,
+	"maps": [
+		{
+			"id": "town",
+			"name": "Town",
+			"events": "res://rpg/maps/town.events.json",
+			"order": 0,
+			"parent": "",
+			"properties": "res://rpg/maps/town.map.json",
+			"scene": "res://rpg/maps/town.tscn"
+		},
+		{
+			"id": "house_inside",
+			"name": "Elder's house",
+			"events": "res://rpg/maps/house_inside.events.json",
+			"order": 0,
+			"parent": "town",
+			"properties": "res://rpg/maps/house_inside.map.json",
+			"scene": "res://rpg/maps/house_inside.tscn"
+		},
+		{
+			"id": "field",
+			"name": "Green Field",
+			"events": "res://rpg/maps/field.events.json",
+			"order": 1,
+			"parent": "",
+			"properties": "res://rpg/maps/field.map.json",
+			"scene": "res://rpg/maps/field.tscn"
+		}
+	]
+}
