@@ -12,6 +12,8 @@ This folder is a Godot project and also the addon's development home:
 - `addons/rpg/` and `addons/rpg_database/` are the addon.
 - `rpg/`, `assets/`, `extensions/project/` and `scenes/` are a small sample game, *Sample Quest*.
 
+**Documentation:** the [wiki](docs/wiki/Home.md) covers installation, eight step-by-step lessons (maps, events, story, cutscenes, database, battles, sharing) and a reference.
+
 New to making games? Start with [addons/rpg/docs/MAKER_GUIDE.md](addons/rpg/docs/MAKER_GUIDE.md).
 
 | Map editor | Event mode with passability overlay |
@@ -287,7 +289,7 @@ Helper scripts:
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 79 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
+| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 78 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
 | 2 | Asset import (2000/2003) | Done for ChipSet, CharSet, FaceSet and System graphic, with passability overrides that survive reimport. The ChipSet layout follows public docs plus fixtures; see *Limitations* |
 | 3 | Main window and map editor | Done. Map tree and properties, all painting tools, autotiles, 4 layers, regions, shadows, event mode, overlays, Playtest |
 | 4 | Event editor | Done. Pages, form-built commands, pickers, move route editor, quick events, `project` extension |

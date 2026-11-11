@@ -21,7 +21,7 @@ Open this folder in Godot. At the top of the window, click the **RPG** tab. (In 
 - Click a tile in the palette (tab **A**), then click or drag on the map.
 - Grass and water **join up by themselves** (these are called *autotiles*).
 - **Rect** draws a box, **Fill** pours paint into an area like a bucket.
-- Tab **B** and **C** have trees, houses and furniture. They go *on top* of the ground automatically.
+- Tab **C** has trees, houses and furniture. They go *on top* of the ground automatically. (Tab **B** holds more ground tiles, which replace what is under them.)
 - Made a mistake? Press **Ctrl+Z**.
 - Right-click a tile on the map to pick it up again.
 
