@@ -24,7 +24,7 @@ Monsters fight in **enemy groups** (RPG Maker's *troops*). On **Enemy groups**, 
 1. **+ Add enemy** adds the selected enemy to the picture of the battle screen. Drag enemies to place them; **Auto-arrange** spaces them evenly. The *Backdrop* menu only changes the preview.
 2. **Autoname** names the group after its members (*Wolf x2*).
 3. **Can escape**: whether the party can run.
-4. **Appears later** on a member keeps it out of the battle at the start. *Note:* the kit has no *Enemy Appear* command yet, so such a member never joins (see [Limitations](Limitations.md)).
+4. **Appears later** on a member keeps it out of the battle at the start. A battle event brings it in with **Enemy Appear** (section 5).
 5. **Battle test** on this tab starts this fight at once in a game window (save first). *Game > Battle test…* on the RPG tab lets you choose the group, the party and their levels.
 
 ## 3. Random encounters
@@ -70,6 +70,12 @@ An enemy group's **Battle events** run *during* its battles: a boss that taunts 
 
 Each battle event page has **Conditions** (turn number, an enemy's HP, an actor's HP, a switch), a **Span** (*once per battle*, *once per turn*, or *every check*), a priority, and **Commands**. All the usual commands work: messages, switches, Change HP / SP, Change State, music, and so on.
 
+**Enemy Appear** (in the *Scenes* category) brings in a member marked *Appears later*. Its picture fades in and "*Slime B appears!*" shows. Pick the enemy by its number in the group (the number on the battle picture), or *Every hidden enemy*. From then on it fights and can be targeted like the others.
+
+For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.
+
+Enemy Appear only works in a battle: in battle events, or in a common event they call. On a map event it stops the event with an error, and the export checks warn about it.
+
 ## 6. Battle style
 
 Two settings decide how the default battle looks and plays. Set them on **Database > System**. An enemy group can override both (its *Battle view* and *Battle system*, "As in System" by default). A map can too, with `battle_view` / `battle_system` in its `.map.json` file (there is no field for them in the Map properties dialog).
@@ -107,6 +113,7 @@ The party gets EXP, gold and drops, and actors level up, learn skills and show m
 
 - Make a slime that gets angry: an action pattern *Power Strike* with the condition *Own HP %* ≤ 50.
 - Add a battle event to the boss: at turn 2, `Show Text: "You'll pay for that!"` and give the boss a state that raises its attack.
+- Add a slime to the boss group, mark it *Appears later*, and bring it in at turn 3 with **Enemy Appear**.
 - Try every battle style on the same group with **Battle test**.
 
 Next: [Lesson 8: Playtest, debug and share](Lesson-8-Playtest-Debug-and-Share.md).

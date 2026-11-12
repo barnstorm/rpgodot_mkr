@@ -711,3 +711,196 @@ func _click(pos: Vector2) -> InputEventMouseButton:
 	ev.pressed = true
 	ev.position = pos
 	return ev
+
+
+# --- Enemy Appear ---------------------------------------------------------------------------------
+
+## Two slimes; the second is marked "Appears later" (hidden). `pages`: the troop's battle events.
+func _later_troop(pages: Array = []) -> Dictionary:
+	return {"id": "later", "name": "Later", "can_escape": true, "members": [
+		{"enemy": "slime", "hidden": false, "position": [120, 150]},
+		{"enemy": "slime", "hidden": true, "position": [200, 150]}], "pages": pages}
+
+
+func _add_troop(t: Dictionary) -> void:
+	var data: RPGProjectData = env.rpg.data
+	data.db["troops"].by_id[t.id] = t
+	data.db["troops"].records.append(t)
+
+
+func test_core_appear_brings_hidden_members_in() -> void:
+	var core := _core(["hero"], _later_troop(), "turn", 3)
+	var later: RPGBattler = core.enemies[1]
+	assert_true(later.hidden and not later.is_active(), "hidden at the start")
+	assert_eq(core.active_enemies().size(), 1)
+	assert_eq(core.resolve_targets(core.party[0], {"scope": "one_enemy"}, 1), [core.enemies[0]], "a hidden enemy cannot be targeted")
+	assert_eq(core.appear(0), [], "a member already in the battle: nothing")
+	assert_eq(core.appear(1), [later], "the hidden member appears")
+	assert_false(later.hidden)
+	assert_eq(core.active_enemies().size(), 2)
+	assert_eq(core.resolve_targets(core.party[0], {"scope": "one_enemy"}, 1), [later], "and can be targeted")
+	assert_eq(core.appear(1), [], "only once")
+	# It takes its turns from the next turn on.
+	core.begin_turn()
+	var users := []
+	var r := core.next_action()
+	while not r.is_empty():
+		users.append(r.user)
+		r = core.next_action()
+	assert_true(users.has(later), "the new enemy acts")
+	# -1: every hidden member.
+	var two := _later_troop()
+	two.members.append({"enemy": "bat", "hidden": true, "position": [260, 120]})
+	var c2 := _core(["hero"], two, "turn", 3)
+	assert_eq(c2.appear(-1).size(), 2, "all hidden members")
+	assert_eq(c2.active_enemies().size(), 3)
+
+
+func test_core_appear_takes_back_a_win() -> void:
+	var core := _core(["hero"], _later_troop(), "turn", 4)
+	core.enemies[0].set_resource("hp", 0)
+	assert_eq(core.battle_over(), "win", "every visible enemy has fallen")
+	assert_eq(core.appear(1).size(), 1)
+	assert_eq(core.battle_over(), "", "reinforcements: the battle goes on")
+	core.enemies[1].set_resource("hp", 0)
+	assert_eq(core.battle_over(), "win")
+	assert_eq(int(core.rewards().exp), 12, "both slimes give their EXP")
+	# A result set from outside (abort battle) stays.
+	var c2 := _core(["hero"], _later_troop(), "turn", 4)
+	c2.force_result("win")
+	c2.appear(1)
+	assert_eq(c2.battle_over(), "win", "a forced result is kept")
+	# A hidden member that never appears gives nothing.
+	var c3 := _core(["hero"], _later_troop(), "turn", 4)
+	c3.enemies[0].set_resource("hp", 0)
+	assert_eq(c3.battle_over(), "win")
+	assert_eq(int(c3.rewards().exp), 6, "only the slime that fought")
+
+
+func test_core_appear_in_timed_battles() -> void:
+	for system in ["atb", "ctb"]:
+		var core := _core(["hero"], _later_troop(), system, 5)
+		var later: RPGBattler = core.enemies[1]
+		core.begin_turn()
+		var order := _timed_turns(core, 4)
+		assert_false(order.has(later), "%s: no turn while hidden" % system)
+		core.appear(1)
+		assert_eq(core.gauge(later), RPGBattleCore.ATB_START, "%s: the gauge starts from ATB_START" % system)
+		assert_true(core.turn_order(6).has(later), "%s: it is in the turn order" % system)
+		order = _timed_turns(core, 8)
+		assert_true(order.has(later), "%s: it takes turns once it has appeared" % system)
+
+
+## Plays `n` timed turns (actors guard). Returns who acted.
+func _timed_turns(core: RPGBattleCore, n: int) -> Array:
+	var order := []
+	var guard := 0
+	while order.size() < n and core.battle_over() == "" and guard < 500:
+		guard += 1
+		var b := core.next_auto_ready()
+		if b == null:
+			var a := core.next_input_actor()
+			if a != null:
+				core.set_action(core.party.find(a), {"kind": "guard"})
+				continue
+			core.atb_advance_to_next()
+			continue
+		order.append(b)
+		var r := core.act(b)
+		if r.get("turn_end", false):
+			core.begin_turn()
+	return order
+
+
+func test_enemy_appear_command_in_each_system_and_view() -> void:
+	var appear_page := {"id": "appear", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle",
+		"commands": [{"type": "enemy_appear", "which": "one", "enemy": 2}]}
+	var reinforce_page := {"id": "reinforce", "conditions": [{"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 0}], "span": "once_per_battle",
+		"commands": [{"type": "enemy_appear", "which": "all"}]}
+	for view in ["front", "side"]:
+		for system in ["turn", "atb", "ctb"]:
+			for page in [appear_page, reinforce_page]:
+				var what := "%s/%s/%s" % [view, system, page.id]
+				_sample_env()
+				env.rpg.rng.seed = 2024
+				_add_troop(_later_troop([page]))
+				var out := {}
+				var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true, "auto": true, "battle_view": view, "battle_system": system}, out)
+				var core: RPGBattleCore = scene.core
+				var lines: Array = scene.log_lines
+				assert_true(await _wait_until(func(): return out.has("r"), 20.0), "%s: the battle ends" % what)
+				assert_eq(out.r.get("value", {}).get("outcome", ""), "win", "%s: %s" % [what, str(out.r)])
+				assert_false(core.enemies[1].hidden, "%s: the second slime appeared" % what)
+				assert_true(core.enemies[1].is_dead(), "%s: and was defeated" % what)
+				assert_eq(lines.count("Slime A appears!"), 1, "%s: %s" % [what, str(lines)])
+				assert_eq(lines.count("Slime B appears!"), 1, "%s: announced once, when it appears" % what)
+				assert_true(lines.find("Slime B appears!") > lines.find("Slime A appears!"), what)
+				assert_eq(int(out.r.value.rewards.exp), 12, "%s: both give EXP" % what)
+				await env.destroy()
+				env = null
+
+
+func test_enemy_appear_shows_the_enemy_and_its_target() -> void:
+	for view in ["front", "side"]:
+		_sample_env()
+		_add_troop(_later_troop())
+		env.rpg.ui.auto_advance = false
+		var out := {}
+		var scene := _start_battle({"troop": "later", "can_escape": true, "can_lose": true, "battle_view": view}, out)
+		assert_true(await _wait_until(func(): return scene.phase == "party"), "%s: the party command opens" % view)
+		var later: RPGBattler = scene.core.enemies[1]
+		var spr: TextureRect = scene.enemy_nodes[later]
+		var node: Node2D = scene.battler_node(later)
+		assert_false(spr.visible, "%s: not on screen yet" % view)
+		assert_false(node.visible, "%s: its battler node is hidden too" % view)
+		var shown: Array = await scene.enemy_appear(1)
+		assert_eq(shown, [later])
+		assert_true(spr.visible, "%s: on screen" % view)
+		await _wait_until(func(): return spr.modulate.a >= 1.0, 2.0)
+		assert_eq(spr.modulate.a, 1.0, "%s: faded in" % view)
+		await frames(1)
+		assert_true(node.visible, "%s: the battler node follows" % view)
+		assert_eq(scene.log_lines[-1], "Slime B appears!")
+		scene.handle_action("ok")          # Fight
+		scene.handle_action("ok")          # Attack -> target
+		assert_eq(scene.phase, "target_enemy")
+		scene.handle_action("right")
+		assert_eq(scene.target_index, 1, "%s: the arrow reaches the new enemy" % view)
+		var rects: Array = scene.pointer_targets().filter(func(x): return x.has("select"))
+		assert_eq(rects.size(), 2, "%s: both enemies can be pointed at" % view)
+		await _finish(scene, out)
+		await env.destroy()
+		env = null
+
+
+func test_enemy_appear_outside_a_battle_fails() -> void:
+	_sample_env()
+	env.rpg.state.new_game()
+	var r: RPGResult = await env.rpg.run_commands([{"type": "enemy_appear", "which": "one", "enemy": 1}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error(), "no battle: an error")
+	assert_true(str(r).contains("only works in a battle"), str(r))
+	var cmd: RPGCommand = env.rpg.registry.get_command("enemy_appear")
+	assert_eq(cmd.summary({"which": "one", "enemy": 2}), "Enemy Appear: enemy #2")
+	assert_eq(cmd.summary({"which": "all"}), "Enemy Appear: every hidden enemy")
+
+
+func test_validator_checks_enemy_appear() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var cmd_ok := {"type": "enemy_appear", "which": "one", "enemy": 2}
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [cmd_ok, {"type": "enemy_appear", "which": "all"}]}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
+	assert_eq(probs, [], "a hidden member in a battle event: no problem")
+	t.pages[0].commands = [{"type": "enemy_appear", "which": "one", "enemy": 1}, {"type": "enemy_appear", "which": "one", "enemy": 5}]
+	probs = RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
+	var msgs := probs.map(func(p): return "%s %s" % [p.severity, p.message])
+	assert_true(msgs.any(func(m): return m.begins_with("warning") and m.contains("#1 is not marked")), str(msgs))
+	assert_true(msgs.any(func(m): return m.begins_with("error") and m.contains("no enemy #5")), str(msgs))
+	# On a map it can never work: flagged, also inside a branch.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "switch", "id": "s"}, "then": [cmd_ok], "else": []}]}]}
+	var p2 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	var w := p2.filter(func(p): return str(p.message).contains("only works in a battle event"))
+	assert_eq(w.size(), 1, str(p2))
+	assert_eq(w[0].severity, "warning")
+	assert_eq(w[0].path, "events/0/pages/0/commands/0/then/0")

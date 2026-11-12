@@ -29,9 +29,10 @@ extends "res://addons/rpg/runtime/ui/rpg_ui_screen.gd"
 ## Party battlers are the RPGBattler objects in rpg.state.actors, so HP/SP and states persist.
 ## Battle events: at each core checkpoint the eligible troop pages run through an
 ## RPGInterpreter (owner kind "battle_event") while the battle waits; the message box shows on
-## top of the battle. Auto mode (args.auto or rpg.ui.auto_advance): every actor attacks the
-## first living enemy and text waits are skipped (headless tests); timed battles then jump
-## straight from one turn to the next.
+## top of the battle. Enemy Appear calls enemy_appear(member_index) on the scene (a custom battle
+## scene that wants the command implements the same method). Auto mode (args.auto or
+## rpg.ui.auto_advance): every actor attacks the first living enemy and text waits are skipped
+## (headless tests); timed battles then jump straight from one turn to the next.
 
 signal finished(result: Variant)
 signal cancelled(reason: String)
@@ -828,6 +829,32 @@ func _shake() -> void:
 	var t := stage.create_tween()
 	for x in [4, -4, 3, -2, 0]:
 		t.tween_property(stage, "position:x", float(x), 0.04)
+
+
+## Enemy Appear (event command): brings troop member `member_index` (-1: every hidden member)
+## into the battle. Each one's image fades in and "%1 appears!" shows; target lists, the CTB order
+## strip and battler_node(b) follow. Returns the battlers that appeared.
+func enemy_appear(member_index: int) -> Array:
+	if core == null:
+		return []
+	var shown: Array = core.appear(member_index)
+	for e in shown:
+		var s: TextureRect = enemy_nodes.get(e)
+		if s == null:
+			continue
+		s.modulate = Color(1, 1, 1, 0)
+		s.visible = true
+		if auto or not is_inside_tree():
+			s.modulate.a = 1.0
+		else:
+			s.create_tween().tween_property(s, "modulate:a", 1.0, 0.3)
+	_place_battler_nodes()
+	_refresh_order_strip()
+	for e in shown:
+		await say(rules().term("appear", [e.name]), 0.45)
+	if not shown.is_empty():
+		log_win.visible = false
+	return shown
 
 
 func _collapse(b: RPGBattler) -> void:

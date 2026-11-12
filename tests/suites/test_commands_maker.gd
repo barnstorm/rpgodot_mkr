@@ -42,7 +42,7 @@ func test_all_commands_are_registered() -> void:
 	for t in ["show_animation", "change_actor_graphic", "change_name", "change_nickname", "change_level", "change_exp",
 			"change_skills", "change_equipment", "change_class", "change_transparency", "change_battle_bgm", "change_victory_me",
 			"change_map_name_display", "change_tileset", "change_parallax", "change_battle_back", "get_location_info",
-			"stop_sound", "change_windowskin"]:
+			"stop_sound", "change_windowskin", "enemy_appear"]:
 		assert_true(env.rpg.registry.has_command(t), t)
 		var cmd: RPGCommand = env.rpg.registry.get_command(t)
 		if cmd != null:

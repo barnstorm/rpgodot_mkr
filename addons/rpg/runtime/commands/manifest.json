@@ -83,6 +83,7 @@
 		"change_tileset.gd",
 		"change_parallax.gd",
 		"change_battle_back.gd",
+		"enemy_appear.gd",
 		"get_location_info.gd",
 		"stop_sound.gd",
 		"change_windowskin.gd"

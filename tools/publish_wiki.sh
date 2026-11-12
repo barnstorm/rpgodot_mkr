@@ -19,6 +19,15 @@ cp "$ROOT"/docs/wiki/images/*.png "$WORK/wiki/images/"
 # ](Page.md) and ](Page.md#anchor)  ->  ](Page) and ](Page#anchor), for relative links only.
 sed -i -E 's/\]\(([A-Za-z0-9_-]+)\.md(#[^)]*)?\)/](\1\2)/g' "$WORK"/wiki/*.md
 cd "$WORK/wiki"
+# Commit as this repository's identity (set in its .git/config), not the global one.
+NAME="$(git -C "$ROOT" config --local user.name || true)"
+EMAIL="$(git -C "$ROOT" config --local user.email || true)"
+if [ -z "$NAME" ] || [ -z "$EMAIL" ]; then
+	echo "Set user.name and user.email in this repository first (git config --local ...)." >&2
+	exit 1
+fi
+git config user.name "$NAME"
+git config user.email "$EMAIL"
 git add -A
 if git diff --cached --quiet; then
 	echo "Wiki already up to date."
