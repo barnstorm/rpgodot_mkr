@@ -98,6 +98,99 @@ static func create_map(data: RPGProjectData, id: String, display_name: String, t
 	return err
 
 
+## Creates an image-backed map (RPGImageMap): the normal map files, sized from the base image's
+## `cells`, with `image_map` in its properties and a Navigation layer filled with `start_bits`
+## (RPGImageMap.WALKABLE or BLOCKED). `props` are the dialog's other properties. Returns OK or an error.
+static func create_image_map(data: RPGProjectData, id: String, entry_name: String, props: Dictionary, cells: Vector2i, start_bits: int, parent := "") -> Error:
+	var err := create_map(data, id, entry_name, str(props.get("tileset", "")), cells.x, cells.y, parent)
+	if err != OK:
+		return err
+	var node := load_map(data, id)
+	ensure_navigation(node, cells, start_bits)
+	err = save_scene(node, data.map_scene_path(id))
+	node.free()
+	if err != OK:
+		return err
+	var out := props.duplicate(true)
+	out["id"] = id
+	out["width"] = cells.x
+	out["height"] = cells.y
+	err = save_props(data, id, out)
+	data.reload()
+	return err
+
+
+## Adds the Navigation layer to a map node when it has none, every cell set to `bits`.
+static func ensure_navigation(node: RPGMap, cells: Vector2i, bits: int) -> TileMapLayer:
+	var nav := node.get_node_or_null(RPGImageMap.NAV_LAYER) as TileMapLayer
+	var made := nav == null
+	if made:
+		nav = RPGImageMap.new_nav_layer()
+		node.add_child(nav)
+		nav.owner = node
+		var regions := node.get_node_or_null("Regions")
+		if regions != null:
+			node.move_child(nav, regions.get_index())
+	node.navigation = nav
+	if nav.tile_set == null:
+		var px := node.tile_size
+		if not node.tile_layers.is_empty() and node.tile_layers[0].tile_set != null:
+			px = node.tile_layers[0].tile_set.tile_size.x
+		nav.tile_set = RPGImageMap.navigation_tileset(px)
+	if made:
+		RPGImageMap.fill_nav(nav, Rect2i(Vector2i.ZERO, cells), bits)
+	return nav
+
+
+## After an image-backed map grew from `old` to `new`: the new cells get the map's "new cells"
+## navigation (blocked unless the map was made walkable).
+static func grow_navigation(node: RPGMap, props: Dictionary, old: Vector2i, new: Vector2i) -> void:
+	var nav := node.get_node_or_null(RPGImageMap.NAV_LAYER) as TileMapLayer
+	if nav == null:
+		return
+	var bits := RPGImageMap.WALKABLE if str(RPGImageMap.block(props).get("new_cells", "blocked")) == "walkable" else RPGImageMap.BLOCKED
+	for y in new.y:
+		for x in new.x:
+			if x >= old.x or y >= old.y:
+				RPGImageMap.set_nav(nav, Vector2i(x, y), bits)
+
+
+## Image-backed maps: what a size change to `new_cells` would put outside the map: a list of short descriptions
+## (events, start positions, painted tiles/regions/navigation per layer). Empty when nothing.
+static func outside_after_resize(data: RPGProjectData, map_id: String, map_node: Node, new_cells: Vector2i) -> Array:
+	var out := []
+	var inside := func(x: int, y: int) -> bool: return x < new_cells.x and y < new_cells.y
+	var ev_file := load_events_file(data, map_id)
+	for ev in ev_file.get("events", []):
+		var p: Array = ev.get("position", [0, 0])
+		if not inside.call(int(p[0]), int(p[1])):
+			out.append("Event '%s' (%s) at %d, %d" % [ev.get("name", ""), ev.get("id", ""), int(p[0]), int(p[1])])
+	var st: Variant = data.system.get("start", {})
+	if st is Dictionary and str(st.get("map", "")) == map_id and st.get("position") is Array:
+		if not inside.call(int(st.position[0]), int(st.position[1])):
+			out.append("The player's starting position (%d, %d)" % [int(st.position[0]), int(st.position[1])])
+	var vs: Variant = data.system.get("vehicles", {})
+	if vs is Dictionary:
+		for k in vs:
+			var s: Variant = vs[k].get("start") if vs[k] is Dictionary else null
+			if s is Dictionary and str(s.get("map", "")) == map_id and s.get("position") is Array and not inside.call(int(s.position[0]), int(s.position[1])):
+				out.append("The %s's starting position" % k)
+	if map_node != null:
+		for c in map_node.get_children():
+			if not (c is TileMapLayer):
+				continue
+			var n := 0
+			for cell in c.get_used_cells():
+				if not inside.call(cell.x, cell.y):
+					# Navigation cells that only repeat "blocked" carry no work worth listing.
+					if c.name == RPGImageMap.NAV_LAYER and RPGImageMap.nav_bits(c, cell) == RPGImageMap.BLOCKED:
+						continue
+					n += 1
+			if n > 0:
+				out.append("%d painted %s cell(s)" % [n, {"Regions": "region", RPGImageMap.NAV_LAYER: "navigation", "Shadows": "shadow"}.get(str(c.name), "tile (%s)" % c.name)])
+	return out
+
+
 ## Saves a map node as a scene without its TileSets (they are caches).
 static func save_scene(map_node: Node, path: String) -> Error:
 	var saved_sets := {}

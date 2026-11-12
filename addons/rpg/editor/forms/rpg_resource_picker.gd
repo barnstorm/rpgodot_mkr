@@ -13,13 +13,14 @@ extends HBoxContainer
 signal value_changed(value: Variant)
 
 const ASSETS_SCRIPT := "res://addons/rpg/core/rpg_assets.gd"
-const IMAGE_KINDS := ["charset", "faceset", "picture", "battler", "backdrop", "panorama", "title", "gameover", "system", "chipset", "iconset", "sv_battler"]
+const IMAGE_KINDS := ["charset", "faceset", "picture", "battler", "backdrop", "panorama", "title", "gameover", "system", "chipset", "iconset", "sv_battler", "map_image"]
 const ICONSET_HINT := "No icon sheets yet. Icons come from an icon sheet such as RPG Maker VX/MV's IconSet.png in a pack's System folder: add one with Tools > Resources > Import."
 const AUDIO_KINDS := ["music", "sound"]
 const FOLDERS := {
 	"charset": "CharSet", "faceset": "FaceSet", "chipset": "ChipSet", "system": "System",
 	"picture": "Picture", "music": "Music", "sound": "Sound", "battler": "Monster",
 	"backdrop": "Backdrop", "panorama": "Panorama", "title": "Title", "gameover": "GameOver",
+	"map_image": "MapImage",
 }
 
 var kind := "picture"

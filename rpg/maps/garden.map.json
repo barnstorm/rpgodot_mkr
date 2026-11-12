@@ -1,0 +1,26 @@
+{
+	"schema_version": 1,
+	"id": "garden",
+	"display_name": "The Garden",
+	"notes": "Sample image-backed map: the picture is assets/starter/MapImage/garden.png, the arch beam and tree crown are garden_fg.png.",
+	"battle_background": "auto",
+	"bgs": null,
+	"custom": {},
+	"disable_dash": false,
+	"encounters": {
+		"groups": [],
+		"steps": 30
+	},
+	"height": 15,
+	"image_map": {
+		"base": "res://assets/starter/MapImage/garden.png",
+		"foreground": "res://assets/starter/MapImage/garden_fg.png",
+		"new_cells": "blocked",
+		"version": 1
+	},
+	"music": null,
+	"parallax": null,
+	"scroll": "none",
+	"tileset": "",
+	"width": 20
+}

@@ -29,6 +29,12 @@ What the kit doesn't do yet, and what hasn't been verified. This list is kept ho
 - **VX/Ace passability** isn't read (it is in a binary database): check imported tilesets in **Tiles**. An XP RTP (not a project) has no database, so its autotiles are only paired where the file names make it clear.
 - **MZ** has not been tried on real files.
 
+## Image-backed maps
+
+- Navigation is painted by hand; it isn't worked out from the picture. Tall objects aren't split into base and foreground for you.
+- No picture swaps (seasons, repairs) and no streaming: the largest picture side is 8192 px by default. Shift contents is not available on these maps.
+- The editor's navigation overlay and picture reload were tested automatically and with scripted screenshots, not yet by a person on a large map.
+
 ## Plugins
 
 - **Lighting**: lights shine through walls (no shadows).

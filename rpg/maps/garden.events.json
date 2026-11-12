@@ -1,0 +1,139 @@
+{
+	"schema_version": 1,
+	"map": "garden",
+	"events": [
+		{
+			"id": "to_field_a",
+			"name": "Transfer",
+			"position": [9, 14],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "down",
+							"fade": "black",
+							"to": {
+								"map": "field",
+								"position": [15, 2]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "to_field_b",
+			"name": "Transfer",
+			"position": [10, 14],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "down",
+							"fade": "black",
+							"to": {
+								"map": "field",
+								"position": [15, 2]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
+		},
+		{
+			"id": "gardener",
+			"name": "Gardener",
+			"position": [6, 8],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "show_text",
+							"name": "Gardener",
+							"face": {
+								"index": 3,
+								"sheet": "hero_face"
+							},
+							"text": "Mind the roses! I drew this whole garden as one picture."
+						},
+						{
+							"type": "show_text",
+							"name": "Gardener",
+							"face": {
+								"index": 3,
+								"sheet": "hero_face"
+							},
+							"text": "Walk under the arch: the beam is in the foreground picture, so it covers you."
+						}
+					],
+					"conditions": [],
+					"graphic": {
+						"facing": "down",
+						"index": 3,
+						"sheet": "hero"
+					},
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "same",
+					"trigger": "action_button"
+				}
+			]
+		}
+	]
+}

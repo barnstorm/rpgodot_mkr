@@ -83,7 +83,7 @@ Numbers that are whole are normalised to `int` on load (`RPGJson.parse_file`).
 * `rpg/profile.json`: `{schema_version, profile: "rm2k", tile_size: 16}`
 * `rpg/state.json`: `{schema_version, switches: [{id, label, folder, description}], variables: [{id, type: "int"|"float"|"bool"|"string", default, label, folder, description}]}`
 * `rpg/map_index.json`: `{schema_version, maps: [{id, name, parent, order, scene, properties, events}], favourites: []}`
-* `rpg/maps/<id>.map.json`: `{schema_version, id, display_name, tileset, width, height, scroll: "none"|"loop_v"|"loop_h"|"loop_both", music, bgs, battle_background, disable_dash, parallax, encounters: {steps, groups: [{troop, weight, regions: []}]}, notes, custom}`
+* `rpg/maps/<id>.map.json`: `{schema_version, id, display_name, tileset, width, height, scroll: "none"|"loop_v"|"loop_h"|"loop_both", music, bgs, battle_background, disable_dash, parallax, encounters: {steps, groups: [{troop, weight, regions: []}]}, notes, custom, image_map?}` (`image_map`: image-backed maps only, see below)
 * `rpg/maps/<id>.events.json`: as the spec's canonical example.
 * `rpg/common_events.json`: `{schema_version, common_events: [{id, name, trigger: "none"|"autorun"|"parallel", switch, commands}]}`
 * `rpg/database/<type>.json`: `{schema_version, records: [ {id, name, notes, custom: {}, ...} ]}`
@@ -126,6 +126,40 @@ layer is empty, the cell is blocked.
 Region layer: a generated TileSet (`RPGTilesetBuilder.region_tileset()`), atlas coords `(n % 16, n / 16)`
 is region `n` (1..255). Shadow layer: a 16-tile TileSet, atlas x = quarter mask
 (1 TL, 2 TR, 4 BL, 8 BR).
+
+## Image-backed maps (core/rpg_image_map.gd)
+
+An image-backed map is an ordinary map (same three files and index entry) whose look comes from
+one pixel-aligned picture. Tile maps have none of the data below and behave exactly as before.
+
+- **Properties**: `<id>.map.json` gains `"image_map": {"version": 1, "base": "res://…png",
+  "foreground": "res://…png" | null, "new_cells": "blocked" | "walkable"}`. Paths are project
+  paths, usually `assets/<pack>/MapImage/` (asset kind `map_image`). `width`/`height` must equal
+  the base image's size divided by the project tile size (`profile.json` `tile_size`).
+- **Navigation**: a `TileMapLayer` named `Navigation` in `<id>.tscn` (saved like `Regions`, TileSet
+  generated on load by `RPGImageMap.navigation_tileset`). A cell's tile is atlas `(bits, 0)` with
+  the passage bits (1 down, 2 left, 4 right, 8 up; 15 walkable, 0 blocked); an empty cell is
+  blocked. Hidden in the game; the editor draws it as an overlay (shape plus colour).
+- **Passability** (`RPGMovement.passage`): when the map has a Navigation layer, the cell's bits AND
+  the passage of the top visible non-star tile (15 when there is none). Flags, terrain, events,
+  vehicles and reservations work as on tile maps.
+- **Drawing** (`RPGMap.setup_images`, called from `assign_tilesets`, so editor and game share it):
+  `ImageBase` Sprite2D at (0, 0), z -1, under every tile layer; `ImageForeground` at z 5, above
+  star tiles (z 3), characters (z 2) and "above" events (z 4), and before `Events` in the tree so a
+  flying airship (z 5) stays on top. Nearest filter, no repeat, not saved (no owner). Scale is
+  `map tile size / project tile size` (1 unless a 16 px tileset is used in a 48 px project; the
+  camera zoom brings it back to 1:1).
+- **Checks** (`RPGImageMap.check_images`, `RPGValidator.image_map_problems`): readable, not empty,
+  both sides a multiple of the tile size, no side over `max_size` (default 8192, warning above
+  4096; `project.json` `"image_maps": {"max_size", "warn_size"}`, never above Godot's 16384),
+  foreground the same size, map size equal to the image's cells. Errors block playtest and export.
+- **Editor**: New map > *Image-backed map* (`RPGMapFiles.create_image_map`), Navigation mode
+  (Shift+F7, palette tab N), *Overlays > Navigation*, *Foreground: show / dim / hide* (editor
+  only). A base image of another size goes through `RPGMainScreen.review_image_resize`, which lists
+  what a smaller map would lose (`RPGMapFiles.outside_after_resize`); confirming resizes like Map
+  properties does (not undoable), moves starting positions inside, and gives new cells the map's
+  `new_cells` navigation. Image files are watched by content hash; a same-size outside edit
+  reloads on focus. Shift contents is refused on image-backed maps.
 
 ## Asset profiles and decoders
 

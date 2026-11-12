@@ -78,10 +78,24 @@ func in_bounds(cell: Vector2i) -> bool:
 
 
 ## Passage bits for a cell (top layer that is not empty and not a star tile decides).
+## Image-backed maps: the Navigation layer's bits, ANDed with that tile's passage when the cell has
+## a visible tile (an empty cell needs no tile; a painted fence can still block).
 func passage(cell: Vector2i) -> int:
+	var nav: Variant = map.get("navigation")
+	if nav is TileMapLayer:
+		return RPGImageMap.nav_bits(nav, cell) & _tile_passage(map.tile_layers, cell, 15)
 	var layers: Array = map.tile_layers
 	if layers.is_empty():
 		return 15
+	var p := _tile_passage(layers, cell, -1)
+	if p >= 0:
+		return p
+	# Every layer empty: blocked (unless the map has no tiles at all, handled above).
+	return 0 if _any_layer_used(layers) else 15
+
+
+## The passage of the top visible tile in a cell that is not a star tile, or `none` when there is none.
+func _tile_passage(layers: Array, cell: Vector2i, none: int) -> int:
 	for i in range(layers.size() - 1, -1, -1):
 		var layer: TileMapLayer = layers[i]
 		var td := layer.get_cell_tile_data(cell)
@@ -94,8 +108,7 @@ func passage(cell: Vector2i) -> int:
 		if flags & FLAG_EDGE:
 			p &= _open_edges(layer, cell, td)
 		return p
-	# Every layer empty: blocked (unless the map has no tiles at all, handled above).
-	return 0 if _any_layer_used(layers) else 15
+	return none
 
 
 ## For FLAG_EDGE tiles: the edges whose neighbour (same layer) is the same tile kind, as RPG

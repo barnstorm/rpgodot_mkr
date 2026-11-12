@@ -2,6 +2,7 @@ extends SceneTree
 ## Shows the RPG main screen (map editor) outside the Godot editor and saves screenshots, so the
 ## layout can be checked headless-ish. Undo uses a local UndoRedo here.
 ##   godot --path . --script res://tools/editor_preview.gd -- --map=town --mode=event --out=name  [--tools=Deploy]
+##   [--new_image=res://…/base.png,res://…/fg.png]  the New map dialog for an image-backed map
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -35,6 +36,17 @@ func _run() -> void:
 	screen._update_status()
 	if args.has("welcome"):
 		screen._show_welcome(true)
+	if args.has("new_image"):  # --new_image=<base>[,<foreground>]: the New map dialog for an image-backed map
+		var imgs := str(args.new_image).split(",")
+		var dlg := RPGMapPropertiesDialog.open_for(screen, screen.data, "", true, func(_a, _b, _c): pass, "", true)
+		await process_frame
+		dlg._f.id.text = "garden_copy"
+		dlg._f.name.text = "Garden copy"
+		dlg._f.display_name.text = "The Garden"
+		dlg._f.image_base.set_value(imgs[0])
+		if imgs.size() > 1:
+			dlg._f.image_foreground.set_value(imgs[1])
+		dlg._check_images()
 	if args.has("tools"):
 		screen.open_tools(str(args.tools))
 		await process_frame

@@ -11,7 +11,7 @@ From top to bottom:
 - **Menu bar:** Project, Edit, Mode, Draw, Layer, Scale, Tools, Game, Help.
 - **Toolbar:**
   - Save, Undo, Redo.
-  - Modes: **Map** (F5) for painting, **Event** (F6) for events, **Region** (F7) for region numbers.
+  - Modes: **Map** (F5) for painting, **Event** (F6) for events, **Region** (F7) for region numbers, and **Navigation** (Shift+F7) for where characters can walk on an [image-backed map](Image-Backed-Maps.md).
   - Drawing tools: Pencil, Rectangle, Ellipse, Fill, Shadow pen.
   - **Auto layer** puts each tile on the right layer for you. Choose *Layer 1–4* to edit one layer on its own.
   - Zoom out, 1:1, zoom in.
@@ -27,6 +27,7 @@ From top to bottom:
 | Key | What it does |
 | --- | --- |
 | F5 / F6 / F7 | Map / Event / Region mode |
+| Shift+F7 | Navigation mode ([image-backed maps](Image-Backed-Maps.md)) |
 | F8 | Open the Database |
 | F9 or Ctrl+R | Playtest |
 | Ctrl+Z / Ctrl+Y | Undo / redo (Godot's own history, also across map switches) |

@@ -2,7 +2,7 @@
 
 An RPG Maker style workflow inside **Godot 4.5**, built from `Godot as RPG Maker Design Spec.md`:
 
-- autotile map painting
+- autotile map painting, or [image-backed maps](docs/wiki/Image-Backed-Maps.md) drawn as one picture with painted navigation and a foreground to walk behind
 - events made with forms and quick-event templates
 - a JSON database
 - a default runtime (message box, menus, shop, saves, front- or side-view battles, turn based or ATB) you can replace piece by piece with ordinary Godot scenes and scripts
@@ -12,7 +12,7 @@ This folder is a Godot project and also the addon's development home:
 - `addons/rpg/` and `addons/rpg_database/` are the addon.
 - `rpg/`, `assets/`, `extensions/project/` and `scenes/` are a small sample game, *Sample Quest*.
 
-**Documentation:** the [wiki](docs/wiki/Home.md) covers installation, eight step-by-step lessons (maps, events, story, cutscenes, database, battles, sharing) and a reference.
+**Documentation:** the [wiki](docs/wiki/Home.md) covers installation, eight step-by-step lessons (maps, events, story, cutscenes, database, battles, sharing), image-backed maps and a reference.
 
 New to making games? Start with [addons/rpg/docs/MAKER_GUIDE.md](addons/rpg/docs/MAKER_GUIDE.md).
 

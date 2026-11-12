@@ -18,6 +18,7 @@ const TYPES := [
 	["Title", "title"],
 	["Picture", "picture"],
 	["Panorama", "panorama"],
+	["Map image (image-backed maps)", "map_image"],
 ]
 const IMAGE_EXT := ["png", "webp", "jpg", "jpeg", "bmp"]
 ## Every audio file type the kit plays; MIDI only as music (rendered with the sound bank at import).

@@ -86,7 +86,7 @@ Right-click the map in the tree and choose **Properties…** to change:
 - **Music** and **Background sound**: a file, "(keep playing)" or "(stop)". The music starts when the player enters.
 - **Battle background** and **Battle scene** (empty means the default battle).
 - **Disable dashing**.
-- **Parallax background**: a picture behind the map, for skies and seas.
+- **Parallax background**: a picture behind the map, for skies and seas. (To draw a whole map as one picture instead, see [Image-backed maps](Image-Backed-Maps.md).)
 - **Encounters**: the average number of steps between random battles, and the enemy groups that can appear (see [Lesson 7](Lesson-7-Battles.md)).
 - **Notes**: your own notes.
 
