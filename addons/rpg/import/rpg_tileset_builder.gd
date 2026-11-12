@@ -946,6 +946,32 @@ static func shadow_tileset(tile_size := 16) -> TileSet:
 	return ts
 
 
+## Navigation TileSet (image-backed maps): source 0, 16 tiles at atlas (mask, 0), where the mask is
+## the passage bitmask (1 down, 2 left, 4 right, 8 up). Custom data layer `passage` (int, the mask).
+## The Navigation layer is never drawn (the editor's passability overlay shows it), so the atlas
+## is only a plain marker: open edges light, closed edges dark.
+static func navigation_tileset(tile_size := 16) -> TileSet:
+	var ts := TileSet.new()
+	ts.tile_size = Vector2i(tile_size, tile_size)
+	ts.add_custom_data_layer()
+	ts.set_custom_data_layer_name(0, "passage")
+	ts.set_custom_data_layer_type(0, TYPE_INT)
+	var atlas := Image.create_empty(16 * tile_size, tile_size, false, Image.FORMAT_RGBA8)
+	for m in 16:
+		var o := Vector2i(m * tile_size, 0)
+		atlas.fill_rect(Rect2i(o, Vector2i(tile_size, tile_size)), Color(0.3, 0.6, 1.0, 0.3) if m != 0 else Color(1.0, 0.3, 0.3, 0.3))
+		var edges := {1: Rect2i(o + Vector2i(0, tile_size - 2), Vector2i(tile_size, 2)), 2: Rect2i(o, Vector2i(2, tile_size)), 4: Rect2i(o + Vector2i(tile_size - 2, 0), Vector2i(2, tile_size)), 8: Rect2i(o, Vector2i(tile_size, 2))}
+		for bit in edges:
+			if not (m & bit):
+				atlas.fill_rect(edges[bit], Color(0.6, 0.1, 0.1, 0.8))
+	var src := _new_source(ts, atlas, 0)
+	for m in 16:
+		src.create_tile(Vector2i(m, 0))
+		src.get_tile_data(Vector2i(m, 0), 0).set_custom_data("passage", m)
+	ts.set_meta("rpg_kind", "navigation")
+	return ts
+
+
 ## 3x5 pixel digits, rows top to bottom, 3 bits per row (MSB = left).
 const DIGITS := [
 	[7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 3, 1, 7], [5, 5, 7, 1, 1],

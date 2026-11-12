@@ -20,6 +20,7 @@ addons/rpg/
     rpg_formula.gd     RPGFormula     restricted formula language (parser + evaluator)
     rpg_random.gd      RPGRandom      seeded RNG with savable state
     rpg_quick_events.gd RPGQuickEvents template compiler
+    rpg_image_map.gd   RPGImageMap    image-backed maps: size checks, limits, review report, validation
     profiles/          profile descriptors (JSON) + RPGProfile loader
   import/                         asset import (pure code, usable by editor tools and at runtime)
     rpg_chipset_2k.gd  RPGChipset2k   RM2000/2003 ChipSet decoder (autotiles, animation, lower/upper)
@@ -83,7 +84,10 @@ Numbers that are whole are normalised to `int` on load (`RPGJson.parse_file`).
 * `rpg/profile.json`: `{schema_version, profile: "rm2k", tile_size: 16}`
 * `rpg/state.json`: `{schema_version, switches: [{id, label, folder, description}], variables: [{id, type: "int"|"float"|"bool"|"string", default, label, folder, description}]}`
 * `rpg/map_index.json`: `{schema_version, maps: [{id, name, parent, order, scene, properties, events}], favourites: []}`
-* `rpg/maps/<id>.map.json`: `{schema_version, id, display_name, tileset, width, height, scroll: "none"|"loop_v"|"loop_h"|"loop_both", music, bgs, battle_background, disable_dash, parallax, encounters: {steps, groups: [{troop, weight, regions: []}]}, notes, custom}`
+* `rpg/maps/<id>.map.json`: `{schema_version, id, display_name, tileset, width, height, scroll: "none"|"loop_v"|"loop_h"|"loop_both", music, bgs, battle_background, disable_dash, parallax, encounters: {steps, groups: [{troop, weight, regions: []}]}, notes, custom, image_map?}`
+  - optional `image_map: {version: 1, base: "res://...png", foreground: "res://...png" | null}`. A map is
+    **image-backed** exactly when `image_map` is a Dictionary with a non-empty `base`; no key means a
+    tile map (old files need no migration). See *Image-backed maps* below.
 * `rpg/maps/<id>.events.json`: as the spec's canonical example.
 * `rpg/common_events.json`: `{schema_version, common_events: [{id, name, trigger: "none"|"autorun"|"parallel", switch, commands}]}`
 * `rpg/database/<type>.json`: `{schema_version, records: [ {id, name, notes, custom: {}, ...} ]}`
@@ -125,7 +129,62 @@ layer is empty, the cell is blocked.
 
 Region layer: a generated TileSet (`RPGTilesetBuilder.region_tileset()`), atlas coords `(n % 16, n / 16)`
 is region `n` (1..255). Shadow layer: a 16-tile TileSet, atlas x = quarter mask
-(1 TL, 2 TR, 4 BL, 8 BR).
+(1 TL, 2 TR, 4 BL, 8 BR). Navigation layer (image-backed maps): a 16-tile TileSet
+(`RPGTilesetBuilder.navigation_tileset()`), atlas x = passage bitmask 0..15 (custom data `passage`).
+
+Passability on a map **with a `Navigation` layer**: the layer's mask decides, and a cell without a
+mask tile is blocked (bitmask 0 is stored as no tile). Visible tiles still supply `flags` (bush,
+counter, ladder, damage floor) and `terrain`, but not passage. Maps without the layer use the rule
+above unchanged (including "a map with no tiles at all is open everywhere").
+
+## Image-backed maps
+
+`RPGImageMap` (core) holds the rules shared by the new-map dialog, Map Properties, the validator and
+the tests: the **map tile size** (the map tileset's profile tile size, else `data.tile_size()`),
+`check_size` / `check_image` (zero, unreadable, not a multiple of the tile size with the nearest
+sizes above and below, over `MAX_SIDE` = 8192 px, more than 500 cells; warning over `WARN_SIDE` =
+4096 px; both limits still to be confirmed per export target), the foreground size check, the
+`outside_report` used by the resize review, and `problems()` for the validator.
+
+- **Scene.** `RPGMapFiles.create_image_map` checks the image, then `create_map(..., {image_map, walkable})`
+  writes the standard three files with a hidden `TileMapLayer` named `Navigation` (not in
+  `RPGMap.tile_layers`; saved with the scene, TileSet assigned in `RPGMap.assign_tilesets` like
+  `Regions` and `Shadows`), filled with 15 or left empty, and `scroll` = `none`.
+- **Images.** `RPGMap.apply_image_map(props)` builds `ImageBase` (`Sprite2D`, z -1, `centered = false`,
+  nearest filter, at (0, 0), scale 1) and the optional `ImageForeground` (z 5). It is called from
+  `RPGMap.start` (game) and `RPGMapFiles.load_map` (editor), so origin and scale match by
+  construction. The sprites have no `owner`, so `save_scene` never packs them. Saves hold no image data.
+- **Editor.** Passability mode (`RPGMapView.mode == "passability"`, F4) paints the mask with the brush
+  `{kind: "passage", passage: bits}` (pencil, rect, ellipse, fill, eyedropper; undo snapshots include
+  the layer); the passability overlay is always on there. The foreground can be shown, dimmed or hidden
+  (editor only). "Shift contents" is off. A size change goes through `RPGMainScreen._resize_review`
+  (refuses while a start position would fall outside; otherwise backs up the three files to
+  `rpg/.backup/map_<id>_<time>/` with `RPGMapFiles.backup_map`, then resizes). `check_disk_changes`
+  reloads changed images and re-checks their size.
+- **Checks.** `RPGValidator.image_map_problems` (part of `full`, so playtest and export run it):
+  missing images, misaligned or oversized images, a base that no longer matches the map size, a
+  foreground of another size, looping; warnings for mipmaps / lossy import. `RPGDeploy.unused_asset_excludes`
+  keeps the images because their paths appear in the map properties.
+
+## Draw order (z_index)
+
+| Content | `z_index` |
+| --- | --- |
+| Parallax background (`ParallaxBackground`, canvas layer -10) | — |
+| Image-backed map base image (`ImageBase`) | -1 |
+| Tile layers `Layer1` to `Layer4`, `Layer1Base`, `Shadows` | 0 |
+| Events with priority *below* | 1 |
+| Player, followers, boats, events with priority *same* | 2 |
+| Star-flag tiles (`RPGTilesetBuilder.STAR_Z_INDEX`) | 3 |
+| Events with priority *above* | 4 |
+| Image-backed map foreground (`ImageForeground`) | 5 |
+| Airship | 6 |
+| `Regions` (editor only; hidden at runtime) | 80 |
+| Debug overlay | 90 |
+| `MapOverlay` attachment space | 100 |
+| Editor overlay (grid, passability, event markers) | 200 |
+
+`Navigation` is never drawn (hidden at runtime and in the editor; the passability overlay shows it).
 
 ## Asset profiles and decoders
 

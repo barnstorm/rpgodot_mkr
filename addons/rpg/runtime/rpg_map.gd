@@ -7,6 +7,9 @@ extends Node2D
 ## Layer1Base (optional, drawn just below Layer1) holds the hidden base tiles of VX Ace / MV
 ## overlay autotiles (the sea under deep sea, the ground under a bush; see RPGAutotile). It is
 ## not in tile_layers: passability, terrain and events read the visible layers only.
+## Image-backed maps (RPGImageMap) also have a hidden Navigation layer (the passage mask; not in
+## tile_layers) and, built from props.image_map at load time and never saved into the scene, an
+## ImageBase sprite under the tiles and an optional ImageForeground sprite above the characters.
 
 @export var map_id := ""
 
@@ -24,6 +27,11 @@ var tile_layers: Array = []
 var base_layer: TileMapLayer
 var regions: TileMapLayer
 var shadows: TileMapLayer
+## Passage mask of an image-backed map (atlas x = passage bits); null on tile maps.
+var navigation: TileMapLayer
+## Image-backed maps: the base and foreground sprites (null when the map has none).
+var image_base: Sprite2D
+var image_foreground: Sprite2D
 var events_root: Node2D
 var events: Dictionary = {}
 var event_order: Array[String] = []
@@ -76,6 +84,8 @@ func assign_tilesets(data: RPGProjectData) -> Array:
 		regions.tile_set = RPGTilesetBuilder.region_tileset(ts_size)
 	if shadows != null and shadows.tile_set == null:
 		shadows.tile_set = RPGTilesetBuilder.shadow_tileset(ts_size)
+	if navigation != null and navigation.tile_set == null:
+		navigation.tile_set = RPGTilesetBuilder.navigation_tileset(ts_size)
 	return warnings
 
 
@@ -112,8 +122,89 @@ func _collect_layers() -> void:
 	base_layer = get_node_or_null(RPGAutotile.BASE_LAYER) as TileMapLayer
 	regions = get_node_or_null("Regions") as TileMapLayer
 	shadows = get_node_or_null("Shadows") as TileMapLayer
+	navigation = get_node_or_null(RPGImageMap.NAVIGATION_LAYER) as TileMapLayer
 	if regions != null and not Engine.is_editor_hint():
 		regions.visible = false
+	if navigation != null:
+		# Never drawn: the editor's passability overlay shows it.
+		navigation.visible = false
+
+
+## The Navigation layer (passage mask), created empty (every cell blocked) and saved with the scene
+## when missing. Once it exists, RPGMovement.passage reads passage from it alone.
+func ensure_navigation_layer() -> TileMapLayer:
+	if navigation != null and is_instance_valid(navigation):
+		return navigation
+	navigation = get_node_or_null(RPGImageMap.NAVIGATION_LAYER) as TileMapLayer
+	if navigation != null:
+		return navigation
+	var n := TileMapLayer.new()
+	n.name = RPGImageMap.NAVIGATION_LAYER
+	n.visible = false
+	add_child(n)
+	n.owner = self
+	var ts_size := tile_size
+	if not tile_layers.is_empty() and tile_layers[0].tile_set != null:
+		ts_size = (tile_layers[0].tile_set as TileSet).tile_size.x
+	n.tile_set = RPGTilesetBuilder.navigation_tileset(ts_size)
+	navigation = n
+	return n
+
+
+## Passage bits of a cell on the Navigation layer (0 when empty or when there is no layer).
+func navigation_mask(c: Vector2i) -> int:
+	if navigation == null or navigation.get_cell_source_id(c) < 0:
+		return 0
+	return navigation.get_cell_atlas_coords(c).x & 15
+
+
+## Sets a cell's passage bits on the Navigation layer (0 = blocked = no tile).
+func set_navigation_mask(c: Vector2i, bits: int) -> void:
+	var nav := ensure_navigation_layer()
+	if (bits & 15) == 0:
+		nav.erase_cell(c)
+	else:
+		nav.set_cell(c, 0, Vector2i(bits & 15, 0))
+
+
+## Builds the base and foreground sprites from `p.image_map` (one builder for the editor and the
+## game, so origin and scale always match). They have no owner, so saving the scene never packs
+## them. Returns warnings (images that could not be loaded).
+func apply_image_map(p: Dictionary, fresh := false) -> Array:
+	var warnings := []
+	for n in [image_base, image_foreground]:
+		if n != null and is_instance_valid(n):
+			remove_child(n)
+			n.queue_free()
+	image_base = null
+	image_foreground = null
+	var base := RPGImageMap.base_path(p)
+	if base == "":
+		return warnings
+	image_base = _image_sprite(RPGImageMap.BASE_NODE, base, RPGImageMap.BASE_Z, warnings, fresh)
+	if image_base != null:
+		move_child(image_base, 0)
+	var fg := RPGImageMap.foreground_path(p)
+	if fg != "":
+		image_foreground = _image_sprite(RPGImageMap.FOREGROUND_NODE, fg, RPGImageMap.FOREGROUND_Z, warnings, fresh)
+	return warnings
+
+
+func _image_sprite(node_name: String, path: String, z: int, warnings: Array, fresh := false) -> Sprite2D:
+	var tex := RPGImageMap.load_texture(path, fresh)
+	if tex == null:
+		warnings.append("Image %s could not be loaded." % path)
+		return null
+	var s := Sprite2D.new()
+	s.name = node_name
+	s.texture = tex
+	s.centered = false
+	s.position = Vector2.ZERO
+	s.z_index = z
+	# Pixel art stays sharp whatever the project's default filter is.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(s)
+	return s
 
 
 ## The hidden base layer under Layer1, created (empty, just below Layer1, saved with the scene)
@@ -165,6 +256,8 @@ func start(p_rpg: Node) -> void:
 	scroll_type = str(props.get("scroll", "none"))
 	movement = RPGMovement.new(self)
 	_setup_parallax()
+	for w in apply_image_map(props):
+		push_warning("RPG map '%s': %s" % [map_id, w])
 	events_root = Node2D.new()
 	events_root.name = "Events"
 	events_root.y_sort_enabled = true

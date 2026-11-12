@@ -2,7 +2,7 @@
 
 An RPG Maker style workflow inside **Godot 4.5**, built from `Godot as RPG Maker Design Spec.md`:
 
-- autotile map painting
+- autotile map painting, and image-backed maps drawn from one picture with painted passability and a foreground to walk behind
 - events made with forms and quick-event templates
 - a JSON database
 - a default runtime (message box, menus, shop, saves, front- or side-view battles, turn based or ATB) you can replace piece by piece with ordinary Godot scenes and scripts
@@ -12,7 +12,7 @@ This folder is a Godot project and also the addon's development home:
 - `addons/rpg/` and `addons/rpg_database/` are the addon.
 - `rpg/`, `assets/`, `extensions/project/` and `scenes/` are a small sample game, *Sample Quest*.
 
-**Documentation:** the [wiki](docs/wiki/Home.md) covers installation, eight step-by-step lessons (maps, events, story, cutscenes, database, battles, sharing) and a reference.
+**Documentation:** the [wiki](docs/wiki/Home.md) covers installation, nine step-by-step lessons (maps, events, story, cutscenes, database, battles, sharing, image-backed maps) and a reference.
 
 New to making games? Start with [addons/rpg/docs/MAKER_GUIDE.md](addons/rpg/docs/MAKER_GUIDE.md).
 
@@ -45,15 +45,16 @@ The screenshots are produced by `tools/screenshot.gd` and `tools/editor_preview.
    - Coming from RPG Maker? [Following the RPG Maker tutorials in RPG Kit](addons/rpg/docs/RPG_MAKER_TUTORIALS.md) maps RPG Maker's menus, tabs and commands to RPG Kit's.
 2. **RPG tab: the map editor.**
    - It looks like RPG Maker's window. A menu bar (Project, Edit, Mode, Draw, Layer, Scale, Tools, Game, Help) and an icon toolbar sit above the map. **Maker view** hides Godot's own docks while you're on the RPG or Database tab; turn it off in *Project > Maker view*.
-   - Shortcuts: F8 opens the Database, F9 or Ctrl+R playtests, and Ctrl+= / Ctrl+− zoom. The map tree's right-click menu has *Shift*, *Load sample map* and *Generate dungeon*.
+   - Shortcuts: F8 opens the Database, F9 or Ctrl+R playtests, and Ctrl+= / Ctrl+− zoom. The map tree's right-click menu has *New map*, *New image-backed map*, *Shift*, *Load sample map* and *Generate dungeon*.
    - **Left:** the tile palette above the map tree. Tabs: A, B, C and Anim for 2000/2003 tilesets; A, A5, B, C, D and E for VX/Ace/MV tilesets; R for regions. Right-click the tree to add, copy, delete or edit maps.
    - **Toolbar:**
-     - Modes: **Map** (F5), **Event** (F6), **Region** (F7).
+     - Modes: **Map** (F5), **Event** (F6), **Region** (F7), and **Passability** (F4) on image-backed maps.
      - Tools: Pencil, Rect, Ellipse, Fill, Shadow.
      - **Auto layer** puts each tile on the right layer for you. Pick *Layer N* to edit one layer on its own.
      - **Overlays** show the grid, passability, regions and terrain tags.
    - Right-click a tile to pick it up (eyedropper). Undo and redo use Godot's own history (Ctrl+Z / Ctrl+Y).
    - **Tiles** opens the tileset's tile settings: passability (on/off or per direction), star, bush, counter, ladder, damage floor and terrain tags, as in RPG Maker's Tilesets tab. They are stored in `rpg/tileset_overrides/` and survive reimport.
+   - **Image-backed maps** ([lesson 9](docs/wiki/Lesson-9-Image-Backed-Maps.md)): *New image-backed map...* sizes a map from a picture whose sides are whole map tiles (no rescaling; up to 8192 px, a warning above 4096). You paint where characters walk in **Passability** mode (walkable, blocked or per edge; pencil, rectangle, fill, undo), and an optional transparent foreground is drawn above the characters (show, dim or hide it while editing). Tiles, regions and events work as on any map. Replacing the picture with one of the same size keeps everything; another size opens a review that lists what would fall outside, backs the map up to `rpg/.backup/` and refuses while a start position would be lost. The export checks report missing, misaligned and oversized pictures.
 3. **Events.**
    - In Event mode, double-click a tile to create an event, or right-click > *Quick event* for Door, Treasure, Inn, Sign, Shop or Transfer.
    - Double-click an event to open the **event editor**: pages, conditions, graphic, trigger, priority, movement and the command list.
@@ -219,7 +220,7 @@ The first command runs every suite; the second runs a single suite. You can also
 godot --headless --path . --script res://tests/run_tests.gd -- --suite=interpreter
 ```
 
-There are 538 tests in 30 suites:
+There are 568 tests in 31 suites:
 
 | Suite | What it covers |
 | --- | --- |
@@ -233,6 +234,7 @@ There are 538 tests in 30 suites:
 | `plugins_wave1` | Kit plugins: menu & options plus, message codes plus, letter sounds, gab window, save & autosave plus (off by default, saves) |
 | `plugins_wave2` | Kit plugins: quest journal and tracker, lighting and time of day, item crafting; plugin Database record types and map/event-page plugin fields |
 | `plugins_battle` | Battle hooks (determinism, action/damage/victory hooks, battler nodes, member filter) and the enemy gauges, victory aftermath, party formation and bestiary plugins in every battle view and system |
+| `image_maps` | Image-backed maps: size checks (valid, not a multiple of the tile size, unreadable, empty, over the limit), creation and the dialog, editor and runtime alignment (also 16 px art in a 48 px project), foreground and airship draw order, passability painting with undo and redo, movement with no visible tiles, save and reload, same-size and resizing replacement (review, cancel, backup, start positions), outside image changes, validator errors, export keeping the images, legacy maps unchanged |
 | `map_editor` | Painting, undo (also across map switches), Fill with the eraser, hand-drawn shadows kept, growing a map, events with stable IDs, map files without embedded TileSets |
 | `editor_data` | Quick events, validator, forms, command list, database and JSON round trips; RPG and Database tabs not overwriting each other; deleted events not coming back |
 | `ui_screens` | Every default screen, plus auto battles |

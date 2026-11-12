@@ -7,6 +7,8 @@ extends RefCounted
 ##   rpg/maps/<id>.map.json    properties
 ##   rpg/maps/<id>.events.json events
 ## Map scenes are saved WITHOUT TileSets: they are generated caches assigned on load.
+## Image-backed maps (RPGImageMap) add a Navigation layer to the scene and an "image_map" block to
+## the properties; their image sprites are built on load and never saved.
 
 const LAYER_NAMES := ["Layer1", "Layer2", "Layer3", "Layer4"]
 const MAP_SCRIPT := "res://addons/rpg/runtime/rpg_map.gd"
@@ -62,18 +64,29 @@ static func new_map_node(id: String, layer_count := 4) -> RPGMap:
 
 
 ## Creates a new map: scene, properties, empty events, index entry. Returns OK or an error code.
-static func create_map(data: RPGProjectData, id: String, display_name: String, tileset: String, w: int, h: int, parent := "") -> Error:
+## `image`: for an image-backed map, {image_map: block, walkable: bool}; the scene then gets a
+## Navigation layer, every cell walkable or (walkable false) blocked, and the map does not loop.
+static func create_map(data: RPGProjectData, id: String, display_name: String, tileset: String, w: int, h: int, parent := "", image := {}) -> Error:
 	if not RPGIds.is_valid(id) or data.maps.has(id):
 		return ERR_ALREADY_EXISTS
 	var dir := maps_dir(data)
 	DirAccess.make_dir_recursive_absolute(dir)
 	var node := new_map_node(id)
+	if not image.is_empty():
+		node.ensure_navigation_layer()
+		if bool(image.get("walkable", false)):
+			for y in h:
+				for x in w:
+					node.set_navigation_mask(Vector2i(x, y), 15)
 	var scene_path := dir.path_join(id + ".tscn")
 	var err := save_scene(node, scene_path)
 	node.free()
 	if err != OK:
 		return err
 	var props := default_props(id, display_name, tileset, w, h)
+	if not image.is_empty():
+		props[RPGImageMap.KEY] = image.get("image_map", {})
+		props["scroll"] = "none"
 	err = RPGJson.save_file(dir.path_join(id + ".map.json"), props)
 	if err != OK:
 		return err
@@ -96,6 +109,57 @@ static func create_map(data: RPGProjectData, id: String, display_name: String, t
 	err = RPGJson.save_file(data.root.path_join("map_index.json"), index)
 	data.reload()
 	return err
+
+
+## New image-backed map from a base image: checks the image against the map tile size and sizes
+## the map from it. Writes nothing when the check fails. Returns {error: Error, message, cells}.
+static func create_image_map(data: RPGProjectData, id: String, display_name: String, tileset: String, base: String, foreground := "", walkable := false, parent := "") -> Dictionary:
+	var tile := RPGImageMap.tile_size_for_tileset(data, tileset)
+	var chk := RPGImageMap.check_image(base, tile)
+	if not chk.ok:
+		return {"error": ERR_INVALID_DATA, "message": chk.error, "cells": Vector2i.ZERO}
+	if foreground != "":
+		var fr := RPGImageMap.read_size(foreground)
+		if not fr.ok:
+			return {"error": ERR_INVALID_DATA, "message": fr.error, "cells": Vector2i.ZERO}
+		var mm := RPGImageMap.foreground_mismatch(chk.size, fr.size)
+		if mm != "":
+			return {"error": ERR_INVALID_DATA, "message": mm, "cells": Vector2i.ZERO}
+	var err := create_map(data, id, display_name, tileset, chk.cells.x, chk.cells.y, parent, {"image_map": RPGImageMap.make_block(base, foreground), "walkable": walkable})
+	return {"error": err, "message": "" if err == OK else "Could not create map '%s' (error %d)." % [id, err], "cells": chk.cells}
+
+
+## Adds a Navigation layer to an open map that has none (a tile map given a base image), copying
+## today's tile passability into it so movement stays exactly as it was. Returns the layer.
+static func ensure_navigation(map_node: RPGMap, size: Vector2i) -> TileMapLayer:
+	if map_node.navigation != null and is_instance_valid(map_node.navigation):
+		return map_node.navigation
+	var mv := RPGMovement.new(map_node)
+	map_node.size = size
+	var bits := {}
+	for y in size.y:
+		for x in size.x:
+			bits[Vector2i(x, y)] = mv.passage(Vector2i(x, y))
+	var nav := map_node.ensure_navigation_layer()
+	for c in bits:
+		map_node.set_navigation_mask(c, bits[c])
+	return nav
+
+
+## Copies a map's scene, properties and events files into rpg/.backup/map_<id>_<time>/ (before a
+## size change that cannot be undone). Returns the folder, or "" on failure.
+static func backup_map(data: RPGProjectData, id: String) -> String:
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+	var dir := data.root.path_join(".backup/map_%s_%s_%d" % [id, stamp, Time.get_ticks_msec() % 1000])
+	if DirAccess.make_dir_recursive_absolute(dir) != OK:
+		return ""
+	var e: Dictionary = data.map_entry(id)
+	for key in ["scene", "properties", "events"]:
+		var p := str(e.get(key, ""))
+		if p != "" and FileAccess.file_exists(p):
+			if DirAccess.copy_absolute(ProjectSettings.globalize_path(p), ProjectSettings.globalize_path(dir.path_join(p.get_file()))) != OK:
+				return ""
+	return dir
 
 
 ## Saves a map node as a scene without its TileSets (they are caches).
@@ -129,6 +193,8 @@ static func load_map(data: RPGProjectData, id: String) -> RPGMap:
 		node = new_map_node(id)
 	node.map_id = id
 	node.assign_tilesets(data)
+	for w in node.apply_image_map(data.map_props(id)):
+		push_warning("RPG map '%s': %s" % [id, w])
 	return node
 
 

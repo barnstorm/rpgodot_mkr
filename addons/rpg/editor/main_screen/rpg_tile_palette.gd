@@ -2,9 +2,11 @@
 class_name RPGTilePalette
 extends TabContainer
 ## The tile palette: one tab per sheet part (A autotiles, B lower, C upper, Anim) plus R for
-## regions. Drag across several tiles to pick a stamp. Emits brush_changed(brush):
+## regions, and P (image-backed maps only) for the passability brush. Drag across several tiles
+## to pick a stamp. Emits brush_changed(brush):
 ##   {kind: "tiles", size: Vector2i, cells: [{offset, source, coords}]}
 ##   {kind: "region", region: int}
+##   {kind: "passage", passage: bits}   (1 down, 2 left, 4 right, 8 up; 15 walkable, 0 blocked)
 
 signal brush_changed(brush: Dictionary)
 
@@ -131,6 +133,8 @@ func set_tile_set(ts: TileSet, p_tile_size: int) -> void:
 		remove_child(c)
 		c.queue_free()
 	_grids.clear()
+	_passage_dirs.clear()
+	_passage_label = null
 	if ts != null:
 		# Empty pages are left out (xp/vx/mv TileSets have no Anim source, xp has no B).
 		var pages := [["A", _autotile_cells(), 6], ["B", _plain_cells(RPGTilesetBuilder.SOURCE_LOWER), _plain_cols(RPGTilesetBuilder.SOURCE_LOWER)], ["C", _plain_cells(RPGTilesetBuilder.SOURCE_UPPER), _plain_cols(RPGTilesetBuilder.SOURCE_UPPER)], ["Anim", _anim_cells(), 6]]
@@ -261,6 +265,9 @@ func set_brush_external(b: Dictionary) -> void:
 ## Eyedropper: switches to the page holding the picked tile(s) and highlights them, as RPG Maker
 ## does, so the maker can see what they are now painting with.
 func _show_brush(b: Dictionary) -> void:
+	if b.get("kind", "") == "passage":
+		_show_passage_bits(int(b.get("passage", 15)))
+		return
 	var cells: Array = b.get("cells", [])
 	if b.get("kind", "") != "tiles" or cells.is_empty():
 		return
@@ -292,11 +299,124 @@ static func _cell_index(g: Grid, c: Dictionary) -> int:
 	return -1
 
 
+func _tab_index(title: String) -> int:
+	for i in get_tab_count():
+		if get_tab_title(i) == title:
+			return i
+	return -1
+
+
 func show_regions(on: bool) -> void:
-	if get_tab_count() == 0:
+	_show_tab("R", on)
+
+
+## Shows the passability brush page (Passability mode), or leaves it.
+func show_passage(on: bool) -> void:
+	_show_tab("P", on)
+
+
+func _show_tab(title: String, on: bool) -> void:
+	var idx := _tab_index(title)
+	if idx < 0:
 		return
-	var idx := get_tab_count() - 1
 	if on:
 		current_tab = idx
 	elif current_tab == idx:
 		current_tab = 0
+
+
+## Offers the P page only on image-backed maps (tile maps keep exactly their old tabs).
+func set_passage_available(on: bool) -> void:
+	var idx := _tab_index("P")
+	if on and idx < 0:
+		_add_passage_page()
+	elif not on and idx >= 0:
+		if current_tab == idx:
+			current_tab = 0
+		var page := get_child(idx)
+		remove_child(page)
+		page.queue_free()
+		_passage_dirs.clear()
+		_passage_label = null
+
+
+# --- passability brush (image-backed maps) ----------------------------------------------------
+
+var _passage_dirs: Dictionary = {}
+var _passage_label: Label
+
+
+func _add_passage_page() -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = "P"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
+	var head := Label.new()
+	head.text = "Passability brush"
+	box.add_child(head)
+	var walk := Button.new()
+	walk.text = "Walkable"
+	walk.tooltip_text = "Paint cells characters can enter and leave in every direction"
+	walk.pressed.connect(func(): set_passage_brush(15))
+	box.add_child(walk)
+	var block := Button.new()
+	block.text = "Blocked"
+	block.tooltip_text = "Paint cells nobody can walk onto (walls, water, furniture)"
+	block.pressed.connect(func(): set_passage_brush(0))
+	box.add_child(block)
+	var sub := Label.new()
+	sub.text = "Open directions"
+	sub.tooltip_text = "Which edges of a cell can be crossed, as RPG Maker's four-direction passage"
+	box.add_child(sub)
+	for d in [["Up", 8], ["Down", 1], ["Left", 2], ["Right", 4]]:
+		var cb := CheckBox.new()
+		cb.text = d[0]
+		cb.button_pressed = true
+		cb.tooltip_text = "Characters can cross the cell's %s edge" % str(d[0]).to_lower()
+		cb.toggled.connect(func(_on): _on_passage_dirs())
+		box.add_child(cb)
+		_passage_dirs[int(d[1])] = cb
+	_passage_label = Label.new()
+	_passage_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_passage_label.custom_minimum_size.x = 160
+	_passage_label.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(_passage_label)
+	add_child(scroll)
+	set_tab_title(get_tab_count() - 1, "P")
+	set_tab_tooltip(get_tab_count() - 1, "Passability brush (image-backed maps): walkable, blocked or one-way edges")
+	_update_passage_label(15)
+
+
+func _on_passage_dirs() -> void:
+	var bits := 0
+	for b in _passage_dirs:
+		if _passage_dirs[b].button_pressed:
+			bits |= int(b)
+	_update_passage_label(bits)
+	brush = {"kind": "passage", "passage": bits}
+	brush_changed.emit(brush)
+
+
+## Sets the passability brush (and its checkboxes) and emits it.
+func set_passage_brush(bits: int) -> void:
+	_show_passage_bits(bits)
+	brush = {"kind": "passage", "passage": bits & 15}
+	brush_changed.emit(brush)
+
+
+func _show_passage_bits(bits: int) -> void:
+	for b in _passage_dirs:
+		_passage_dirs[b].set_pressed_no_signal((bits & int(b)) != 0)
+	_update_passage_label(bits)
+
+
+func _update_passage_label(bits: int) -> void:
+	if _passage_label == null:
+		return
+	var open := []
+	for d in [["up", 8], ["down", 1], ["left", 2], ["right", 4]]:
+		if bits & int(d[1]):
+			open.append(d[0])
+	_passage_label.text = "Painting: walkable (dot)" if bits == 15 else ("Painting: blocked (X)" if bits == 0 else "Painting: open %s (arrows)" % ", ".join(PackedStringArray(open)))

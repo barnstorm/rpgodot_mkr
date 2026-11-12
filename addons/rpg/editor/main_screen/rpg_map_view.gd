@@ -4,6 +4,10 @@ extends SubViewportContainer
 ## The map being edited, drawn in a SubViewport with overlays on top.
 ## Map mode paints tiles (pencil, rectangle, ellipse, fill, shadow pen) with RPG Maker autotiling;
 ## Region mode paints region numbers; Event mode selects, moves and opens events.
+## Passability mode (image-backed maps only) paints the Navigation mask with the brush
+## {kind: "passage", passage: bits} and always shows the passability overlay. The base image of an
+## image-backed map is drawn under the tiles; its foreground can be shown, dimmed or hidden here
+## (editor only, set_foreground_view).
 ## Right-click copies a tile, right-drag copies an area (eyedropper); Shift places an autotile
 ## without connecting it (or draws a shadow rectangle with the shadow pen).
 ## Every stroke is one undo step (layer data snapshots), joining Godot's undo history.
@@ -35,7 +39,7 @@ var events_file: Dictionary = {}
 var tile_size := 16
 var map_size := Vector2i(20, 15)
 
-var mode := "map"            # map | event | region
+var mode := "map"            # map | event | region | passability
 var tool := "pencil"         # pencil | rect | ellipse | fill | shadow
 var layer_mode := 0          # 0 auto, 1..4 explicit
 var brush: Dictionary = {}
@@ -47,6 +51,9 @@ var show_terrain := false
 var start_pos: Dictionary = {}
 var selected_event := ""
 var hover_cell := Vector2i(-1, -1)
+## Editor-only look of an image-backed map's foreground: "show", "dim" or "hide".
+var foreground_view := "show"
+const FOREGROUND_DIM_ALPHA := 0.35
 
 var _stroke_before: Dictionary = {}
 var _painting := false
@@ -107,6 +114,7 @@ func open_map(p_data: RPGProjectData, id: String) -> void:
 			c.set_meta(RPGAutotile.MAP_SIZE_META, map_size)
 	if map_node.regions:
 		map_node.regions.visible = mode == "region" or show_regions
+	_apply_foreground_view()
 	events_file = RPGMapFiles.load_events_file(data, id)
 	start_pos = data.system.get("start", {})
 	selected_event = ""
@@ -152,6 +160,40 @@ func rejoin_edges(old_size: Vector2i) -> void:
 
 func tile_layers() -> Array:
 	return map_node.tile_layers if map_node else []
+
+
+## Whether the open map is image-backed (its properties name a base image).
+func is_image_map() -> bool:
+	return map_node != null and RPGImageMap.is_image_map(props)
+
+
+func has_foreground() -> bool:
+	return map_node != null and map_node.image_foreground != null
+
+
+## Rebuilds the base and foreground images from `p` (Map Properties, or an image changed on disk).
+func refresh_images(p: Dictionary = {}, fresh := false) -> void:
+	if map_node == null:
+		return
+	if not p.is_empty():
+		props = p.duplicate(true)
+	map_node.apply_image_map(props, fresh)
+	_apply_foreground_view()
+	overlay.queue_redraw()
+
+
+## Shows ("show"), dims ("dim") or hides ("hide") the foreground image while editing. The game
+## always draws it fully; this is not saved.
+func set_foreground_view(v: String) -> void:
+	foreground_view = v if v in ["show", "dim", "hide"] else "show"
+	_apply_foreground_view()
+
+
+func _apply_foreground_view() -> void:
+	if map_node == null or map_node.image_foreground == null:
+		return
+	map_node.image_foreground.visible = foreground_view != "hide"
+	map_node.image_foreground.modulate = Color(1, 1, 1, FOREGROUND_DIM_ALPHA if foreground_view == "dim" else 1.0)
 
 
 func tile_set() -> TileSet:
@@ -360,6 +402,8 @@ func _all_paint_layers() -> Array:
 		out.append(map_node.shadows)
 	if map_node.regions:
 		out.append(map_node.regions)
+	if map_node.navigation != null:
+		out.append(map_node.navigation)
 	return out
 
 
@@ -369,6 +413,8 @@ func _begin_stroke() -> void:
 	var ts := tile_set()
 	if ts != null and not (ts.get_meta(RPGAutotile.OVERLAY_META, {}) as Dictionary).is_empty():
 		map_node.ensure_base_layer()
+	if mode == "passability":
+		map_node.ensure_navigation_layer()
 	_stroke_before.clear()
 	for l in _all_paint_layers():
 		_stroke_before[l] = l.tile_map_data
@@ -422,6 +468,9 @@ func _is_eraser(source_id: int, coords: Vector2i) -> bool:
 func _apply_at(cell: Vector2i, shift: bool, local_pos: Vector2) -> void:
 	if not in_map(cell):
 		return
+	if mode == "passability":
+		_paint_passage(cell)
+		return
 	if mode == "region":
 		_paint_region(cell)
 		return
@@ -472,6 +521,15 @@ func paint_cell(c: Vector2i, source_id: int, coords: Vector2i, connect := true) 
 		RPGAutotile.update_auto_shadows_around(tile_layers(), map_node.shadows, c)
 
 
+## The passage bits the brush paints (0 = blocked).
+func brush_passage() -> int:
+	return int(brush.get("passage", 15)) & 15 if brush.get("kind", "") == "passage" else 15
+
+
+func _paint_passage(c: Vector2i) -> void:
+	map_node.set_navigation_mask(c, brush_passage())
+
+
 func _paint_region(c: Vector2i) -> void:
 	var n := int(brush.get("region", 0)) if brush.get("kind", "") == "region" else 0
 	if n <= 0:
@@ -500,6 +558,11 @@ func _shape_cells(a: Vector2i, b: Vector2i, ellipse: bool) -> Array:
 
 
 func _apply_shape(a: Vector2i, b: Vector2i, shift: bool) -> void:
+	if mode == "passability":
+		for c in _shape_cells(a, b, tool == "ellipse"):
+			if in_map(c):
+				_paint_passage(c)
+		return
 	if tool == "shadow":
 		for c in _shape_cells(a, b, false):
 			if in_map(c):
@@ -529,6 +592,12 @@ func _apply_shape(a: Vector2i, b: Vector2i, shift: bool) -> void:
 ## Flood fill of the contiguous area that has the same tile as the clicked cell on the target layer.
 func _fill(start: Vector2i) -> void:
 	if not in_map(start):
+		return
+	if mode == "passability":
+		var target_p := map_node.navigation_mask(start)
+		if target_p == brush_passage():
+			return
+		_flood(start, func(c): return map_node.navigation_mask(c) == target_p, func(c): _paint_passage(c))
 		return
 	if mode == "region":
 		var target_r := map_node.region_at(start)
@@ -599,6 +668,10 @@ func _flood(start: Vector2i, same: Callable, act: Callable) -> void:
 ## Right-click copies a tile; right-drag copies an area (top non-empty layer per cell, or the
 ## selected layer). The copy becomes the brush.
 func _eyedropper(a: Vector2i, b: Vector2i) -> void:
+	if mode == "passability":
+		brush = {"kind": "passage", "passage": map_node.navigation_mask(a)}
+		brush_picked.emit(brush)
+		return
 	if mode == "region":
 		var n := map_node.region_at(a)
 		brush = {"kind": "region", "region": n}
@@ -835,7 +908,7 @@ func _draw_overlay() -> void:
 			overlay.draw_line(Vector2(x * ts, 0), Vector2(x * ts, full.size.y), col, 1.0 / zoom)
 		for y in range(1, map_size.y):
 			overlay.draw_line(Vector2(0, y * ts), Vector2(full.size.x, y * ts), col, 1.0 / zoom)
-	if show_passability:
+	if show_passability or mode == "passability":
 		_draw_passability()
 	if not route_preview.is_empty():
 		_draw_route_preview(ts)
@@ -874,21 +947,41 @@ func _draw_passability() -> void:
 	var mv := RPGMovement.new(map_node)
 	map_node.size = map_size
 	var ts := float(tile_size)
-	for y in map_size.y:
-		for x in map_size.x:
+	# Over artwork (image-backed maps) the marks get a dark outline and blocked cells a shade, so
+	# they read on bright and dark pixels alike (shape, not colour alone, tells them apart).
+	var outline := is_image_map()
+	var dark := Color(0, 0, 0, 0.75)
+	# Only the cells in view: a 500×500 image map would otherwise redraw 250 000 marks per hover.
+	var from := Vector2i.ZERO
+	var to := map_size
+	if size.x > 0 and size.y > 0:
+		var a := to_cell(Vector2.ZERO)
+		var b := to_cell(size)
+		from = Vector2i(clampi(a.x, 0, map_size.x), clampi(a.y, 0, map_size.y))
+		to = Vector2i(clampi(b.x + 1, 0, map_size.x), clampi(b.y + 1, 0, map_size.y))
+	for y in range(from.y, to.y):
+		for x in range(from.x, to.x):
 			var c := Vector2i(x, y)
 			var bits := mv.passage(c)
 			var p := Vector2(x, y) * ts
 			if bits == 0:
+				if outline:
+					overlay.draw_rect(Rect2(p, Vector2(ts, ts)), Color(0, 0, 0, 0.3))
+					overlay.draw_line(p + Vector2(3, 3), p + Vector2(ts - 3, ts - 3), dark, 3.5 / zoom)
+					overlay.draw_line(p + Vector2(ts - 3, 3), p + Vector2(3, ts - 3), dark, 3.5 / zoom)
 				overlay.draw_line(p + Vector2(3, 3), p + Vector2(ts - 3, ts - 3), Color(1, 0.25, 0.25, 0.85), 1.5 / zoom)
 				overlay.draw_line(p + Vector2(ts - 3, 3), p + Vector2(3, ts - 3), Color(1, 0.25, 0.25, 0.85), 1.5 / zoom)
 			elif bits == 15:
+				if outline:
+					overlay.draw_circle(p + Vector2(ts / 2, ts / 2), 3.5, dark)
 				overlay.draw_circle(p + Vector2(ts / 2, ts / 2), 2.5, Color(0.4, 0.8, 1.0, 0.7))
 			else:
 				for dn in ["down", "left", "right", "up"]:
 					if bits & RPGMovement.BIT[dn]:
 						var d := Vector2(RPGMovement.DIRS[dn])
 						var mid := p + Vector2(ts / 2, ts / 2)
+						if outline:
+							overlay.draw_line(mid, mid + d * (ts / 2 - 2), dark, 3.5 / zoom)
 						overlay.draw_line(mid, mid + d * (ts / 2 - 2), Color(0.4, 0.8, 1.0, 0.9), 1.5 / zoom)
 			if mv.flags(c) & RPGMovement.FLAG_STAR:
 				overlay.draw_string(ThemeDB.fallback_font, p + Vector2(ts - 6, 6), "*", HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Color.YELLOW)
