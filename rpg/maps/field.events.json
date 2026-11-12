@@ -320,6 +320,48 @@
 					"trigger": "action_button"
 				}
 			]
+		},
+		{
+			"id": "to_garden",
+			"name": "Transfer",
+			"position": [15, 1],
+			"notes": "",
+			"pages": [
+				{
+					"commands": [
+						{
+							"type": "play_sound",
+							"sound": {
+								"role": "step"
+							}
+						},
+						{
+							"type": "transfer_player",
+							"facing": "up",
+							"fade": "black",
+							"to": {
+								"map": "garden",
+								"position": [9, 13]
+							}
+						}
+					],
+					"conditions": [],
+					"graphic": null,
+					"movement": {
+						"type": "fixed",
+						"frequency": 3,
+						"speed": 3
+					},
+					"options": {
+						"direction_fix": false,
+						"step_anim": false,
+						"through": false,
+						"walk_anim": true
+					},
+					"priority": "below",
+					"trigger": "player_touch"
+				}
+			]
 		}
 	]
 }

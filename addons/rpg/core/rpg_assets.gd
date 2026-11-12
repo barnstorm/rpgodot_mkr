@@ -44,6 +44,8 @@ const FOLDERS := {
 	## Side-view actor battlers: 2003 BattleCharSet sheets (144x384) and MV/MZ img/sv_actors
 	## sheets (576x384) share one folder; the battle scene tells them apart by size.
 	"sv_battler": "BattleCharSet",
+	## Base and foreground images of image-backed maps (RPGImageMap); one image pixel is one map pixel.
+	"map_image": "MapImage",
 }
 const AUDIO_KINDS: Array[String] = ["music", "sound"]
 

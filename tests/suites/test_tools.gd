@@ -451,7 +451,7 @@ func test_resource_import_and_delete() -> void:
 	txt.store_string("x")
 	txt.close()
 	assert_eq(ResourceFilesHelpers.folder_for("battler"), "Monster")
-	assert_eq(ResourceFilesHelpers.TYPES.size(), 11)
+	assert_eq(ResourceFilesHelpers.TYPES.size(), 12, "11 kinds, plus Map image (image-backed maps)")
 	var face := root + "/project/FaceSet/zz_new_face.png"
 	var r := ResourceFilesHelpers.import_files(PackedStringArray([src_dir + "/zz_new_face.png", src_dir + "/notes.txt"]), "faceset", "project", root)
 	assert_eq(r.copied, [face])

@@ -1153,6 +1153,21 @@ static func full(data: RPGProjectData, registry: RPGCommandRegistry, files: Dict
 							"Common event '%s' runs as %s but has no condition switch, so it always runs." % [ce.get("id", ""), ce.get("trigger")],
 							"Pick a condition switch."))
 	out.append_array(database_values(files))
+	out.append_array(image_map_problems(files, data))
+	return out
+
+
+## Image-backed maps: missing, unreadable, misaligned, oversized or mismatched images, and a map
+## size that no longer matches its base image (RPGImageMap). Errors block playtest and export.
+static func image_map_problems(files: Dictionary, data: RPGProjectData) -> Array:
+	var out := []
+	if data == null:
+		return out
+	var lim := RPGImageMap.limits(data)
+	for path in files:
+		var e: Dictionary = files[path]
+		if e.get("kind", "") == "map" and e.get("data") is Dictionary:
+			out.append_array(RPGImageMap.problems_for(str(e.get("map", "")), e.data, path, data.tile_size(), lim))
 	return out
 
 

@@ -27,6 +27,15 @@
 			"parent": "",
 			"properties": "res://rpg/maps/field.map.json",
 			"scene": "res://rpg/maps/field.tscn"
+		},
+		{
+			"id": "garden",
+			"name": "Garden",
+			"events": "res://rpg/maps/garden.events.json",
+			"order": 0,
+			"parent": "field",
+			"properties": "res://rpg/maps/garden.map.json",
+			"scene": "res://rpg/maps/garden.tscn"
 		}
 	]
 }

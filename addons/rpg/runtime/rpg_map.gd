@@ -7,6 +7,8 @@ extends Node2D
 ## Layer1Base (optional, drawn just below Layer1) holds the hidden base tiles of VX Ace / MV
 ## overlay autotiles (the sea under deep sea, the ground under a bush; see RPGAutotile). It is
 ## not in tile_layers: passability, terrain and events read the visible layers only.
+## Image-backed maps (RPGImageMap) also have a hidden Navigation layer that decides passability,
+## and draw their base and foreground images as unsaved Sprite2D children (setup_images).
 
 @export var map_id := ""
 
@@ -24,6 +26,11 @@ var tile_layers: Array = []
 var base_layer: TileMapLayer
 var regions: TileMapLayer
 var shadows: TileMapLayer
+## Image-backed maps: the hidden passability layer (null on tile maps).
+var navigation: TileMapLayer
+## Image-backed maps: the base image (under the tiles) and the foreground (above characters).
+var image_base: Sprite2D
+var image_foreground: Sprite2D
 var events_root: Node2D
 var events: Dictionary = {}
 var event_order: Array[String] = []
@@ -76,7 +83,67 @@ func assign_tilesets(data: RPGProjectData) -> Array:
 		regions.tile_set = RPGTilesetBuilder.region_tileset(ts_size)
 	if shadows != null and shadows.tile_set == null:
 		shadows.tile_set = RPGTilesetBuilder.shadow_tileset(ts_size)
+	if navigation != null and navigation.tile_set == null:
+		navigation.tile_set = RPGImageMap.navigation_tileset(ts_size)
+	warnings.append_array(setup_images(data, p, ts_size))
 	return warnings
+
+
+## Image-backed maps: (re)creates the base and foreground sprites from the map properties `p`.
+## They are not saved with the scene (no owner). One image pixel is one project-tile-size pixel;
+## when the map's tileset is drawn smaller (16 px art in a 48 px project) the images are scaled
+## down by the same factor, so the camera's zoom brings them back to 1:1 on screen.
+## `fresh` reloads the files (they changed on disk).
+func setup_images(data: RPGProjectData, p: Dictionary, cell_px: int, fresh := false) -> Array:
+	var warnings := []
+	for n in [image_base, image_foreground]:
+		if n != null and is_instance_valid(n):
+			remove_child(n)
+			n.free()
+	image_base = null
+	image_foreground = null
+	if not RPGImageMap.is_image_map(p):
+		return warnings
+	var image_px: int = data.tile_size() if data != null else cell_px
+	var k := float(cell_px) / float(maxi(1, image_px))
+	var base := RPGImageMap.base_path(p)
+	var tex := RPGImageMap.load_texture(base, fresh)
+	if tex == null:
+		warnings.append("Base image '%s' could not be loaded." % base)
+	else:
+		image_base = _image_sprite(RPGImageMap.BASE_NODE, tex, k, RPGImageMap.BASE_Z)
+		move_child(image_base, 0)
+	var fg := RPGImageMap.foreground_path(p)
+	if fg != "":
+		var ftex := RPGImageMap.load_texture(fg, fresh)
+		if ftex == null:
+			warnings.append("Foreground image '%s' could not be loaded." % fg)
+		else:
+			image_foreground = _image_sprite(RPGImageMap.FOREGROUND_NODE, ftex, k, RPGImageMap.FOREGROUND_Z)
+			# Before the events: a flying airship (same z) is drawn after it, so on top.
+			if events_root != null and events_root.get_parent() == self:
+				move_child(image_foreground, events_root.get_index())
+	return warnings
+
+
+func _image_sprite(n: String, tex: Texture2D, k: float, z: int) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.name = n
+	s.texture = tex
+	s.centered = false
+	s.position = Vector2.ZERO
+	s.scale = Vector2(k, k)
+	# Pixel art: never smoothed, whatever the project's default filter is.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	s.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
+	s.z_index = z
+	s.z_as_relative = false
+	add_child(s)
+	return s
+
+
+func is_image_map() -> bool:
+	return navigation != null or RPGImageMap.is_image_map(props)
 
 
 static var _tileset_cache: Dictionary = {}
@@ -112,8 +179,11 @@ func _collect_layers() -> void:
 	base_layer = get_node_or_null(RPGAutotile.BASE_LAYER) as TileMapLayer
 	regions = get_node_or_null("Regions") as TileMapLayer
 	shadows = get_node_or_null("Shadows") as TileMapLayer
+	navigation = get_node_or_null(RPGImageMap.NAV_LAYER) as TileMapLayer
 	if regions != null and not Engine.is_editor_hint():
 		regions.visible = false
+	if navigation != null:
+		navigation.visible = false
 
 
 ## The hidden base layer under Layer1, created (empty, just below Layer1, saved with the scene)

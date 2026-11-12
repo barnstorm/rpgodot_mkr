@@ -25,6 +25,9 @@ That is the **Star** flag in the tile settings: a star tile is drawn above chara
 **Autotiles don't join up.**
 Hold **Shift** while painting to place an autotile *without* joining it to its neighbours; without Shift they join.
 
+**My map picture is refused, blurred, or the events don't line up with it.**
+See [Image-backed maps](Image-Backed-Maps.md#troubleshooting): the picture must be a whole number of tiles wide and high, drawn at 1×, with no padding.
+
 ## Events
 
 **My event does nothing.**

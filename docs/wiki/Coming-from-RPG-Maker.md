@@ -28,6 +28,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Database > Troops | Database > **Enemy groups** |
 | Features | **Traits** |
 | Tilesets tab: passability (○/×, ☆, directions) | The **Tiles** button on the RPG tab |
+| Parallax mapping (a map drawn as one picture, with a plugin or blank tiles for collision) | Built in: [Image-backed maps](Image-Backed-Maps.md), with a foreground picture and painted navigation |
 | Terms tab: skill, weapon and armour types | Database > **Types** |
 | Change Maximum… | **New** (IDs are names like `potion`, and are never reused) |
 | Switch/Variable 0001 | Named switches and variables, e.g. `talked_to_king` |

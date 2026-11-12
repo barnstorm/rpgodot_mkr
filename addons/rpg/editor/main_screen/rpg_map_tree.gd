@@ -109,6 +109,8 @@ func _gui_input(event: InputEvent) -> void:
 func open_menu(id: String, at := Vector2(-1, -1)) -> PopupMenu:
 	var menu := PopupMenu.new()
 	menu.add_item("New map...", 0)
+	menu.add_item("New image-backed map...", 10)
+	menu.set_item_tooltip(menu.get_item_index(10), "A map drawn from one picture you made in a paint program; you paint where characters can walk")
 	if id != "":
 		menu.add_item("Properties...", 1)
 		menu.add_separator()
@@ -126,7 +128,7 @@ func open_menu(id: String, at := Vector2(-1, -1)) -> PopupMenu:
 		menu.add_item("Paste", 3)
 	menu.add_item("Load sample map...", 8)
 	menu.id_pressed.connect(func(action_id: int):
-		var names := {0: "new", 1: "properties", 2: "copy", 3: "paste", 4: "delete", 5: "favourite", 6: "start_here", 7: "shift", 8: "sample", 9: "dungeon"}
+		var names := {0: "new", 1: "properties", 2: "copy", 3: "paste", 4: "delete", 5: "favourite", 6: "start_here", 7: "shift", 8: "sample", 9: "dungeon", 10: "new_image"}
 		map_action.emit(names.get(action_id, ""), id)
 		menu.queue_free())
 	menu.close_requested.connect(menu.queue_free)
