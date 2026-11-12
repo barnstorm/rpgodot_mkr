@@ -77,8 +77,16 @@ func in_bounds(cell: Vector2i) -> bool:
 	return normalize(cell) != Vector2i(-1, -1)
 
 
-## Passage bits for a cell (top layer that is not empty and not a star tile decides).
+## Passage bits for a cell. On a map with a Navigation layer (image-backed maps) the layer's mask
+## decides, and a cell without a mask tile is blocked; visible tiles then only supply flags and
+## terrain. Otherwise the top layer that is not empty and not a star tile decides.
 func passage(cell: Vector2i) -> int:
+	var nav: Variant = map.get("navigation")
+	if nav is TileMapLayer and is_instance_valid(nav):
+		var nl: TileMapLayer = nav
+		if nl.get_cell_source_id(cell) < 0:
+			return 0
+		return nl.get_cell_atlas_coords(cell).x & 15
 	var layers: Array = map.tile_layers
 	if layers.is_empty():
 		return 15

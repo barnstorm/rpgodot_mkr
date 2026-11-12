@@ -13,6 +13,7 @@
 6. [The database](Lesson-6-The-Database.md)
 7. [Battles](Lesson-7-Battles.md)
 8. [Playtest, debug and share](Lesson-8-Playtest-Debug-and-Share.md)
+9. [Image-backed maps](Lesson-9-Image-Backed-Maps.md)
 
 **Reference**
 - [Coming from RPG Maker](Coming-from-RPG-Maker.md)

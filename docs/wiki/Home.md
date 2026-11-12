@@ -24,6 +24,7 @@
 | [6. The database](Lesson-6-The-Database.md) | Actors, classes, skills, items, equipment, states, system settings |
 | [7. Battles](Lesson-7-Battles.md) | Enemies, enemy groups, encounters, battle events, front/side view, turn/ATB/CTB |
 | [8. Playtest, debug and share](Lesson-8-Playtest-Debug-and-Share.md) | The debug screen, the export checks, building a game for players |
+| [9. Image-backed maps](Lesson-9-Image-Backed-Maps.md) | Maps drawn as one picture: sizing, painting passability, a foreground to walk behind, replacing the art |
 
 ## Reference
 

@@ -393,7 +393,8 @@ func _board(kind: String) -> void:
 	speed = int(cfg.get("speed", 4))
 	set_graphic(cfg.get("graphic"))
 	step_anim = true
-	z_index = 5 if kind == "airship" else 2
+	# The airship flies above everything on the map, image-map foregrounds (z 5) included.
+	z_index = 6 if kind == "airship" else 2
 	for f in followers:
 		f.visible = false
 	trail.clear()

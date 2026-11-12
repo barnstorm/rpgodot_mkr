@@ -1153,6 +1153,25 @@ static func full(data: RPGProjectData, registry: RPGCommandRegistry, files: Dict
 							"Common event '%s' runs as %s but has no condition switch, so it always runs." % [ce.get("id", ""), ce.get("trigger")],
 							"Pick a condition switch."))
 	out.append_array(database_values(files))
+	out.append_array(image_map_problems(data, files))
+	return out
+
+
+## Image-backed maps: missing base or foreground image, a size that is not a whole number of map
+## tiles, over the limit or different from the map, a foreground of another size, and looping
+## (RPGImageMap.problems). Each message names the map and the image path.
+static func image_map_problems(data: RPGProjectData, files: Dictionary) -> Array:
+	var out := []
+	for path in files:
+		var e: Dictionary = files[path]
+		if e.get("kind", "") != "map" or not (e.get("data") is Dictionary):
+			continue
+		for p in RPGImageMap.problems(data, str(e.get("map", "")), e.data):
+			var pr := problem(str(p.severity), path, str(e.get("map", "")), str(p.field), str(p.field), str(p.message),
+				"Fix the image or pick another one in Map Properties (right-click the map > Properties...).")
+			if p.severity == "error":
+				pr["blocks_export"] = true
+			out.append(pr)
 	return out
 
 

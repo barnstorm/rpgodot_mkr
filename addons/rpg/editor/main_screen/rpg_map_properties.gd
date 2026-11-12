@@ -6,6 +6,9 @@ extends ConfirmationDialog
 ## custom_fields ("maps") of enabled extensions and of the project, kept in the map's "custom".
 ## Opens on New map and from right-click > Properties. Shrinking warns first: what falls outside
 ## is deleted.
+## Image-backed maps (RPGImageMap) also show their base and foreground images. Their size comes
+## from the base image (width and height are read-only), the tileset may be (none), and the loop
+## choices are off. A new image of another size is checked here, then reviewed by the main screen.
 
 signal saved(map_id: String, props: Dictionary, entry_name: String)
 
@@ -18,6 +21,9 @@ var _enc_list: VBoxContainer
 var _error: Label
 ## Plugin fields (custom_fields "maps"), or null when there are none.
 var _custom_form: RPGFormBuilder = null
+var _image := false
+var _picker: FileDialog
+var _picking := ""
 
 
 ## `parent_map`: for a new map, the map it goes under; the new map starts with that map's
@@ -78,17 +84,39 @@ func _ready() -> void:
 		_f["id"] = idl
 	_text(grid, "name", "Name (editor only)", str(entry.get("name", "")))
 	_text(grid, "display_name", "Display name", str(props.get("display_name", "")))
+	_image = not is_new and RPGImageMap.is_image_map(props)
 	var ts := OptionButton.new()
 	for r in data.records("tilesets"):
 		ts.add_item("%s (%s)" % [r.get("name", r.id), r.id])
 		ts.set_item_metadata(ts.item_count - 1, r.id)
 		if r.id == props.get("tileset", ""):
 			ts.select(ts.item_count - 1)
+	if _image:
+		# Tiles are optional on an image-backed map; with (none) the project tile size is the map's.
+		ts.add_item("(none)")
+		ts.set_item_metadata(ts.item_count - 1, "")
+		if str(props.get("tileset", "")) == "":
+			ts.select(ts.item_count - 1)
+		ts.tooltip_text = "Tiles painted on top of the image. The tileset's tile size is the map tile size, which the image size must divide."
+		ts.item_selected.connect(func(_i): _check_images())
 	_row(grid, "Tileset", ts)
 	_f["tileset"] = ts
+	if _image:
+		_f["base"] = _path_row(grid, "Base image", "The image drawn under the whole map. A new image of the same size keeps everything; another size opens a review first.", "base", RPGImageMap.base_path(props))
+		_f["foreground"] = _path_row(grid, "Foreground image", "Optional transparent image of the same size, drawn above the characters. Clear removes it; nothing else changes.", "foreground", RPGImageMap.foreground_path(props))
 	_spin(grid, "width", "Width (tiles)", int(props.get("width", 20)), 1, 500)
 	_spin(grid, "height", "Height (tiles)", int(props.get("height", 15)), 1, 500)
 	_choice(grid, "scroll", "Scroll type", ["none", "loop_v", "loop_h", "loop_both"], ["No loop", "Loop vertically", "Loop horizontally", "Loop both ways"], str(props.get("scroll", "none")))
+	if _image:
+		for k in ["width", "height"]:
+			_f[k].editable = false
+			_f[k].tooltip_text = "Set by the base image: its size divided by the map tile size."
+		var sc: OptionButton = _f.scroll
+		sc.select(0)
+		for i in range(1, sc.item_count):
+			sc.set_item_disabled(i, true)
+		sc.tooltip_text = "Image-backed maps do not loop: the image would show a seam."
+		_check_images()
 	# RPG Maker's "Auto-change BGM/BGS": keep what is playing, stop it, or play a file.
 	var music: Variant = props.get("music")
 	_choice(grid, "music", "Music", [KEEP, STOP] + RPGAssets.list("music"), ["(keep playing)", "(stop)"] + RPGAssets.list("music"), _sound_choice(music))
@@ -275,6 +303,69 @@ func _meta(key: String) -> Variant:
 	return o.get_item_metadata(o.selected) if o.selected >= 0 else null
 
 
+func _path_row(grid: GridContainer, label: String, tip: String, key: String, value: String) -> LineEdit:
+	var hb := HBoxContainer.new()
+	var le := LineEdit.new()
+	le.text = value
+	le.tooltip_text = tip
+	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	le.text_changed.connect(func(_t): _check_images())
+	hb.add_child(le)
+	var browse := Button.new()
+	browse.text = "Browse..."
+	browse.tooltip_text = "Pick the image from the project's files"
+	browse.pressed.connect(func(): _browse(key))
+	hb.add_child(browse)
+	if key == "foreground":
+		var clear := Button.new()
+		clear.text = "Clear"
+		clear.tooltip_text = "Remove the foreground image (the base image, passability, regions, tiles and events stay)"
+		clear.pressed.connect(func():
+			le.text = ""
+			_check_images())
+		hb.add_child(clear)
+	_row(grid, label, hb)
+	return le
+
+
+func _browse(key: String) -> void:
+	if _picker == null:
+		_picker = FileDialog.new()
+		_picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_picker.access = FileDialog.ACCESS_RESOURCES
+		_picker.filters = PackedStringArray(RPGImageMapDialog.IMAGE_FILTERS)
+		_picker.file_selected.connect(func(path: String):
+			_f[_picking].text = path
+			_check_images())
+		add_child(_picker)
+	_picking = key
+	_picker.popup_centered(Vector2i(720, 480))
+
+
+## Image-backed maps: checks the images against the chosen tileset's tile size, shows the size
+## they give, and returns the problem ("" = fine) and the size in cells.
+func _check_images() -> Dictionary:
+	if not _image:
+		return {"problem": "", "cells": Vector2i(int(_f.width.value), int(_f.height.value))}
+	var tile := RPGImageMap.tile_size_for_tileset(data, str(_meta("tileset")) if _meta("tileset") != null else "")
+	var chk := RPGImageMap.check_image(str(_f.base.text).strip_edges(), tile)
+	var problem := ""
+	if str(_f.base.text).strip_edges() == "":
+		problem = "An image-backed map needs a base image."
+	elif not chk.ok:
+		problem = str(chk.error)
+	else:
+		_f.width.value = chk.cells.x
+		_f.height.value = chk.cells.y
+		var fg := str(_f.foreground.text).strip_edges()
+		if fg != "":
+			var fr := RPGImageMap.read_size(fg)
+			problem = str(fr.error) if not fr.ok else RPGImageMap.foreground_mismatch(chk.size, fr.size)
+	if _error != null:
+		_error.text = problem if problem != "" else (str(chk.warning) if chk.ok else "")
+	return {"problem": problem, "cells": chk.cells}
+
+
 ## Why `id` can't be a new map's ID, or "" when it can.
 func _id_problem(id: String) -> String:
 	if not is_new:
@@ -295,6 +386,10 @@ func _on_ok() -> void:
 		_error.text = problem
 		_f.id.grab_focus()
 		return
+	var img := _check_images()
+	if img.problem != "":
+		_error.text = img.problem
+		return
 	hide()
 	var out := props.duplicate(true)
 	out["id"] = id
@@ -303,6 +398,16 @@ func _on_ok() -> void:
 	out["width"] = int(_f.width.value)
 	out["height"] = int(_f.height.value)
 	out["scroll"] = str(_meta("scroll"))
+	if _image:
+		out["width"] = img.cells.x
+		out["height"] = img.cells.y
+		out["scroll"] = "none"
+		var b := RPGImageMap.block(props).duplicate(true)
+		b["version"] = int(b.get("version", RPGImageMap.VERSION))
+		b["base"] = str(_f.base.text).strip_edges()
+		var fg := str(_f.foreground.text).strip_edges()
+		b["foreground"] = fg if fg != "" else null
+		out[RPGImageMap.KEY] = b
 	out["music"] = _sound_value(str(_meta("music")))
 	out["bgs"] = _sound_value(str(_meta("bgs")))
 	out["battle_background"] = str(_meta("battle_background"))

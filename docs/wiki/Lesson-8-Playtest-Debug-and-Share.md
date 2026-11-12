@@ -107,6 +107,8 @@ build/windows/MyGame.console.exe --headless -- --rpg-smoke
 
 You have made maps, events, a quest, a cutscene, heroes, items, monsters and battles, and built the game. Where next?
 
+- [Lesson 9: Image-backed maps](Lesson-9-Image-Backed-Maps.md): build a map from one picture you drew, instead of tiles.
+
 - [Plugins](Plugins.md): quests, lighting and a day/night clock, crafting, a bestiary, better messages and more, all one tick away.
 - [Importing RPG Maker resources](Importing-RPG-Maker-Resources.md): use art and music from RPG Maker you own.
 - [For programmers](For-Programmers.md): your own commands, screens and battle systems in GDScript.

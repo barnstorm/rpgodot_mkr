@@ -17,6 +17,8 @@ const GAME_SCENE := "res://addons/rpg/runtime/game.tscn"
 const TOOL_TABS := ["Event search", "Sound test", "Resources", "Extensions", "Deploy"]
 
 var plugin: EditorPlugin
+## The RPG project this tab edits (tests point it at a scratch project before adding the screen).
+var project_root := "res://rpg"
 var data: RPGProjectData
 var registry: RPGCommandRegistry
 var undo: RPGUndo
@@ -31,6 +33,12 @@ var status: Label
 var mode_buttons: Dictionary = {}
 var tool_buttons: Dictionary = {}
 var layer_option: OptionButton
+## Image-backed maps: show, dim or hide the foreground image while editing.
+var foreground_option: OptionButton
+## The open resize review of an image-backed map (null when none).
+var review_dialog: AcceptDialog
+## Folder of the last backup made before an image-backed map was resized.
+var last_backup := ""
 var current_map := ""
 var clipboard_event: Dictionary = {}
 var clipboard_map := ""
@@ -77,6 +85,7 @@ func _build_ui() -> void:
 	_mode_button("Map", "map", "Map mode: paint tiles (F5)", ["TileMapLayer", "TileMap"])
 	_mode_button("Event", "event", "Event mode: place and edit events (F6)", ["CharacterBody2D", "Node2D"])
 	_mode_button("Region", "region", "Region mode: paint region numbers (F7)", ["NavigationRegion2D", "Rectangle"])
+	_mode_button("Passability", "passability", "Passability mode: paint where characters can walk on an image-backed map (F4)", ["NavigationPolygon", "CollisionPolygon2D"])
 	toolbar.add_child(VSeparator.new())
 	for t in [["Pencil", "pencil", ["Edit"]], ["Rect", "rect", ["Rectangle", "RectangleShape2D"]], ["Ellipse", "ellipse", ["CircleShape2D"]], ["Fill", "fill", ["Bucket"]], ["Shadow", "shadow", ["LightOccluder2D", "GradientTexture2D"]]]:
 		_tool_button(t[0], t[1], t[2])
@@ -104,6 +113,14 @@ func _build_ui() -> void:
 	_overlay_menu.add_check_item("Terrain tags", 3)
 	_overlay_menu.id_pressed.connect(toggle_overlay)
 	toolbar.add_child(ov)
+	foreground_option = OptionButton.new()
+	for t in ["Foreground: show", "Foreground: dim", "Foreground: hide"]:
+		foreground_option.add_item(t)
+	foreground_option.tooltip_text = "The foreground image of this image-backed map while editing: show it, dim it, or hide it to reach events under it. The game always draws it."
+	foreground_option.focus_mode = Control.FOCUS_ALL
+	foreground_option.item_selected.connect(func(i: int): set_foreground_view(["show", "dim", "hide"][i]))
+	foreground_option.visible = false
+	toolbar.add_child(foreground_option)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	toolbar.add_child(spacer)
@@ -223,7 +240,7 @@ const M_CUT := 12
 const M_COPY := 13
 const M_PASTE := 14
 const M_DELETE := 15
-const M_MODE := 20        # + 0 map, 1 event, 2 region
+const M_MODE := 20        # + 0 map, 1 event, 2 region, 3 passability
 const M_DRAW := 30        # + index in DRAW_TOOLS
 const M_LAYER := 40       # + 0 auto, 1..4
 const M_ZOOM_IN := 50
@@ -242,7 +259,7 @@ const M_SPEC := 92
 const M_TUTORIALS := 93
 const M_TUTORIALS_WEB := 94
 const DRAW_TOOLS := ["pencil", "rect", "ellipse", "fill", "shadow"]
-const MODES := ["map", "event", "region"]
+const MODES := ["map", "event", "region", "passability"]
 
 
 func _build_menubar() -> void:
@@ -274,6 +291,7 @@ func _build_menubar() -> void:
 	mode.add_radio_check_item("Map", M_MODE + 0, KEY_F5)
 	mode.add_radio_check_item("Event", M_MODE + 1, KEY_F6)
 	mode.add_radio_check_item("Region", M_MODE + 2, KEY_F7)
+	mode.add_radio_check_item("Passability", M_MODE + 3, KEY_F4)
 	var draw := _menu("Draw")
 	for i in DRAW_TOOLS.size():
 		draw.add_radio_check_item(["Pencil", "Rectangle", "Ellipse", "Fill", "Shadow pen"][i], M_DRAW + i)
@@ -345,6 +363,7 @@ func _sync_menus() -> void:
 	var mode: PopupMenu = _menus.Mode
 	for i in MODES.size():
 		mode.set_item_checked(mode.get_item_index(M_MODE + i), view.mode == MODES[i])
+	mode.set_item_disabled(mode.get_item_index(M_MODE + 3), not view.is_image_map())
 	var draw: PopupMenu = _menus.Draw
 	for i in DRAW_TOOLS.size():
 		draw.set_item_checked(draw.get_item_index(M_DRAW + i), view.tool == DRAW_TOOLS[i])
@@ -541,14 +560,47 @@ func _battle_test_dialog() -> void:
 
 
 func _select_mode(m: String) -> void:
+	if m == "passability" and not view.is_image_map():
+		# Tile maps take their passability from the tiles (Tiles button); only image-backed maps
+		# have a mask to paint.
+		status.text = "Passability mode is for image-backed maps (right-click the map list > New image-backed map...). On tile maps, passability comes from the tiles: use the Tiles button."
+		m = view.mode if view.mode != "passability" else "map"
 	for k in mode_buttons:
 		mode_buttons[k].set_pressed_no_signal(k == m)
 	view.set_mode(m)
 	right_panel.visible = m == "event"
 	palette.show_regions(m == "region")
+	palette.show_passage(m == "passability")
 	if m == "region" and view.brush.get("kind", "") != "region":
 		view.brush = {"kind": "region", "region": 1}
+	if m == "passability" and view.brush.get("kind", "") != "passage":
+		view.brush = {"kind": "passage", "passage": 15}
+		palette._show_passage_bits(15)
 	_refresh_event_list()
+
+
+## Editor-only look of the foreground image ("show", "dim" or "hide").
+func set_foreground_view(v: String) -> void:
+	view.set_foreground_view(v)
+	var i := ["show", "dim", "hide"].find(view.foreground_view)
+	if foreground_option != null and foreground_option.selected != i:
+		foreground_option.select(i)
+
+
+## Shows the image-backed-map controls only where they apply.
+func _update_image_controls() -> void:
+	var image := view.is_image_map()
+	if mode_buttons.has("passability"):
+		mode_buttons.passability.disabled = not image
+		mode_buttons.passability.tooltip_text = "Passability mode: paint where characters can walk (F4)" if image else "Passability mode (F4) is for image-backed maps; on tile maps the tiles decide (Tiles button)"
+	if foreground_option != null:
+		foreground_option.visible = view.has_foreground()
+		foreground_option.select(maxi(0, ["show", "dim", "hide"].find(view.foreground_view)))
+	palette.set_passage_available(image)
+	if view.mode == "passability" and not image:
+		_select_mode("map")
+	else:
+		palette.show_passage(view.mode == "passability")
 
 
 func _select_tool(t: String) -> void:
@@ -561,6 +613,7 @@ func _shortcut_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed:
 		return
 	match event.keycode:
+		KEY_F4: _select_mode("passability")
 		KEY_F5: _select_mode("map")
 		KEY_F6: _select_mode("event")
 		KEY_F7: _select_mode("region")
@@ -611,7 +664,7 @@ var _welcome: Control
 
 
 func reload_project() -> void:
-	data = RPGProjectData.open()
+	data = RPGProjectData.open(project_root)
 	_show_welcome(not FileAccess.file_exists(data.root.path_join("project.json")))
 	registry = RPGCommandRegistry.new()
 	registry.load_all(data.project.get("extensions", []), data.project.get("disabled_extensions", []), data.project.get("extensions_root", "res://extensions"))
@@ -655,9 +708,11 @@ func open_map(id: String) -> void:
 		EditorInterface.get_editor_settings().set_project_metadata("rpg_kit", "last_map", id)
 	palette.set_tile_set(view.tile_set(), data.tile_size())
 	palette.show_regions(view.mode == "region")
+	_update_image_controls()
 	_refresh_event_list()
 	_update_status()
 	remember_disk()
+	_image_stamp = _image_files_stamp()
 
 
 ## Tile settings dialog for the current map's tileset; saving rebuilds the TileSet and reopens
@@ -684,7 +739,9 @@ func _on_brush(b: Dictionary) -> void:
 	view.brush = b
 	if b.get("kind", "") == "region" and view.mode != "region":
 		_select_mode("region")
-	elif b.get("kind", "") == "tiles" and view.mode == "region":
+	elif b.get("kind", "") == "passage" and view.mode != "passability":
+		_select_mode("passability")
+	elif b.get("kind", "") == "tiles" and view.mode in ["region", "passability"]:
 		_select_mode("map")
 
 
@@ -721,6 +778,8 @@ func _on_map_action(action: String, id: String) -> void:
 				else:
 					status.text = "Could not create map '%s' (error %d)." % [new_id, err]
 					push_error(status.text), id)
+		"new_image":
+			RPGImageMapDialog.open_for(self, data, func(v: Dictionary): create_image_map(v), id)
 		"properties":
 			RPGMapPropertiesDialog.open_for(self, data, id, false, func(_id, props, entry_name): _apply_props(id, props, entry_name))
 		"start_here":
@@ -784,8 +843,27 @@ func _on_map_action(action: String, id: String) -> void:
 			tree.rebuild(data, id)
 
 
+## New image-backed map from the dialog's values ({id, name, tileset, base, foreground, walkable,
+## parent}); opens it in Passability mode. Returns RPGMapFiles.create_image_map's result.
+func create_image_map(v: Dictionary) -> Dictionary:
+	var id := str(v.get("id", ""))
+	var r := RPGMapFiles.create_image_map(data, id, str(v.get("name", "")) if str(v.get("name", "")) != "" else id, str(v.get("tileset", "")), str(v.get("base", "")), str(v.get("foreground", "")), bool(v.get("walkable", false)), str(v.get("parent", "")))
+	if r.error != OK:
+		status.text = str(r.message)
+		return r
+	data.reload()
+	tree.rebuild(data, id)
+	open_map(id)
+	_select_mode("passability")
+	status.text = "Created image-backed map '%s' (%d×%d cells). Paint where characters can walk, then place events in Event mode (F6)." % [id, r.cells.x, r.cells.y]
+	return r
+
+
 ## Map > Shift: moves the whole map's contents; things pushed off one edge come in at the other.
 func _shift_dialog(id: String) -> void:
+	if RPGImageMap.is_image_map(data.map_props(id)):
+		status.text = "Shift contents is off on image-backed maps: the image cannot move with the tiles and events."
+		return
 	open_map(id)
 	var dlg := ConfirmationDialog.new()
 	dlg.title = "Shift map contents"
@@ -821,7 +899,7 @@ What leaves one edge comes back at the opposite edge."
 
 
 func shift_map(offset: Vector2i) -> void:
-	if view.map_node == null or offset == Vector2i.ZERO:
+	if view.map_node == null or offset == Vector2i.ZERO or view.is_image_map():
 		return
 	# Wrapping is reversible, so undo is simply the opposite shift.
 	undo.create_action("RPG: Shift map")
@@ -959,11 +1037,23 @@ func _apply_props(id: String, props: Dictionary, entry_name: String, confirmed :
 	var h := int(props.height)
 	var old_w := int(old.get("width", w))
 	var old_h := int(old.get("height", h))
+	var image := RPGImageMap.is_image_map(props) or RPGImageMap.is_image_map(old)
 	# Resizing works on the open map: open the one being changed first (saves the current one).
 	if (w != old_w or h != old_h) and current_map != id:
 		open_map(id)
+	# Image-backed maps: a new image of another size goes through a blocking review first.
+	if image and not confirmed and current_map == id and view.map_node != null and (w != old_w or h != old_h):
+		_resize_review(id, props, entry_name, Vector2i(old_w, old_h), Vector2i(w, h))
+		return
+	if image and confirmed and (w != old_w or h != old_h):
+		if view.dirty:
+			view.save()
+		last_backup = RPGMapFiles.backup_map(data, id)
+		if last_backup == "":
+			status.text = "Could not back up map '%s' to %s; nothing was changed." % [id, data.root.path_join(".backup")]
+			return
 	# Shrinking deletes the events outside the new size: name them and ask first.
-	if not confirmed and current_map == id and (w < int(old.get("width", w)) or h < int(old.get("height", h))):
+	if not image and not confirmed and current_map == id and (w < int(old.get("width", w)) or h < int(old.get("height", h))):
 		var outside := []
 		for ev in view.events():
 			var p: Array = ev.get("position", [0, 0])
@@ -1008,6 +1098,77 @@ Tiles outside are removed too. Undo is not available for this." % [w, h, outside
 		view.rejoin_edges(Vector2i(old_w, old_h))
 		view.save()
 		remember_disk()
+	# An image-backed map needs its passability mask (one given an image by hand may lack it).
+	if image and view.map_node != null and current_map == id and view.map_node.navigation == null and RPGImageMap.is_image_map(props):
+		RPGMapFiles.ensure_navigation(view.map_node, view.map_size)
+		view.save()
+		remember_disk()
+	if image:
+		_update_image_controls()
+		_image_stamp = _image_files_stamp()
+		if last_backup != "" and confirmed:
+			status.text = "Resized %s to %d×%d. The old files are in %s." % [id, w, h, last_backup]
+
+
+## The blocking review before an image-backed map changes size (a new image of another size, or
+## the image changed on disk). Lists what falls outside; refuses while a start position would;
+## otherwise Resize makes a backup in rpg/.backup/ and applies it. Cancel changes nothing.
+func _resize_review(id: String, props: Dictionary, entry_name: String, old_size: Vector2i, new_size: Vector2i) -> AcceptDialog:
+	if review_dialog != null and is_instance_valid(review_dialog):
+		review_dialog.queue_free()
+	var r := RPGImageMap.outside_report(id, view.map_node, view.events(), data.system, new_size)
+	var lines := ["The new image makes map '%s' %d×%d cells; it is %d×%d now." % [id, new_size.x, new_size.y, old_size.x, old_size.y]]
+	if new_size.x > old_size.x or new_size.y > old_size.y:
+		lines.append("The map grows. New cells start blocked; paint them in Passability mode.")
+	if RPGImageMap.report_has_losses(r):
+		lines.append("")
+		lines.append("Outside the new size:")
+		if not r.events.is_empty():
+			lines.append("  %d event(s): %s%s" % [r.events.size(), ", ".join(PackedStringArray(r.events.slice(0, 10))), " ..." if r.events.size() > 10 else ""])
+		if r.tiles > 0:
+			lines.append("  %d tile(s)" % r.tiles)
+		if r.regions > 0:
+			lines.append("  %d region cell(s)" % r.regions)
+		if r.navigation > 0:
+			lines.append("  %d passability cell(s)" % r.navigation)
+		for st in r.starts:
+			lines.append("  the %s" % st)
+	var dlg: AcceptDialog
+	if r.blocking:
+		dlg = AcceptDialog.new()
+		dlg.title = "Image size changed: move the start positions first"
+		lines.append("")
+		lines.append("A start position would fall outside the map. Move it inside the new size first (Event mode: right-click a cell > Set starting position). Nothing was changed.")
+		dlg.ok_button_text = "Close"
+		dlg.confirmed.connect(func(): _review_closed(dlg, "Nothing was changed: move the start positions inside the new size first."))
+	else:
+		var cd := ConfirmationDialog.new()
+		cd.title = "Image size changed: review"
+		lines.append("")
+		lines.append(("Resizing deletes what is listed above. " if RPGImageMap.report_has_losses(r) else "") + "A copy of the map's files is saved to %s first. Resizing cannot be undone." % data.root.path_join(".backup"))
+		cd.ok_button_text = "Resize map"
+		cd.cancel_button_text = "Cancel"
+		cd.confirmed.connect(func():
+			_review_closed(cd, "")
+			_apply_props(id, props, entry_name, true))
+		cd.canceled.connect(func(): _review_closed(cd, "Cancelled: map '%s', its images and its data are unchanged." % id))
+		dlg = cd
+	dlg.dialog_text = "\n".join(PackedStringArray(lines))
+	dlg.close_requested.connect(func(): _review_closed(dlg, "Cancelled: map '%s' is unchanged." % id))
+	review_dialog = dlg
+	add_child(dlg)
+	dlg.popup_centered(Vector2i(560, 0))
+	return dlg
+
+
+func _review_closed(dlg: AcceptDialog, message: String) -> void:
+	if message != "":
+		status.text = message
+	if review_dialog == dlg:
+		review_dialog = null
+	if is_instance_valid(dlg):
+		dlg.hide()
+		dlg.queue_free()
 
 
 # --- events -------------------------------------------------------------------------------------------------
@@ -1529,6 +1690,7 @@ func _reload_database_files(changed: Array) -> Array:
 func check_disk_changes() -> void:
 	if data == null or _disk_prompt != null:
 		return
+	check_image_changes()
 	var changed := disk_changes()
 	# A changed tileset the open map uses needs the map redrawn: a full reload when it can be.
 	var map_ts := str(data.map_props(current_map).get("tileset", "")) if current_map != "" else ""
@@ -1559,6 +1721,48 @@ func check_disk_changes() -> void:
 		_disk_prompt = null)
 	add_child(_disk_prompt)
 	_disk_prompt.popup_centered()
+
+
+var _image_stamp := ""
+
+
+## Content hash of the open image-backed map's image files ("" for a tile map).
+func _image_files_stamp() -> String:
+	if view == null or not view.is_image_map():
+		return ""
+	var parts := PackedStringArray()
+	for path in [RPGImageMap.base_path(view.props), RPGImageMap.foreground_path(view.props)]:
+		if path == "":
+			parts.append("-")
+			continue
+		parts.append(path + "=" + (FileAccess.get_md5(path) if FileAccess.file_exists(path) else "missing"))
+	return "|".join(parts)
+
+
+## On focus return or a rescan: an image of the open map that changed on disk is shown again (Godot
+## has reimported it), and its size is checked again; a new size opens the resize review.
+## Returns true when something changed.
+func check_image_changes() -> bool:
+	if view == null or view.map_node == null or not view.is_image_map():
+		return false
+	var st := _image_files_stamp()
+	if st == _image_stamp:
+		return false
+	_image_stamp = st
+	var p: Dictionary = data.map_props(current_map)
+	view.refresh_images(p, true)
+	_update_image_controls()
+	var chk := RPGImageMap.check_image(RPGImageMap.base_path(p), RPGImageMap.map_tile_size(data, p))
+	if not chk.ok:
+		status.text = "Map '%s': %s" % [current_map, chk.error]
+	elif chk.cells != view.map_size and (review_dialog == null or not is_instance_valid(review_dialog)):
+		var np := p.duplicate(true)
+		np["width"] = chk.cells.x
+		np["height"] = chk.cells.y
+		_apply_props(current_map, np, "")
+	else:
+		status.text = "Reloaded the images of %s." % current_map
+	return true
 
 
 func _reload_from_disk(message: String) -> void:
