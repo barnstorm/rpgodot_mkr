@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 78 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 79 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -122,6 +122,7 @@ There are 78 built-in commands. The *ID* is the command's `type` in the event JS
 | **Battle Processing** | `battle` | Enemy group, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage, Store outcome in, If won, If escaped, If lost |
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
+| **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |
 | **Open Menu Screen** | `open_menu` |  |

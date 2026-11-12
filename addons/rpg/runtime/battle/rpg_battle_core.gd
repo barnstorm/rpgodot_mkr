@@ -16,6 +16,8 @@ extends RefCounted
 ##
 ## Battle events: connect to `checkpoint`, call eligible_battle_pages(kind) and run the
 ## returned pages' commands (the battle waits while they run).
+## Troop members marked "hidden" ("Appears later") stay out of the battle until appear(index)
+## brings them in (the Enemy Appear command).
 ##
 ## Actions: {kind: "attack"|"skill"|"item"|"guard"|"escape"|"wait", skill?, item?, target?}
 ## `target` is an index into the opposing side (enemy scopes) or the user's side (ally
@@ -116,6 +118,7 @@ var _turn_members: Array = []  ## timed: battlers active when this battle turn b
 var _extra := {}               ## timed: battler -> extra actions left ("action_times" traits)
 var _known_states := {}        ## hooks: battler -> state ids last reported
 var _defeated := {}            ## hooks: battlers reported as defeated (until revived)
+var _forced := false          ## the result came from force_result()
 
 
 func _init(p_party: Array = [], p_troop: Dictionary = {}, p_rules: RPGRuleSystem = null, p_rng: RPGRandom = null) -> void:
@@ -165,6 +168,7 @@ func start() -> void:
 	escape_attempts = 0
 	phase = "idle"
 	_result = ""
+	_forced = false
 	_rewards = {}
 	_page_runs.clear()
 	_queue.clear()
@@ -1112,7 +1116,30 @@ func battle_over() -> String:
 ## Ends the battle from outside (e.g. an event command "abort battle").
 func force_result(result: String) -> void:
 	_result = result
+	_forced = true
 	phase = "over"
+
+
+## Enemy Appear: brings troop member `member_index` into the battle if it is hidden ("Appears
+## later"); -1 brings every hidden member. Returns the battlers that appeared, in troop order.
+## Timed battles: a new enemy starts from an empty-ish gauge (ATB_START). A win that was only
+## seen because every visible enemy fell (a battle event "enemy HP 0%" calling reinforcements)
+## is taken back, so the battle goes on.
+func appear(member_index: int) -> Array:
+	var out := []
+	for e in enemies:
+		if not e.hidden or (member_index >= 0 and e.index != member_index):
+			continue
+		e.hidden = false
+		out.append(e)
+		_known_states[e] = e.state_ids()
+		if is_timed():
+			_speeds[e] = _speed_of(e)
+			gauges[e] = ATB_START if e.is_alive() else 0.0
+	if not out.is_empty() and _result == "win" and not _forced and not active_enemies().is_empty():
+		_result = ""
+		phase = "actions"
+	return out
 
 
 ## Spoils from defeated enemies: {exp, gold, items: [{kind, id, count}]}. Drops are rolled

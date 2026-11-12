@@ -5,7 +5,6 @@ What the kit doesn't do yet, and what hasn't been verified. This list is kept ho
 ## Not built
 
 - **Character generator** (RPG Maker's face and sprite builder).
-- **An *Enemy Appear* command.** An enemy group member marked *Appears later* can't be brought into the battle yet, so it stays hidden.
 - **Animation timeline editor.** Battle animations are a sprite sheet with flashes and sounds, or one of the built-in effects (slash, fire, ice, thunder, heal, hit).
 - **Converting RPG Maker projects.** The importer copies art and sound; maps, events and databases are not converted.
 

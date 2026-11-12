@@ -289,7 +289,7 @@ Helper scripts:
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 78 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
+| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 79 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
 | 2 | Asset import (2000/2003) | Done for ChipSet, CharSet, FaceSet and System graphic, with passability overrides that survive reimport. The ChipSet layout follows public docs plus fixtures; see *Limitations* |
 | 3 | Main window and map editor | Done. Map tree and properties, all painting tools, autotiles, 4 layers, regions, shadows, event mode, overlays, Playtest |
 | 4 | Event editor | Done. Pages, form-built commands, pickers, move route editor, quick events, `project` extension |

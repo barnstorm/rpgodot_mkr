@@ -298,6 +298,41 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 	if not PAGE_TRIGGERS.has(str(pg.get("trigger", "action_button"))):
 		out.append(problem("error", file, rec, "trigger", pp + "/trigger", "Unknown trigger '%s'." % pg.get("trigger"), "Use action_button, player_touch, event_touch, autorun or parallel."))
 	_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+	_battle_only_outside(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+
+
+## Map event pages: commands whose descriptor says "battle_only" (Enemy Appear) never find a
+## battle there, so they would stop the event with an error.
+static func _battle_only_outside(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array) -> void:
+	if registry == null or not (list is Array):
+		return
+	registry.walk(list, func(c: Dictionary, p: String) -> void:
+		var d: Dictionary = registry.descriptor(str(c.get("type", "")))
+		if bool(d.get("battle_only", false)):
+			out.append(problem("warning", file, rec, "type", path + p.replace(".", "/"),
+				"%s only works in a battle event; on a map it stops the event with an error." % d.get("label", c.type),
+				"Move it to an enemy group's battle events (Database > Enemy groups), or to a common event called from one.")))
+
+
+## Enemy Appear in a troop's battle events: the enemy number must be a member of the group, and
+## that member should be marked "Appears later" (else the command does nothing).
+static func _enemy_appear_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
+	if registry == null or not (list is Array):
+		return
+	var rec := str(tr.get("id", ""))
+	var members: Variant = tr.get("members", [])
+	if not (members is Array):
+		return
+	registry.walk(list, func(c: Dictionary, p: String) -> void:
+		if str(c.get("type", "")) != "enemy_appear" or str(c.get("which", "one")) == "all":
+			return
+		var n := int(c.get("enemy", 1)) if typeof(c.get("enemy", 1)) in [TYPE_INT, TYPE_FLOAT] else 0
+		var cp := path + p.replace(".", "/") + "/enemy"
+		if n < 1 or n > members.size():
+			out.append(problem("error", file, rec, "enemy", cp, "Enemy Appear: enemy group '%s' has no enemy #%d." % [rec, n], "Pick a number from 1 to %d." % members.size()))
+		elif not (members[n - 1] is Dictionary and bool(members[n - 1].get("hidden", false))):
+			out.append(problem("warning", file, rec, "enemy", cp, "Enemy Appear: enemy #%d is not marked \"Appears later\", so it is already in the battle." % n, "Tick \"Appears later\" for that enemy, or pick another number."))
+		)
 
 
 static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file: String, base: String, out: Array) -> void:
@@ -316,6 +351,7 @@ static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file:
 		for k in pg.get("conditions", []).size():
 			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, true)
 		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+		_enemy_appear_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 
 
 static func _condition_structure(c: Variant, file: String, rec: String, path: String, out: Array, battle: bool) -> void:
