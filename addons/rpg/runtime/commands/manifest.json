@@ -84,6 +84,7 @@
 		"change_parallax.gd",
 		"change_battle_back.gd",
 		"enemy_appear.gd",
+		"abort_battle.gd",
 		"get_location_info.gd",
 		"stop_sound.gd",
 		"change_windowskin.gd"

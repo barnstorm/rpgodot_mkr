@@ -55,6 +55,11 @@ var ui: Node:
 var map: Node:
 	get: return rpg.current_map()
 
+## The public battle API while a battle runs (null otherwise). Battle-only commands use it
+## instead of searching the scene stack.
+var battle: RPGBattleFacade:
+	get: return rpg.battle if rpg != null and "battle" in rpg else null
+
 var tree: SceneTree:
 	get: return rpg.get_tree()
 

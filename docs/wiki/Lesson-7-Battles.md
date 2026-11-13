@@ -72,6 +72,12 @@ Each battle event page has **Conditions** (turn number, an enemy's HP, an actor'
 
 **Enemy Appear** (in the *Scenes* category) brings in a member marked *Appears later*. Its picture fades in and "*Slime B appears!*" shows. Pick the enemy by its number in the group (the number on the battle picture), or *Every hidden enemy*. From then on it fights and can be targeted like the others.
 
+The party commands reach the other side too: **Change HP / SP**, **Change State** and **Recover All** take an enemy target (*Enemy #* by its number in the group, or *Entire troop*). A change that defeats an enemy collapses it, counts it as defeated and gives its rewards; Change State respects the state's resist rates unless *Ignore resist rates* is on, and the display refreshes by itself.
+
+**End Battle** (also in *Scenes*) stops the fight at once: *Abort* ends it like an escape with no rewards (RPG Maker's Abort Battle), *Win* takes the victory (with or without rewards) and *Lose* takes the defeat. The Battle Processing command that started the fight continues down the matching branch.
+
+**Change Party Member** works during a battle: an added actor joins the field at once (status row, side-view sprite and a turn gauge under ATB / CTB), a removed one leaves the fight, and victory EXP goes to the members present at the end. *Only for this battle* adds the actor for the fight and takes them out of the party again when it ends.
+
 For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.
 
 Enemy Appear only works in a battle: in battle events, or in a common event they call. On a map event it stops the event with an error, and the export checks warn about it.

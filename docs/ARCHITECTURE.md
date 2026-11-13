@@ -367,6 +367,28 @@ System Auto-save.
 grey and buzz (`open_choices(labels, {disabled: [...]})`). The branch taken is still the
 choice's own index.
 
+**Battle API.** While a battle runs, `RPG.battle` is an `RPGBattleFacade`
+(`runtime/battle/rpg_battle_facade.gd`); it is null before and after. The built-in battle
+commands (Enemy Appear, End Battle, the enemy targets of Change HP/SP / Change State /
+Recover All, Change Party Member during a fight) go through it, and so can extensions and
+custom commands — no reaching into `scene.core` or `scene.enemy_nodes`. Documented methods:
+`scene()`, `core()`, `party()`, `enemies()`, `reveal(b)`, `add_enemy(id, position)`,
+`set_gauge(b, value)`, `refresh()`, `message(text, seconds)` (await), `flash(b, color)`,
+`node_of(b)`, `end(result, award := true)`, `refresh_party(temporary := [])`, `valid()`.
+They follow semantic versioning; anything prefixed `_` may change. For example, a custom
+command that summons a reinforcement:
+
+```gdscript
+func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
+	if ctx.battle == null:
+		return RPGResult.error("No battle is running.")
+	var b: RPGBattler = ctx.battle.add_enemy(args.get("enemy", "slime"), Vector2(160, 120))
+	if b == null:
+		return RPGResult.error("Unknown enemy '%s'." % args.get("enemy", ""))
+	await ctx.battle.message("%s appears!" % b.name)
+	return RPGResult.ok()
+```
+
 **Battle hooks.** `RPG.battle_hook(hook, args, mode) -> {args, cancel}` calls each entry
 script's `on_<hook>(...args)` in load order (`RPGExtensionHost.run_hook`), then emits the `RPG`
 signal `hook` with the final arguments. `mode` `""` only notifies; `"value"`: a non-null return

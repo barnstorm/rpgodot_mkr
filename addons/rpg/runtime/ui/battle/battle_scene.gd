@@ -119,6 +119,10 @@ var _battler_nodes: Dictionary = {}
 ## After a win: one entry per living actor {actor, id, name, old_level, new_level, old_exp,
 ## new_exp, level_ups, old_stats, new_stats, learned} (victory_scene, tests).
 var victory_actors: Array = []
+## True when the battle was ended with rewards withheld (battle facade end("win", false)).
+var skip_rewards := false
+## Actors added mid-battle "only for this battle" (removed again when it ends).
+var _temp_actors: Array[String] = []
 
 
 func _build() -> void:
@@ -231,9 +235,17 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 	if music != null and rpg.audio:
 		rpg.audio.play_bgm(music)
 	_started = true
+	# The public battle API (rpg.battle): valid from now until the battle ends.
+	if rpg != null and "battle" in rpg:
+		rpg.battle = RPGBattleFacade.new(self)
 	_hook("battle_scene_ready", [self])
 	_place_battler_nodes()
 	_run.call_deferred()
+
+
+func _exit_tree() -> void:
+	if rpg != null and "battle" in rpg and rpg.battle != null and rpg.battle.scene() == self:
+		rpg.battle = null
 
 
 # --- extension hooks -----------------------------------------------------------------------------
@@ -502,17 +514,31 @@ static func _side_span(heights: Array, feet: Array) -> float:
 ## BattleCharSet, a walk sprite) is evened out to the tallest figure's height, so nobody looks
 ## half-size next to the others; one source keeps its maker's own proportions.
 func _make_party() -> void:
+	_sync_actor_nodes()
+
+
+## Side view: brings the actor sprites in step with core.party (Change Party Member during the
+## battle), then lays the field out again so the actors never overlap. Called by _make_party().
+func _sync_actor_nodes() -> void:
 	var sprites := []
 	var prof := str(rpg.data.profile.get("profile", "rm2k")) if rpg != null and rpg.data != null else "rm2k"
 	var sources := {}
 	var tallest := 0.0
+	for b in actor_nodes.keys():
+		if not core.party.has(b):
+			var stale: Variant = actor_nodes[b]
+			if stale is Node and is_instance_valid(stale):
+				stale.queue_free()
+			actor_nodes.erase(b)
 	for b in core.party:
-		var spr: Control = ActorSprite.new()
-		spr.actor_id = b.id
-		spr.setup(ActorSprite.resolve(actor_battle_look(b.id), prof), W)
-		spr.name = "Actor_%s" % b.id
-		field.add_child(spr)
-		actor_nodes[b] = spr
+		if not actor_nodes.has(b):
+			var fresh: Control = ActorSprite.new()
+			fresh.actor_id = b.id
+			fresh.setup(ActorSprite.resolve(actor_battle_look(b.id), prof), W)
+			fresh.name = "Actor_%s" % b.id
+			field.add_child(fresh)
+			actor_nodes[b] = fresh
+		var spr: Control = actor_nodes[b]
 		sprites.append(spr)
 		sources["%s@%s" % [spr.kind, spr.native_k]] = true
 		tallest = maxf(tallest, spr.figure_height())
@@ -1278,13 +1304,43 @@ func run_page(page: Dictionary) -> RPGResult:
 	var r: RPGResult = await interp.run(cmds)
 	if r.is_error():
 		rpg.report_error(r, owner)
-	if core != null:
-		core.report_changes()      # states changed by the page's commands (Change State...)
+	refresh_after_event()          # states, defeats and display changed by the page's commands
 	if mb != null and old_index >= 0 and is_instance_valid(mb) and mb.get_parent() != null:
 		mb.get_parent().move_child(mb, old_index)
 	input_enabled = was_enabled
-	_refresh_status()
 	return r
+
+
+## After a battle event or a common event it called changed battlers (Change HP/SP, Change
+## State, Enemy Appear, Change Party Member...): reports the changes (hooks), collapses enemies
+## the commands defeated, and redraws the status display and battler visuals. The battle facade
+## exposes this as rpg.battle.refresh().
+func refresh_after_event() -> void:
+	if core == null:
+		return
+	core.report_changes()
+	for e in core.enemies:
+		if e.is_dead() and enemy_nodes.has(e) and enemy_nodes[e].visible:
+			_collapse(e)
+	_refresh_status()
+
+
+## Change Party Member during the battle: puts the field in step with the game state's party
+## (through battle_members(), so the size limit and the extension hook still apply). Added
+## actors get a gauge and act in the normal order; removed actors leave it, and both views
+## re-flow. `temporary` actor ids (the command's "only for this battle") are removed again when
+## the battle ends.
+func refresh_party(temporary: Array = []) -> void:
+	if core == null:
+		return
+	core.refresh_party(battle_members())
+	for b in core.party:
+		if temporary.has(b.id) and not _temp_actors.has(b.id):
+			_temp_actors.append(b.id)
+	if input_actor != null and not core.party.has(input_actor):
+		_close_timed_input()
+	_sync_actor_nodes()
+	refresh_after_event()
 
 
 ## Shows one action result: announcement, hit effects, popups and the remaining lines.
@@ -1384,6 +1440,12 @@ func _end_battle() -> void:
 	core.finish()
 	for b in core.party:
 		rpg.state.notify_actor_changed(b.id)
+	# Battle-only party members leave again, and the public battle API goes away with the fight.
+	for id in _temp_actors:
+		rpg.state.remove_actor(id)
+	_temp_actors.clear()
+	if rpg != null and "battle" in rpg and rpg.battle != null and rpg.battle.scene() == self:
+		rpg.battle = null
 	if _done:
 		return
 	_done = true
@@ -1434,7 +1496,10 @@ func _victory() -> void:
 	if me != null and rpg.audio:
 		rpg.audio.play_me(me)
 	_replay_map_audio()
+	var give_rewards := not skip_rewards
 	rewards = core.rewards().duplicate(true)
+	if not give_rewards:
+		rewards = {}
 	# victory(rewards): extensions may change the rewards before they are given.
 	var changed: Variant = _hook("victory", [rewards], "value").args[0]
 	if changed is Dictionary:

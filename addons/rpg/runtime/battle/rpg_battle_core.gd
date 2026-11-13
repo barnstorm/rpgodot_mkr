@@ -1142,6 +1142,89 @@ func appear(member_index: int) -> Array:
 	return out
 
 
+## A reinforcement beyond the troop's members: a new enemy built from `enemy_id` at `position`
+## (pixels on the 320x240 battle screen). The battle facade calls this (rpg.battle.add_enemy).
+## Returns the battler, or null when the enemy record does not exist.
+func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
+	var b: RPGBattler = rules.new_enemy_battler(enemy_id)
+	if b == null:
+		return null
+	b.index = enemies.size()
+	b.screen_position = position
+	enemies.append(b)
+	_known_states[b] = b.state_ids()
+	rules.start_battle(b)
+	if is_timed():
+		_speeds[b] = _speed_of(b)
+		gauges[b] = ATB_START if b.is_alive() else 0.0
+	# A win that was only seen because every visible enemy fell is taken back, like appear().
+	if _result == "win" and not _forced and not active_enemies().is_empty():
+		_result = ""
+		phase = "actions"
+	return b
+
+
+## Change Party Member during the battle: brings `party` in step with `wanted` (actor battlers;
+## the battle scene passes the state's party through battle_members()). Added actors join with a
+## fresh gauge in timed battles; removed actors leave the turn order and targeting, and victory
+## and defeat are re-checked. Returns {"added": [...], "removed": [...]}.
+func refresh_party(wanted: Array) -> Dictionary:
+	var added := []
+	var removed := []
+	for b in party.duplicate():
+		if wanted.has(b):
+			continue
+		removed.append(b)
+		party.erase(b)
+		b.action = {}
+		b.guarding = false
+		_acted.erase(b)
+		_extra.erase(b)
+		_turn_members.erase(b)
+		_known_states.erase(b)
+		_defeated.erase(b)
+		gauges.erase(b)
+		_speeds.erase(b)
+	for b in wanted:
+		if party.has(b):
+			continue
+		added.append(b)
+		party.append(b)
+		b.guarding = false
+		b.action = {}
+		b.escaped = false
+		rules.start_battle(b)
+		_known_states[b] = b.state_ids()
+		if b.is_dead():
+			_defeated[b] = true
+		if is_timed():
+			_speeds[b] = _speed_of(b)
+			gauges[b] = ATB_START if b.is_alive() else 0.0
+	for i in party.size():
+		party[i].index = i
+	_queue.clear()
+	_queue_built = false
+	_prune_ready()
+	# A defeat that was only seen because the last actor left is taken back.
+	if not _forced and _result == "lose" and not party.is_empty() and party.any(func(a): return a.is_alive()):
+		_result = ""
+		phase = "actions"
+	battle_over()
+	return {"added": added, "removed": removed}
+
+
+## Timed battles (ATB / CTB): sets a battler's gauge, 0 (empty) to 1 (full). A full actor then
+## waits for its command; a full enemy keeps its normal turn order. rpg.battle.set_gauge.
+func set_gauge(b: RPGBattler, value: float) -> void:
+	if not is_timed() or b == null:
+		return
+	gauges[b] = clampf(value, 0.0, 1.0)
+	if gauges[b] >= 1.0:
+		_make_ready(b)
+	else:
+		_prune_ready()
+
+
 ## Spoils from defeated enemies: {exp, gold, items: [{kind, id, count}]}. Drops are rolled
 ## once and cached. Enemy drops: [{kind: "item"|"weapon"|"armor", id, chance (percent)}].
 func rewards() -> Dictionary:

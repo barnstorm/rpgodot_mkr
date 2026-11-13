@@ -30,17 +30,9 @@ static func member_index(args: Dictionary) -> int:
 	return int(args.get("enemy", 1)) - 1
 
 
-## The battle scene running now (the top scene with enemy_appear()), or null.
+## The battle scene running now, through the public battle API (rpg.battle), or null.
 static func battle_scene(ctx: RPGContext) -> Node:
-	var ui: Node = ctx.ui
-	if ui == null or not ("scene_stack" in ui):
-		return null
-	var stack: Array = ui.scene_stack
-	for i in range(stack.size() - 1, -1, -1):
-		var n: Node = stack[i]
-		if is_instance_valid(n) and n.has_method("enemy_appear"):
-			return n
-	return null
+	return ctx.battle.scene() if ctx.battle != null else null
 
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
