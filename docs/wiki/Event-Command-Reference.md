@@ -45,13 +45,13 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Actor Graphic** | `change_actor_graphic` | Actor, Map sprite sheet (blank = keep), Sprite index, Face sheet (blank = keep), Face index, Battler image (blank = keep) |
 | **Change Encounter** | `change_encounter` | Random encounters on |
 | **Change Gold** | `change_gold` | Operation, Amount |
-| **Change HP / SP** | `change_hp_mp` | Target, Resource, Operation, Amount, Allow knockout |
+| **Change HP / SP** | `change_hp_mp` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy #, Resource, Operation, Amount, Allow knockout |
 | **Change Items** | `change_items` | Kind, Item, Operation, Amount |
 | **Change Name** | `change_name` | Actor, Name |
 | **Change Nickname** | `change_nickname` | Actor, Nickname |
-| **Change Party Member** | `change_party` | Actor, Operation, Initialize (reset level and equipment) |
-| **Change State** | `change_state` | Target, State, Operation |
-| **Recover All** | `recover_all` | Target |
+| **Change Party Member** | `change_party` | Actor, Operation, Initialize (reset level and equipment), Only for this battle |
+| **Change State** | `change_state` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy #, State, Operation, Ignore resist rates |
+| **Recover All** | `recover_all` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy # |
 
 ## Actors and rules
 
@@ -123,6 +123,7 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
 | **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |
+| **End Battle** | `abort_battle` | Result (abort / win / lose), Give victory rewards |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |
 | **Open Menu Screen** | `open_menu` |  |

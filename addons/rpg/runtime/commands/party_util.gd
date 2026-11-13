@@ -5,8 +5,11 @@ extends RefCounted
 ## system when one is loaded.
 
 
-## target: "party" | "leader" | actor id. Returns Array of [actor_id, battler].
-static func targets(ctx: RPGContext, target: String) -> Array:
+## target: "party" | "leader" | actor id, or in a battle "troop" (every enemy) | "enemy" (one
+## member of the troop, 1-based `enemy_index`). Returns Array of [id, battler]; enemies use ["", b].
+static func targets(ctx: RPGContext, target: String, enemy_index := 1) -> Array:
+	if target == "troop" or target == "enemy":
+		return _battle_targets(ctx, target, enemy_index)
 	var out := []
 	var ids: Array = []
 	if target == "party" or target == "":
@@ -21,6 +24,26 @@ static func targets(ctx: RPGContext, target: String) -> Array:
 		if b != null:
 			out.append([id, b])
 	return out
+
+
+## Enemy targets of the party commands (Change HP/SP, Change State, Recover All) while a battle
+## runs. Outside a battle (or with an enemy number the troop does not have) nothing happens and
+## a playtest warning says why; the validator flags both cases when the project is checked.
+static func _battle_targets(ctx: RPGContext, target: String, enemy_index: int) -> Array:
+	var facade: RPGBattleFacade = ctx.battle
+	var core: RPGBattleCore = facade.core() if facade != null else null
+	if core == null:
+		push_warning("Enemy targets need a running battle; nothing happens.")
+		return []
+	if target == "troop":
+		var all := []
+		for e in core.enemies:
+			all.append(["", e])
+		return all
+	if enemy_index < 1 or enemy_index > core.enemies.size():
+		push_warning("The enemy group has no enemy #%d; nothing happens." % enemy_index)
+		return []
+	return [["", core.enemies[enemy_index - 1]]]
 
 
 static func resource_max(ctx: RPGContext, b: Variant, res: String) -> int:

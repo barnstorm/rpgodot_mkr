@@ -82,6 +82,9 @@ var ui: Node
 var saves: RefCounted
 ## The running game root (RPGGame) when there is one.
 var game: Node = null
+## RPGBattleFacade while a battle runs (null otherwise): the public battle API. The battle
+## scene assigns and clears it; see addons/rpg/runtime/battle/rpg_battle_facade.gd.
+var battle: RPGBattleFacade = null
 ## Map used when no game root exists (tests).
 var test_map: Node = null
 ## True in playtest/debug builds: errors pause and show where they happened.
