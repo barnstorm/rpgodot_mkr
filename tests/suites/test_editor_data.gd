@@ -539,6 +539,14 @@ func test_show_text_schema_covers_the_message_style_fields() -> void:
 	assert_eq(props.events_continue.enum, ["keep", "on", "off"], "events_continue choice")
 
 
+func test_scroll_map_schema_covers_the_pan_screen_lock() -> void:
+	# Scroll Map's direction offers RM2000/2003's Pan Screen Lock alongside the pans (#63).
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].cmd_scroll_map.properties
+	assert_has(props.direction.enum, "lock", "direction offers lock")
+	assert_has(props.direction.enum, "unlock", "direction offers unlock")
+	assert_has(props.direction.enum, "return", "direction still offers return")
+
+
 # --------------------------------------------------------------------------------------------
 # Form builder
 # --------------------------------------------------------------------------------------------

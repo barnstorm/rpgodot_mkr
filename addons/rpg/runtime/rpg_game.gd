@@ -398,16 +398,20 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 		transferring = false
 		rpg.scheduler.unlock_input("transfer")
 		return moved
-	# 3. Stop tasks owned by the current map; under the MV-style rules parallel common events
+	# 3. A map change forgets a Pan Screen lock and its pending pans (the same-map path above keeps
+	# them); the new map sets the camera up afresh.
+	if player != null:
+		player.reset_camera()
+	# 4. Stop tasks owned by the current map; under the MV-style rules parallel common events
 	# restart from the top on the new map (the classic rules let them run on across the transfer).
 	if old_map != null:
 		await old_map.shutdown(caller)
 	if _common_parallels_restart_on_map_change():
 		rpg.scheduler.stop_common_parallels("map changed", caller)
-	# 4. Fade out.
+	# 5. Fade out.
 	if fade == "black" or fade == "white":
 		await rpg.screen.fade_out(0.25, Color.WHITE if fade == "white" else Color.BLACK)
-	# 5. Load the destination scene and events.
+	# 6. Load the destination scene and events.
 	var new_map: RPGMap
 	if packed != null:
 		var inst := packed.instantiate()
@@ -424,7 +428,7 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 		world.remove_child(old_map)
 	world.add_child(new_map)
 	new_map.start(rpg)
-	# 6. Place the player and followers (a transfer onto an occupied cell fails unless it opts in).
+	# 7. Place the player and followers (a transfer onto an occupied cell fails unless it opts in).
 	if player == null:
 		_make_player()
 	var target := pos
@@ -455,9 +459,9 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	_sync_windowskin()
 	if old_map != null:
 		old_map.queue_free()
-	# 7. Refresh pages.
+	# 8. Refresh pages.
 	new_map.refresh_pages()
-	# 8. Start the map's music.
+	# 9. Start the map's music.
 	var props2: Dictionary = new_map.props
 	var vehicle_music: bool = rpg.state.riding != "" and player.has_meta("map_bgm")
 	if props2.get("music") is Dictionary and str(props2.music.get("file", "")) == "" and not vehicle_music:
@@ -473,7 +477,7 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	if fade == "black" or fade == "white" or rpg.screen.is_faded:
 		if not rpg.screen.get_meta("hold_fade", false):
 			await rpg.screen.fade_in(0.25)
-	# 9. Give control back.
+	# 10. Give control back.
 	transferring = false
 	rpg.scheduler.unlock_input("transfer")
 	rpg.request_refresh()
@@ -794,4 +798,7 @@ func load_from(save: Dictionary) -> RPGResult:
 	# An NPC rebuilt at its start cell may now stand where the player saved: use the nearest
 	# free cell instead of failing half-way through a load.
 	var r: RPGResult = await transfer(str(m.get("id", "")), Vector2i(int(pos[0]), int(pos[1])), str(m.get("facing", "down")), "none", LOAD_FALLBACK_DISTANCE, null, true)
+	if r.is_ok() and player != null:
+		# A Pan Screen lock and offset ride in the save's map dict (older saves have none).
+		player.camera_restore(m.get("camera", {}))
 	return r
