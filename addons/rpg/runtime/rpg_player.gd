@@ -9,7 +9,6 @@ const RPGVehicles := preload("res://addons/rpg/runtime/rpg_vehicles.gd")
 var followers: Array = []
 var camera: Camera2D
 var encounter_count := 0
-var _last_touch_key := ""
 var _held: Array[String] = []
 var trail: Array[Vector2i] = []
 ## The vehicle being ridden ("" on foot). Mirrors state.riding.
@@ -108,7 +107,6 @@ func _process(delta: float) -> void:
 			_bump(dir)
 			clear_destination()
 		else:
-			_last_touch_key = ""
 			trail.push_front(from)
 			if trail.size() > 8:
 				trail.pop_back()
@@ -420,16 +418,14 @@ func _leave_vehicle() -> void:
 		rpg.game.refresh_party_graphics()
 
 
-## Walking into a same-priority event fires its touch trigger once until the player moves.
+## Walking into a same-priority event fires its touch trigger on every failed step, as in RPG
+## Maker: holding the direction re-fires a door or guard once its run ends. The "main interpreter
+## busy" rule inside trigger_touch keeps one run from starting on top of another.
 func _bump(dir: Vector2i) -> void:
 	var target: Vector2i = map.movement.normalize(cell + dir)
 	for ev in map.events_at(target):
 		if ev.priority == "same":
-			var key := "%s@%s" % [ev.event_id, cell]
-			if key == _last_touch_key:
-				return
 			if ev.trigger_touch(false):
-				_last_touch_key = key
 				return
 
 
