@@ -32,7 +32,7 @@ A cutscene is usually an event with the trigger **Autorun**. It starts as soon a
 
 Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event waits before the next command). Press **Preview** to watch the route drawn on the map in the editor.
 
-An event's page can have a **Custom route** as its movement too, for guards who patrol.
+An event's page can have a **Custom route** as its movement too, for guards who patrol — or a *Vertical* / *Horizontal* movement type, when a simple up-and-down patrol is all a guard needs.
 
 ## 3. Screen effects
 

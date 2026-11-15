@@ -373,6 +373,18 @@ func test_structure_catches_shapes() -> void:
 	assert_eq(p3.size(), 1)
 
 
+func test_movement_type_choices_validate() -> void:
+	var mk_page := func(t): return {"movement": {"type": t}, "commands": []}
+	var mk_events := func(t): return {"schema_version": 1, "map": "town", "events": [
+		{"id": "walker", "position": [1, 1], "pages": [mk_page.call(t)]}]}
+	for t in ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]:
+		var p := RPGValidator.structure("events", mk_events.call(t), registry)
+		var mv := p.filter(func(x): return str(x.message).find("movement type") != -1)
+		assert_eq(mv.size(), 0, "%s is a valid movement type: %s" % [t, str(mv.map(func(x): return x.message))])
+	var bad := RPGValidator.structure("events", mk_events.call("diagonal"), registry)
+	assert_true(bad.any(func(x): return str(x.message).find("movement type") != -1), "diagonal is refused")
+
+
 func test_used_by_lists_reads_and_sets() -> void:
 	var extra := {"id": "user", "name": "", "position": [4, 4], "pages": [{"commands": [
 		{"type": "set_switch", "id": "door_unlocked", "value": "on"},

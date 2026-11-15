@@ -15,6 +15,8 @@ var erased := false
 var move_type := "fixed"
 var custom_route: Dictionary = {}
 var _move_wait := 0.0
+## Current patrol direction for vertical/horizontal movement (ZERO until it starts).
+var _line_dir := Vector2i.ZERO
 var _running_ticket: RPGScheduler.Ticket = null
 var _route_running := false
 var _locked_facing := ""
@@ -87,6 +89,7 @@ func apply_page(idx: int) -> void:
 	trigger = str(page.get("trigger", "action_button"))
 	var mvt: Dictionary = page.get("movement", {})
 	move_type = str(mvt.get("type", "fixed"))
+	_line_dir = Vector2i.ZERO
 	speed = int(mvt.get("speed", 3))
 	frequency = int(mvt.get("frequency", 3))
 	custom_route = mvt.get("route", {})
@@ -186,7 +189,8 @@ func _process(delta: float) -> void:
 	_autonomous(delta)
 
 
-## Autonomous movement: random, approach the player, or a custom route.
+## Autonomous movement: random, approach or flee the player, a vertical/horizontal patrol,
+## or a custom route.
 func _autonomous(delta: float) -> void:
 	if move_type == "fixed" or _route_running:
 		return
@@ -197,9 +201,22 @@ func _autonomous(delta: float) -> void:
 	match move_type:
 		"random":
 			step([Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP][_rand(4)])
+		"vertical", "horizontal":
+			# Patrol one axis, reversing when the way is blocked.
+			if _line_dir == Vector2i.ZERO:
+				_line_dir = Vector2i.DOWN if move_type == "vertical" else Vector2i.RIGHT
+			if not step(_line_dir):
+				_line_dir = -_line_dir
+				step(_line_dir)
 		"approach":
 			if map.player != null:
 				var d := dir_toward(map.player.cell)
+				if d != Vector2i.ZERO and not step(d):
+					if _rand(2) == 0:
+						step(Vector2i(d.y, d.x))
+		"away":
+			if map.player != null:
+				var d := dir_toward(map.player.cell, true)
 				if d != Vector2i.ZERO and not step(d):
 					if _rand(2) == 0:
 						step(Vector2i(d.y, d.x))
