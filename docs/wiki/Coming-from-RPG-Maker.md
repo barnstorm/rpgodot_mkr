@@ -41,6 +41,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |
 | Label, Jump to Label | The same (*flow* category) |
+| Call Event (RM2000/2003) | **Call Event** runs a map event's page inline — this event, by ID, or the ID from a variable; the page's self switches belong to the called event. The common-event tab is **Call Common Event** |
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
 | Change Transparency, Change Map Name Display, Change Tileset, Change Parallax, Change Battle Back | The same commands |
 | Change Battle BGM, Change Victory ME, Stop SE, Change Window Skin, Get Location Info | The same commands |

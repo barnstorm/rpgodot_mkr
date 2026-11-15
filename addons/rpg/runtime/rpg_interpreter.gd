@@ -88,7 +88,7 @@ func run(commands: Array) -> RPGResult:
 ## Runs a nested list inside this interpreter (used by if/loop/choices and call_common_event).
 func run_list(list: Array, label := "") -> RPGResult:
 	if stack.size() >= depth_limit:
-		var e := RPGResult.error("Call depth limit (%d) reached in %s. Check for a common event calling itself." % [depth_limit, describe_owner()])
+		var e := RPGResult.error("Call depth limit (%d) reached in %s. Check for a common event or a called page calling itself." % [depth_limit, describe_owner()])
 		e.where = where()
 		return e
 	var frame := {"label": label, "list": list, "index": 0}

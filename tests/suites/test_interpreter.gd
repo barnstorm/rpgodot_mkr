@@ -756,6 +756,66 @@ func test_movement_frequency_paces_the_beats() -> void:
 	assert_eq(held, 60, "frequency 1 paces the beats slowly")
 
 
+# --- Call Event (#60) ---------------------------------------------------------------------------
+
+func test_call_event_runs_a_page_with_the_called_event_as_this() -> void:
+	# The chest's page 1 adds 100 to counter and turns its own self switch A on. Called from the
+	# API (no this event of its own), the page's self switch must still belong to the chest.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "call_event", "target": "id", "id": "chest", "page": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_variable("counter"), 100, "the called page ran")
+	assert_true(env.rpg.state.get_self_switch("town", "chest", "A"), "self switches in the page are the called event's")
+
+
+func test_call_event_from_a_variable_and_missing_pages() -> void:
+	env.rpg.state.set_variable("hero_name", "chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "call_event", "target": "variable", "variable": "hero_name", "page": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_variable("counter"), 100, "the event id came from the variable")
+	# Page 2 exists (empty commands); page 3 does not, and unknown events are named.
+	r = await env.rpg.run_commands([{"type": "call_event", "target": "id", "id": "chest", "page": 2}])
+	assert_true(r.is_ok(), str(r))
+	r = await env.rpg.run_commands([{"type": "call_event", "target": "id", "id": "chest", "page": 3}])
+	assert_true(r.is_error(), str(r))
+	r = await env.rpg.run_commands([{"type": "call_event", "target": "id", "id": "ghost"}])
+	assert_true(r.is_error(), str(r))
+
+
+func test_call_event_exit_ends_only_the_called_page() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	chest.data["pages"].append({
+		"conditions": [], "graphic": null, "movement": {"type": "fixed"}, "options": {},
+		"priority": "same", "trigger": "action_button",
+		"commands": [
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 3},
+			{"type": "exit_event"},
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 7},
+		],
+	})
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "call_event", "target": "id", "id": "chest", "page": 3},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 5},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_variable("counter"), 8, "the page stopped at Exit Event, the caller continued")
+
+
+func test_call_event_recursion_hits_the_depth_limit() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	chest.data["pages"].append({
+		"conditions": [], "graphic": null, "movement": {"type": "fixed"}, "options": {},
+		"priority": "same", "trigger": "action_button",
+		"commands": [{"type": "call_event", "target": "this", "page": 3}],
+	})
+	var r: RPGResult = await env.rpg.run_commands([{"type": "call_event", "target": "id", "id": "chest", "page": 3}])
+	assert_true(r.is_error(), str(r))
+	assert_true(str(r).find("depth") != -1, "the error names the depth limit: %s" % r)
+
+
 func test_select_item_empty_list_only_cancels() -> void:
 	# No items at all: the window opens, picking is impossible, cancel stores 0.
 	var box = env.rpg.ui.message_box
