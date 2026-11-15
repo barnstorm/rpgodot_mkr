@@ -65,7 +65,8 @@ var parallels: Dictionary = {}
 var input_locks: Dictionary = {}
 ## reason -> count. While any is held the map is suspended, like RPG Maker's map scene behind a
 ## menu, shop, save screen or battle: parallel events sleep and autonomous movement stops.
-## Message boxes never hold one.
+## A message box holds one ("message") while its style pauses events (RM2000/2003's Allow
+## events to continue, off by default).
 var scene_pauses: Dictionary = {}
 var paused := false
 

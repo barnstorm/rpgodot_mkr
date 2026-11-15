@@ -6,6 +6,10 @@ extends Control
 ##
 ## Input as in RPG Maker MV: OK (or a click) while text types shows the rest of the page at once,
 ## the next one closes it, silently unless System "message_advance_sound" names a sound role.
+## RM2000/2003 Message Style lives here too: "don't cover the player" (avoid_player) moves a
+## top/bottom box to the other half of the screen, and "events continue" (events_continue) off
+## suspends the map while the pages show. Both per message and in System
+## (message_avoid_player / message_events_continue).
 ## Choices, the number dial and the item picker repeat while a direction is held. Mouse:
 ## hover/click choices (right click cancels when allowed); click a digit to select it, click it
 ## again above or below its middle (or use the wheel) to change it, click elsewhere to enter the
@@ -74,6 +78,10 @@ var _disabled: Dictionary = {}
 var auto_advance := false
 var auto_choice := 0
 var auto_item := 0
+## RM2000/2003 Message Style: while a message's pages show with "events continue" off (the
+## default), the scheduler holds a scene pause — wandering NPCs stop and parallel events sleep
+## until the last page closes.
+var _holds_pause := false
 
 
 func _init() -> void:
@@ -151,6 +159,7 @@ func is_open() -> bool:
 ## background (window|dim|transparent), gold_window (bool).
 func open_text(params: Dictionary) -> void:
 	_layout(params)
+	_set_map_pause(not _events_continue(params))
 	var parsed := RPGText.expand(str(params.get("text", "")), rpg, {"params": params})
 	text_label.text = parsed.bbcode
 	text_label.visible_characters = 0
@@ -196,6 +205,12 @@ func _reveal_to(count: int, instant: bool) -> void:
 
 func _layout(params: Dictionary) -> void:
 	var pos: String = params.get("position", "bottom")
+	# RM2000/2003's Prevent Hero Hiding: a top or bottom box moves to the other half of the screen
+	# when the player stands in its half. A middle box stays where it is.
+	if _avoid_player(params) and (pos == "top" or pos == "bottom"):
+		var py := _player_screen_y()
+		if py >= 0.0 and (py < 120.0) == (pos == "top"):
+			pos = "bottom" if pos == "top" else "top"
 	var y := 240 - BOX_H
 	if pos == "top":
 		y = 0
@@ -234,6 +249,59 @@ func _layout(params: Dictionary) -> void:
 func _update_gold() -> void:
 	if rpg and rpg.state:
 		gold_label.text = "%d %s" % [rpg.state.gold, rpg.data.currency()]
+
+
+# --- message style (RM2000/2003 Message Style) -------------------------------------------------
+
+
+## The effective "don't cover the player": the message's choice, or the System default.
+func _avoid_player(params: Dictionary) -> bool:
+	var v := str(params.get("avoid_player", "keep"))
+	if v == "on" or v == "off":
+		return v == "on"
+	return _system_style("message_avoid_player", false)
+
+
+## The effective "events continue": the message's choice, or the System default. While pages show
+## with this off, the map is suspended (RM2000/2003's "Allow events to continue", unchecked by
+## default): autonomous movement stops and parallel events sleep. The message's own event chain
+## and the main queue keep running.
+func _events_continue(params: Dictionary) -> bool:
+	var v := str(params.get("events_continue", "keep"))
+	if v == "on" or v == "off":
+		return v == "on"
+	return _system_style("message_events_continue", false)
+
+
+func _system_style(key: String, fallback: bool) -> bool:
+	if rpg == null or rpg.get("data") == null:
+		return fallback
+	return bool(rpg.data.system.get(key, fallback))
+
+
+## Holds or releases the map suspension for the message (idempotent, also on a swapped box scene).
+func _set_map_pause(on: bool) -> void:
+	if on == _holds_pause:
+		return
+	if rpg == null or rpg.get("scheduler") == null:
+		_holds_pause = on
+		return
+	_holds_pause = on
+	if on:
+		rpg.scheduler.suspend_map("message")
+	else:
+		rpg.scheduler.resume_map("message")
+
+
+## The player's Y on the 320x240 screen, or -1 when no game is running.
+func _player_screen_y() -> float:
+	var game: Node = rpg.get("game") if rpg != null else null
+	if game == null or not ("map" in game) or game.map == null:
+		return -1.0
+	var p: Node = game.map.player
+	if p == null or not is_instance_valid(p):
+		return -1.0
+	return p.get_global_transform_with_canvas().origin.y
 
 
 ## Shows choices (the message box may stay open above them). Emits choice_made(index), or
@@ -322,6 +390,7 @@ func force_close() -> void:
 	item_panel.visible = false
 	number_label.visible = false
 	gold_panel.visible = false
+	_set_map_pause(false)
 
 
 ## Hides the text window but keeps the box alive (between consecutive messages).
@@ -400,6 +469,7 @@ func _finish_text() -> void:
 	_reveal_to(text_label.get_total_character_count(), true)
 	text_label.visible_characters = -1
 	mode = ""
+	_set_map_pause(false)
 	closed_frame = Engine.get_process_frames()
 	var se := advance_sound()
 	if se != "":
