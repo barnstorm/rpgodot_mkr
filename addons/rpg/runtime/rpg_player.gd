@@ -320,7 +320,8 @@ func _input_dir() -> Vector2i:
 
 
 ## Action button: getting on or off a vehicle first (as in RPG Maker), then events of priority
-## "same" in front (through a counter), or below/above here.
+## "same" in front (through a counter) — action, player-touch and event-touch pages — or
+## below/above action pages here.
 func check_action() -> bool:
 	if get_on_off_vehicle():
 		return true
@@ -333,12 +334,12 @@ func check_action() -> bool:
 	if front == Vector2i(-1, -1):
 		return false
 	for ev in map.events_at(front):
-		if ev.priority == "same" and ev.trigger_action():
+		if ev.priority == "same" and ev.trigger_action(true):
 			return true
 	if map.movement.flags(front) & RPGMovement.FLAG_COUNTER:
 		var beyond: Vector2i = map.movement.normalize(front + RPGMovement.dir_vec(facing))
 		for ev in map.events_at(beyond):
-			if ev.priority == "same" and ev.trigger_action():
+			if ev.priority == "same" and ev.trigger_action(true):
 				return true
 	return false
 
