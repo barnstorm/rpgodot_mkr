@@ -34,6 +34,6 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		box.force_close()
 		return RPGResult.cancelled()
 	var nxt: Dictionary = ctx.interpreter.peek_next()
-	if not ["show_text", "show_choices", "input_number"].has(nxt.get("type", "")):
+	if not ["show_text", "show_choices", "input_number", "select_item"].has(nxt.get("type", "")):
 		box.hide_box()
 	return RPGResult.ok()

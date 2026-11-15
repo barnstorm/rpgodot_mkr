@@ -1,21 +1,24 @@
 class_name RPGMessageBox
 extends Control
-## Default message box: face, name, typewriter text with text codes, choices, number input and
-## a gold window. Replace it by pointing project.json "scenes.message_box" at a scene whose root
-## implements the same methods and signals.
+## Default message box: face, name, typewriter text with text codes, choices, number input, an
+## item picker and a gold window. Replace it by pointing project.json "scenes.message_box" at a
+## scene whose root implements the same methods and signals.
 ##
 ## Input as in RPG Maker MV: OK (or a click) while text types shows the rest of the page at once,
 ## the next one closes it, silently unless System "message_advance_sound" names a sound role.
-## Choices and the number dial repeat while a direction is held. Mouse: hover/click choices
-## (right click cancels when allowed); click a digit to select it, click it again above or below
-## its middle (or use the wheel) to change it, click elsewhere to enter the number.
+## Choices, the number dial and the item picker repeat while a direction is held. Mouse:
+## hover/click choices (right click cancels when allowed); click a digit to select it, click it
+## again above or below its middle (or use the wheel) to change it, click elsewhere to enter the
+## number; the item picker works like the choice list.
 
 signal closed()
 signal choice_made(index: int)
 signal number_entered(value: int)
+signal item_selected(id: String)
 
 const BOX_H := 76
 const FACE := 48
+const ITEM_ROWS := 4
 const REPEAT_DELAY := 0.35
 const REPEAT_RATE := 0.08
 
@@ -26,12 +29,14 @@ var name_label: Label
 var text_label: RichTextLabel
 var choice_panel: Panel
 var choice_box: VBoxContainer
+var item_panel: Panel
+var item_box: VBoxContainer
 var number_label: Label
 var gold_panel: Panel
 var gold_label: Label
 var arrow: Label
 
-var mode := ""            # "", "text", "choices", "number"
+var mode := ""            # "", "text", "choices", "number", "items"
 var chars_per_sec := 40.0
 var _visible_f := 0.0
 var _waits: Array = []
@@ -42,6 +47,10 @@ var _choices: Array = []
 var _choice_info: Dictionary = {}
 var _choice_index := 0
 var _cancel_index := -1
+## The item picker's entries: [{id, name, count}], the cursor and the first row shown.
+var _items: Array = []
+var _item_index := 0
+var _item_page := 0
 var _digits := 1
 var _number := 0
 var _number_pos := 0
@@ -60,9 +69,11 @@ var _revealed := 0
 var _plain := ""
 ## Choices that can't be picked (Show Choices "enable" switch): index -> true.
 var _disabled: Dictionary = {}
-## Tests: when true, text closes at once and choices pick `auto_choice`.
+## Tests: when true, text closes at once, choices pick `auto_choice` and the item picker picks
+## `auto_item` (-1 cancels).
 var auto_advance := false
 var auto_choice := 0
+var auto_item := 0
 
 
 func _init() -> void:
@@ -107,6 +118,13 @@ func _ready() -> void:
 	choice_box.position = Vector2(8, 6)
 	choice_box.add_theme_constant_override("separation", 0)
 	choice_panel.add_child(choice_box)
+	item_panel = Panel.new()
+	item_panel.visible = false
+	add_child(item_panel)
+	item_box = VBoxContainer.new()
+	item_box.position = Vector2(8, 6)
+	item_box.add_theme_constant_override("separation", 0)
+	item_panel.add_child(item_box)
 	number_label = Label.new()
 	number_label.visible = false
 	number_label.add_theme_font_size_override("font_size", 14)
@@ -301,6 +319,7 @@ func force_close() -> void:
 	mode = ""
 	visible = false
 	choice_panel.visible = false
+	item_panel.visible = false
 	number_label.visible = false
 	gold_panel.visible = false
 
@@ -325,6 +344,8 @@ func _process(delta: float) -> void:
 			_process_choices(delta)
 		"number":
 			_process_number(delta)
+		"items":
+			_process_items(delta)
 	_clicked = false
 
 
@@ -478,6 +499,106 @@ func move_digit(d: int) -> void:
 	_refresh_number()
 
 
+# --- item picker ------------------------------------------------------------------------------
+
+
+## Shows the party's items to pick one (Select Item), like the choice window: above the message
+## box when there is room, below otherwise, at the right edge. entries: [{id, name, count}].
+## Emits item_selected(id), or item_selected("") when the player cancels.
+func open_items(entries: Array) -> void:
+	_items = entries
+	_item_index = 0
+	_item_page = 0
+	var h := 12 + ITEM_ROWS * 15
+	item_panel.size = Vector2(168, h)
+	var base_y := panel.position.y if panel.visible else 240
+	item_panel.position = Vector2(320 - item_panel.size.x - 4, base_y - h - 2)
+	if item_panel.position.y < 0:
+		item_panel.position.y = panel.position.y + BOX_H + 2 if panel.visible else 240 - h
+	item_panel.visible = true
+	visible = true
+	mode = "items"
+	_held.clear()
+	_refresh_items()
+	if auto_advance:
+		var pick := -1  # an empty list can only be cancelled
+		if auto_item >= 0 and not _items.is_empty():
+			pick = clampi(auto_item, 0, _items.size() - 1)
+		_pick_item.call_deferred(pick)
+
+
+## Rebuilds the visible page of rows (name left, ×count right when there is more than one).
+func _refresh_items() -> void:
+	for c in item_box.get_children():
+		item_box.remove_child(c)  # out now: queue_free alone leaves it a child until the frame ends
+		c.queue_free()
+	var start := _item_page * ITEM_ROWS
+	for i in range(start, mini(start + ITEM_ROWS, _items.size())):
+		var it: Dictionary = _items[i]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name := Label.new()
+		name.text = ("▶ " if i == _item_index else "  ") + str(it.get("name", it.get("id", "")))
+		name.add_theme_font_size_override("font_size", 11)
+		row.add_child(name)
+		if int(it.get("count", 1)) > 1:
+			var spacer := Control.new()
+			spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(spacer)
+			var n := Label.new()
+			n.text = "×%d" % int(it.count)
+			n.add_theme_font_size_override("font_size", 11)
+			row.add_child(n)
+		row.modulate = Color(1, 1, 0.6) if i == _item_index else Color.WHITE
+		item_box.add_child(row)
+
+
+func _process_items(delta: float) -> void:
+	if _repeat("rpg_down", delta):
+		_move_item(1)
+	elif _repeat("rpg_up", delta):
+		_move_item(-1)
+	elif Input.is_action_just_pressed("rpg_ok"):
+		if _items.is_empty():
+			_play("buzzer")
+		else:
+			_play("decision")
+			_pick_item(_item_index)
+	elif Input.is_action_just_pressed("rpg_cancel"):
+		_play("cancel")
+		_pick_item(-1)
+
+
+func _move_item(d: int) -> void:
+	if _items.is_empty():
+		return
+	_item_index = posmod(_item_index + d, _items.size())
+	_item_page = _item_index / ITEM_ROWS
+	_play("cursor")
+	_refresh_items()
+
+
+## Picks entry `i`, or cancels when i < 0.
+func _pick_item(i: int) -> void:
+	mode = ""
+	closed_frame = Engine.get_process_frames()
+	item_panel.visible = false
+	item_selected.emit("" if i < 0 else str(_items[i].get("id", "")))
+
+
+## Index (in the whole list) of the picker row under `pos`, or -1.
+func _item_at(pos: Vector2) -> int:
+	var page_i := _item_page * ITEM_ROWS
+	for c in item_box.get_children():
+		if c is HBoxContainer:
+			var r := _local_rect(c, Rect2(Vector2.ZERO, c.size))
+			r.size.x = maxf(r.size.x, item_panel.size.x - 16)
+			if r.has_point(pos):
+				return page_i
+			page_i += 1
+	return -1
+
+
 # --- mouse ---------------------------------------------------------------------------------
 
 func _pointer_enabled() -> bool:
@@ -521,6 +642,29 @@ func pointer_event(ev: InputEvent) -> void:
 				_pick(_cancel_index)
 			elif button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
 				_move_choice(-1 if button == MOUSE_BUTTON_WHEEL_UP else 1)
+		"items":
+			var i := _item_at(ev.position)
+			if ev is InputEventMouseMotion:
+				if i >= 0 and i != _item_index:
+					_move_item(i - _item_index)
+			elif button == MOUSE_BUTTON_LEFT:
+				if i >= 0:
+					if i == _item_index:
+						if _items.is_empty():
+							_play("buzzer")
+						else:
+							_play("decision")
+							_pick_item(i)
+					else:
+						_move_item(i - _item_index)
+				elif _items.is_empty():
+					_play("cancel")
+					_pick_item(-1)
+			elif button == MOUSE_BUTTON_RIGHT:
+				_play("cancel")
+				_pick_item(-1)
+			elif button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
+				_move_item(-1 if button == MOUSE_BUTTON_WHEEL_UP else 1)
 		"number":
 			if button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
 				change_digit(1 if button == MOUSE_BUTTON_WHEEL_UP else -1)
