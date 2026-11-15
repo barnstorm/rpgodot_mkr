@@ -309,3 +309,54 @@ func test_validator_checks_enemy_targets() -> void:
 	assert_eq(w.size(), 1, str(p2))
 	assert_eq(w[0].severity, "warning")
 	assert_eq(w[0].path, "events/0/pages/0/commands/0/then/0/target")
+
+
+# --- Game Data: play counters and last used (#54) -----------------------------------------------------
+
+
+func test_battle_command_updates_play_counters() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var st: RPGGameState = env.rpg.state
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "counters"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(st.game_data({"kind": "counter", "which": "battles"})), 1, "the fight was counted")
+	assert_eq(int(st.game_data({"kind": "counter", "which": "victories"})), 1, "a win")
+	assert_eq(int(st.game_data({"kind": "counter", "which": "defeats"})), 0)
+	assert_eq(int(st.game_data({"kind": "counter", "which": "escapes"})), 0)
+
+
+func test_counters_readable_while_the_fight_runs() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var seen := {"battles": -1}
+	var on_started := func(_args: Dictionary) -> void:
+		seen.battles = int(env.rpg.state.game_data({"kind": "counter", "which": "battles"}))
+	env.rpg.battle_started.connect(on_started)
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "live"})
+	env.rpg.battle_started.disconnect(on_started)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(seen.battles, 1, "the counter is live during the battle")
+
+
+func test_last_used_recorded_by_battle_actions() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "lu"})
+	assert_true(r.is_ok(), str(r))
+	var st: RPGGameState = env.rpg.state
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "actor"})), "hero", "the hero acted")
+	assert_true(int(st.game_data({"kind": "last_used", "what": "target_enemy"})) in [0, 1], "an enemy was targeted: %s" % str(st.last_used))
+
+
+func test_battle_event_reads_enemy_game_data() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle",
+		"commands": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": {"game_data": {"kind": "enemy", "index": 0, "field": "hp"}}},
+			{"type": "abort_battle", "result": "abort"}]}
+	_add_troop(_later_troop([page]))
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_lose": true, "can_escape": false}], {"kind": "api", "id": "probe"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("fish_caught")), 40, "the first slime's HP read from inside the battle")

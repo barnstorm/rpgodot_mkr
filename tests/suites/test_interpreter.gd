@@ -297,3 +297,114 @@ func test_game_data_operand() -> void:
 	assert_eq(int(env.rpg.get_variable("counter")), 250)
 	assert_eq(env.rpg.state.game_data({"kind": "party_size"}), env.rpg.state.party.size())
 	assert_eq(env.rpg.state.game_data({"kind": "item", "id": "nothing"}), 0)
+
+
+func test_game_data_character_map_party() -> void:
+	# Character game data (player at 12, 8 facing up) and the map id, read through a command.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": {"game_data": {"kind": "map_id"}}},
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "x"}}},
+		{"type": "set_variable", "id": "ratio", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "direction"}}},
+	], {"kind": "api", "id": "gd2"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(str(env.rpg.get_variable("hero_name")), "town", "map id is the string id")
+	assert_eq(int(env.rpg.get_variable("ticks")), 12, "player x cell")
+	assert_eq(int(env.rpg.get_variable("ratio")), 8, "facing up reads as RPG Maker's 8")
+	# Party slots hold actor ids (empty past the end).
+	env.rpg.state.party.append("hero")
+	assert_eq(str(env.rpg.state.game_data({"kind": "party_member", "slot": 0})), "hero")
+	assert_eq(str(env.rpg.state.game_data({"kind": "party_member", "slot": 4})), "")
+	# No running map context: character and map id explain themselves.
+	assert_eq(env.rpg.state.game_data({"kind": "map_id"}), "", "needs a command context")
+
+
+func test_game_data_counters_and_last_used() -> void:
+	var st: RPGGameState = env.rpg.state
+	for k in ["saves", "battles", "victories", "defeats", "escapes"]:
+		st.bump_counter(k)
+	st.bump_counter("victories")
+	assert_eq(int(st.game_data({"kind": "counter", "which": "saves"})), 1)
+	assert_eq(int(st.game_data({"kind": "counter", "which": "victories"})), 2)
+	assert_eq(int(st.game_data({"kind": "counter", "which": "battles"})), 1)
+	st.record_last_used({"skill": "fire", "target_enemy": 1})
+	st.record_last_used({"actor": "hero"})
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "skill"})), "fire")
+	assert_eq(int(st.game_data({"kind": "last_used", "what": "target_enemy"})), 1)
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "actor"})), "hero")
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "item"})), "", "untouched keys stay empty")
+	# Both survive a save and load round trip.
+	var d: Dictionary = st.to_dict()
+	st.new_game()
+	assert_eq(int(st.game_data({"kind": "counter", "which": "victories"})), 0, "new game resets counters")
+	st.from_dict(d)
+	assert_eq(int(st.game_data({"kind": "counter", "which": "victories"})), 2, "counters restored")
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "skill"})), "fire", "last used restored")
+
+
+func test_variable_target_range() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": 10},
+		{"type": "set_variable", "id": "ratio", "operation": "set", "value": 1},
+		{"type": "set_variable", "target": "range", "from": "counter", "to": "ratio", "operation": "add", "value": 5},
+	], {"kind": "api", "id": "range"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 15)
+	assert_eq(float(env.rpg.get_variable("ratio")), 6.0)
+	# Reversed endpoints span the same variables.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "ratio", "to": "counter", "operation": "set", "value": 2},
+	], {"kind": "api", "id": "range2"})
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(int(env.rpg.get_variable("counter")), 2)
+	assert_eq(float(env.rpg.get_variable("ratio")), 2.0)
+
+
+func test_variable_range_is_atomic() -> void:
+	await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": 7},
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": 8},
+	])
+	# counter..ticks includes flag (bool) and hero_name (string): adding a number fits neither, so
+	# nothing in the range changes.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "counter", "to": "ticks", "operation": "add", "value": 5},
+	], {"kind": "api", "id": "atomic"})
+	assert_true(r.is_error(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 7, "unchanged")
+	assert_eq(int(env.rpg.get_variable("ticks")), 8, "unchanged")
+	# Undeclared endpoints name nothing.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "counter", "to": "nope", "operation": "set", "value": 1},
+	], {"kind": "api", "id": "atomic2"})
+	assert_true(r2.is_error() and r2.message.contains("nope"), str(r2))
+
+
+func test_variable_range_rerolls_random_per_variable() -> void:
+	env.rpg.rng.seed = hash("dice")
+	var twin := RandomNumberGenerator.new()
+	twin.seed = hash("dice")
+	var want_a := twin.randi_range(1, 1000)
+	var want_b := twin.randi_range(1, 1000)
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "counter", "to": "ratio", "operation": "set", "value": {"random": [1, 1000]}},
+	], {"kind": "api", "id": "dice"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), want_a, "first roll")
+	assert_eq(float(env.rpg.get_variable("ratio")), float(want_b), "each variable gets its own roll")
+
+
+func test_variable_pointer_target_and_source() -> void:
+	# hero_name holds the id of the variable to change ("ticks").
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "ticks"},
+		{"type": "set_variable", "target": "pointer", "pointer": "hero_name", "operation": "set", "value": 41},
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"pointer": "hero_name"}},
+	], {"kind": "api", "id": "ptr"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("ticks")), 41, "the pointed-to variable changed")
+	assert_eq(int(env.rpg.get_variable("counter")), 41, "pointer source reads the pointed-to value")
+	# A pointer variable holding nothing names nothing.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "pointer", "pointer": "scene_result", "operation": "set", "value": 1},
+	], {"kind": "api", "id": "ptr2"})
+	assert_true(r2.is_error(), str(r2))

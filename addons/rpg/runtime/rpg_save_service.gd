@@ -128,6 +128,9 @@ func save(slot: int) -> RPGResult:
 	var why := save_blocked_reason()
 	if why != "":
 		return RPGResult.error(why)
+	# The save-in-progress counts itself (RM2000's "number of saves" reads one higher during the
+	# save), so the bump happens before the state is captured below. Autosaves count too.
+	rpg.state.bump_counter("saves")
 	var data := build_save()
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var err := RPGJson.save_file(slot_path(slot), data)

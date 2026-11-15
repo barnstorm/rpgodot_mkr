@@ -554,6 +554,103 @@ func test_operand_editor_random_and_game_data() -> void:
 	await frames(1)
 
 
+## #54: the operand editor's Pointer mode and the character / map / party member / last used /
+## counter / enemy game data kinds, plus their structure checks.
+func test_operand_editor_pointer_and_new_game_data() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup([{"key": "value", "kind": "operand", "default": 0, "label": "Value"}], data)
+	var ed := form.editor_for("value")
+	var mode: OptionButton = ed.get_child(0)
+	var pp: RPGRefPicker = ed.get_child(8)
+	var ct: OptionButton = ed.get_child(9)
+	var ce: LineEdit = ed.get_child(10)
+	var fi: SpinBox = ed.get_child(11)
+	var cf: OptionButton = ed.get_child(12)
+	var pm: SpinBox = ed.get_child(13)
+	var lu: OptionButton = ed.get_child(14)
+	var cn: OptionButton = ed.get_child(15)
+	var ei: SpinBox = ed.get_child(16)
+	var ef: OptionButton = ed.get_child(17)
+	# Pointer: the value of the variable whose id another variable holds.
+	form.set_value({"value": {"pointer": "counter"}})
+	assert_eq(mode.selected, 4)
+	assert_true(pp.visible)
+	assert_eq(form.get_value().value, {"pointer": "counter"}, "round trip")
+	pp.set_value("ticks")
+	pp.value_changed.emit("ticks")
+	assert_eq(form.get_value().value, {"pointer": "ticks"})
+	# Character: a follower's direction, then the same editor retargeted to an event id.
+	var ch := {"game_data": {"kind": "character", "target": "follower", "index": 2, "field": "direction"}}
+	form.set_value({"value": ch})
+	assert_eq(form.get_value().value, ch, "round trip")
+	assert_true(fi.visible, "follower number shown")
+	assert_false(ce.visible, "no event id line for a follower")
+	assert_eq(cf.selected, 2, "direction picked")
+	fi.value = 3
+	assert_eq(form.get_value().value.game_data.index, 3)
+	ct.select(3)  # Event…
+	ct.item_selected.emit(3)
+	assert_eq(form.get_value().value.game_data.target, "", "event id starts empty")
+	ce.text = "chest"
+	ce.text_changed.emit("chest")
+	assert_eq(form.get_value().value.game_data.target, "chest")
+	assert_false(form.get_value().value.game_data.has("index"), "an event target drops the follower number")
+	assert_true(ce.visible and not fi.visible)
+	# The remaining kinds round trip and only show their own controls.
+	form.set_value({"value": {"game_data": {"kind": "map_id"}}})
+	assert_eq(form.get_value().value, {"game_data": {"kind": "map_id"}})
+	assert_false(pp.visible or ct.visible or pm.visible or lu.visible or cn.visible or ei.visible or ef.visible)
+	form.set_value({"value": {"game_data": {"kind": "party_member", "slot": 1}}})
+	assert_eq(pm.value, 1.0)
+	assert_true(pm.visible)
+	form.set_value({"value": {"game_data": {"kind": "last_used", "what": "target_enemy"}}})
+	assert_eq(lu.selected, RPGFormBuilder.LAST_USED_WHATS.find("target_enemy"))
+	assert_true(lu.visible)
+	form.set_value({"value": {"game_data": {"kind": "counter", "which": "saves"}}})
+	assert_eq(cn.selected, RPGFormBuilder.COUNTER_WHICHES.find("saves"))
+	assert_true(cn.visible)
+	cn.select(RPGFormBuilder.COUNTER_WHICHES.find("escapes"))
+	cn.item_selected.emit(cn.selected)
+	assert_eq(form.get_value().value.game_data.which, "escapes")
+	form.set_value({"value": {"game_data": {"kind": "enemy", "index": 1, "field": "sp"}}})
+	assert_eq(ei.value, 1.0)
+	assert_eq(ef.selected, 1, "SP")
+	assert_true(ei.visible and ef.visible)
+	assert_false(ct.visible or ce.visible or fi.visible or cf.visible, "character controls hidden")
+	ei.value = 0
+	assert_eq(form.get_value().value.game_data.index, 0)
+	# The structure checks accept the new shapes and reject bad ones.
+	var out := []
+	for v in [
+		{"pointer": "counter"},
+		{"game_data": {"kind": "map_id"}},
+		{"game_data": {"kind": "character", "target": "player", "field": "screen_x"}},
+		{"game_data": {"kind": "character", "target": "event", "field": "x"}},
+		{"game_data": {"kind": "party_member", "slot": 3}},
+		{"game_data": {"kind": "last_used", "what": "target_actor"}},
+		{"game_data": {"kind": "counter", "which": "victories"}},
+		{"game_data": {"kind": "enemy", "index": 0, "field": "hp"}},
+	]:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	var bad := [
+		{"pointer": "not an id"},
+		{"game_data": {"kind": "counter", "which": "years"}},
+		{"game_data": {"kind": "last_used", "what": "spell"}},
+		{"game_data": {"kind": "character", "target": "player", "field": "z"}},
+		{"game_data": {"kind": "character", "target": "follower", "index": -1, "field": "x"}},
+		{"game_data": {"kind": "party_member", "slot": -2}},
+		{"game_data": {"kind": "enemy", "index": -1, "field": "hp"}},
+	]
+	for v in bad:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), bad.size(), "each rejected: %s" % str(out))
+	form.queue_free()
+	await frames(1)
+
+
 func test_actor_description_and_troop_autoname() -> void:
 	var actor_fields := RPGRecordSchemas.fields_for("actors")
 	var desc: Array = actor_fields.filter(func(f): return f.key == "description")
