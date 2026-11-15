@@ -1512,6 +1512,11 @@ static func database_values(files: Dictionary) -> Array:
 					if typeof(lo) in [TYPE_INT, TYPE_FLOAT] and typeof(hi) in [TYPE_INT, TYPE_FLOAT] and float(lo) > float(hi):
 						out.append(problem("error", path, rec, "turns_min", base + "/turns_min",
 							"State '%s' lasts at least %d turns but at most %d." % [rec, int(lo), int(hi)], "Make 'at least' no more than 'at most'."))
+					var timing := str(r.get("auto_removal", "turn_end"))
+					if not timing in ["turn_end", "action_end", "none"]:
+						out.append(problem("error", path, rec, "auto_removal", base + "/auto_removal",
+							"State '%s' wears off at '%s', which is not one of: turn_end, action_end, none." % [rec, timing],
+							"Pick when the turns count down: end of the turn, end of the battler's action, or never."))
 					_state_walk_problems(r, path, rec, base, out)
 				"animations":
 					var flashes: Variant = r.get("flashes", [])
