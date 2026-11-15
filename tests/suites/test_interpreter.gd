@@ -154,6 +154,66 @@ func test_bumping_into_a_touch_event_fires_it_again() -> void:
 	assert_eq(env.rpg.get_variable("counter"), 2, "bumping again once the run ended fires it again")
 
 
+# --- Same-frame page refresh (#77) -----------------------------------------------------------------
+
+func test_classic_rules_refresh_pages_before_each_command() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 1, "the command after the switch already sees the new page")
+
+
+func test_a_move_route_uses_the_new_page_in_the_same_list() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.data["pages"][1]["movement"] = {"type": "fixed", "speed": 6}
+	ev.data["pages"][1]["graphic"] = {"sheet": "door_wood", "facing": "down"}
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "move_route", "target": "chest", "wait": false, "steps": [{"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 1, "the move route saw the new page, same frame")
+	assert_eq(ev.speed, 6, "the new page's speed applied before the route")
+	assert_eq(str(ev.graphic.get("sheet", "")), "door_wood", "the new page's graphic applied")
+
+
+func test_mv_style_rules_flush_only_before_a_move_route() -> void:
+	env.rpg.data.project["rules"] = "vx_ace"
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 0, "a plain command does not flush: MV refreshes on the next frame")
+	await frames(2)
+	assert_eq(ev.page_index, 1, "the per-frame refresh still applies the page")
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": false},
+		{"type": "move_route", "target": "chest", "wait": false, "steps": [{"step": "down"}]},
+	])
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(ev.page_index, 0, "the move route flushed the page back, same frame")
+
+
+func test_a_page_change_caused_by_the_running_event_does_not_stop_it() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.data["pages"][0]["commands"] = [
+		{"type": "set_self_switch", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(5, 6))
+	p.force_turn("up")
+	assert_true(p.check_action(), "the chest starts")
+	assert_true(await env.settle(), "the run finished (no error, no hang)")
+	assert_eq(env.rpg.get_variable("counter"), 1, "the command after the page change still ran")
+	assert_eq(ev.page_index, 1, "the chest ended on its new page")
+
+
 func test_autorun_runs_until_it_stops_itself() -> void:
 	env.rpg.set_switch("autorun_on", true)
 	assert_true(await env.settle())

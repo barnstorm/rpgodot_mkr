@@ -392,6 +392,12 @@ func request_refresh() -> void:
 	_refresh_pending = true
 
 
+## True when a page refresh is pending: it runs on the next frame, or before the next command
+## that needs it (see RPGInterpreter.execute).
+func refresh_pending() -> bool:
+	return _refresh_pending
+
+
 ## Called by the scheduler once per frame before it starts new work.
 func process_refresh() -> void:
 	if not _refresh_pending:
