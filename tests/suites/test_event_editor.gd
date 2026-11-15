@@ -416,6 +416,31 @@ func test_e23_move_route_character_is_a_dropdown() -> void:
 	form.queue_free()
 
 
+func test_e23_route_editor_covers_the_new_step_kinds() -> void:
+	var steps := [
+		{"slide": "forward"}, {"move_to": [3, 4]}, {"move_to": "player"},
+		{"call": {"method": "turn", "args": ["left"]}},
+		{"speed_up": true}, {"speed_down": true}, {"frequency_up": true}, {"frequency_down": true},
+		{"opacity_up": true}, {"opacity_down": true},
+	]
+	var want := [
+		"Slide forward", "Move to (3, 4)", "Move to player", "Call turn",
+		"Speed up", "Speed down", "Frequency up", "Frequency down",
+		"Opacity up", "Opacity down",
+	]
+	for i in steps.size():
+		assert_eq(RPGRouteEditor.describe(steps[i]), want[i], "step %s" % str(steps[i]))
+	# Every button in every tab makes a step that describes cleanly (no "? " placeholder).
+	var labels := []
+	for group in RPGRouteEditor.BUTTONS:
+		for b in group[1]:
+			labels.append(b[0])
+			assert_false(RPGRouteEditor.describe(b[1]).begins_with("? "), "%s describes its step" % b[0])
+	assert_has(labels, "Slide ↓")
+	assert_has(labels, "Move to…")
+	assert_has(labels, "Call…")
+
+
 func test_e23_condition_kinds_and_choices_summary() -> void:
 	var branch := RPGConditionEditor.new(data, registry, false, {}, true)
 	var page := RPGConditionEditor.new(data, registry, false, {})

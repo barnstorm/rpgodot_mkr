@@ -271,6 +271,37 @@ func release(ch: Node, cell: Vector2i) -> void:
 		reservations.erase(c)
 
 
+## Shortest way from `from` to `to` as a list of cells (excluding `from`, ending at `to`), four
+## directions, tile passability only — the way around characters is left to the step retries.
+## Breadth-first: on a uniform grid the first way found is a shortest one. Empty when there is
+## none (walled in, or the goal off the map).
+func path(from: Vector2i, to: Vector2i) -> Array:
+	var start := normalize(from)
+	var goal := normalize(to)
+	if start == Vector2i(-1, -1) or goal == Vector2i(-1, -1) or start == goal:
+		return []
+	var came := {start: start}
+	var queue: Array = [start]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		for d in DIRS:
+			var n: Vector2i = c + DIRS[d]
+			if not in_bounds(n) or came.has(n):
+				continue
+			if (passage(c) & BIT[d]) == 0 or (passage(n) & BIT[OPPOSITE[d]]) == 0:
+				continue
+			came[n] = c
+			if n == goal:
+				var out: Array = []
+				var p: Vector2i = n
+				while p != start:
+					out.push_front(p)
+					p = came[p]
+				return out
+			queue.append(n)
+	return []
+
+
 ## Nearest free cell within `max_dist` (for transfers that opt in to a fallback).
 func nearest_free(cell: Vector2i, ch: Node, max_dist := 3) -> Vector2i:
 	if in_bounds(cell) and not is_occupied(cell, ch) and passage(cell) != 0:

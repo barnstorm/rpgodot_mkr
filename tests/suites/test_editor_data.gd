@@ -521,6 +521,17 @@ func test_schema_has_a_branch_per_command() -> void:
 	assert_true(FileAccess.file_exists(dir + "/README.md"))
 
 
+func test_route_step_schema_covers_the_new_step_kinds() -> void:
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].route_step.properties
+	for k in ["slide", "move_to", "call", "speed_up", "speed_down", "frequency_up",
+			"frequency_down", "opacity_up", "opacity_down"]:
+		assert_true(props.has(k), "route_step lists %s" % k)
+	assert_eq(props.slide, {"type": "string"})
+	assert_eq(props.move_to, {"oneOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "string"}]})
+	assert_eq(props.call.required, ["method"])
+	assert_eq(props.call.properties.args, {"type": "array"})
+
+
 # --------------------------------------------------------------------------------------------
 # Form builder
 # --------------------------------------------------------------------------------------------
