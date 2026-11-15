@@ -1,7 +1,7 @@
 extends "res://tests/rpg_test_case.gd"
 ## Battle events through the public battle API: the rpg.battle facade (#29), End Battle (#4),
 ## enemy targets of Change HP/SP, Change State and Recover All (#2), Change Party Member
-## during a battle (#5), Force Flee (#40), and Transform Enemy (#3).
+## during a battle (#5), Force Flee (#40), Transform Enemy (#3), and Force Action (#12).
 
 const Env := preload("res://tests/rpg_test_env.gd")
 
@@ -38,6 +38,21 @@ func _add_troop(t: Dictionary) -> void:
 	var data: RPGProjectData = env.rpg.data
 	data.db["troops"].by_id[t.id] = t
 	data.db["troops"].records.append(t)
+
+
+## A certain-hit, flat-damage skill injected for the Force Action tests: the sample fire's 95%
+## hit would make the "was hit" assertions flaky (a forced cast can miss like any other).
+func _zapt() -> Dictionary:
+	return {"id": "zapt", "name": "Zapt", "cost": {"sp": 6}, "damage_type": "damage",
+		"formula": "25", "hit": 100, "hit_type": "certain", "message": "%1 casts Zapt!",
+		"occasion": "battle", "resource": "hp", "scope": "one_enemy", "skill_type": "magic",
+		"variance": 0}
+
+
+func _add_skill(s: Dictionary) -> void:
+	var data: RPGProjectData = env.rpg.data
+	data.db["skills"].by_id[s.id] = s
+	data.db["skills"].records.append(s)
 
 
 func _run_battle(battle_args: Dictionary) -> Dictionary:
@@ -636,6 +651,164 @@ func test_defeat_handler_instead_of_game_over() -> void:
 	assert_true(await _wait_until(func(): return _game_over_shown(), 10.0), "a missing handler shows Game Over as before")
 
 
+# --- Force Action (#12) ------------------------------------------------------------------------------
+
+
+## A one-member goblin group: the goblin has 10 SP and a pattern that never picks the skills the
+## tests force, so a spent SP point can only come from the Force Action command.
+func _goblin_troop(pages: Array = []) -> Dictionary:
+	return {"id": "boss", "name": "Boss", "can_escape": true, "members": [
+		{"enemy": "goblin", "hidden": false, "position": [160, 150]}], "pages": pages}
+
+
+func test_force_action_right_now_acts_out_of_turn() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_skill(_zapt())
+	_add_troop(_goblin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "boss", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var goblin: RPGBattler = scene.core.enemies[0]
+	var hero: RPGBattler = scene.core.party[0]
+	# The goblin zaps the hero while the party command window is still open.
+	var hero_hp: int = hero.get_resource("hp")
+	await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "zapt",
+		"target": "index", "target_index": 1, "timing": "now"}], {"kind": "api", "id": "t"})
+	assert_eq(scene.phase, "party", "the battle has not taken a turn")
+	assert_true(hero.get_resource("hp") < hero_hp, "the hero was hit")
+	assert_eq(goblin.get_resource("sp"), 4, "the goblin paid zapt's 6 SP")
+	# The hero answers in kind: enemy #1 by number, then the same enemy by "its last target".
+	var goblin_hp: int = goblin.get_resource("hp")
+	for target in ["index", "last"]:
+		hero.set_resource("sp", 99)
+		var sp_before: int = hero.get_resource("sp")
+		await env.rpg.run_commands([{"type": "force_action", "subject": "actor", "actor": "leader",
+			"what": "skill", "skill": "zapt", "target": target, "target_index": 1, "timing": "now"}], {"kind": "api", "id": "t"})
+		assert_true(goblin.get_resource("hp") < goblin_hp, "%s target: the goblin was hit again" % target)
+		goblin_hp = goblin.get_resource("hp")
+		assert_eq(hero.get_resource("sp"), sp_before - 6, "the hero paid for the zapt")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+
+
+func test_force_action_at_its_next_turn_uses_the_turn() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	# A start-of-turn page forces both sides' turn-1 actions: the goblin burns the hero, the hero
+	# burns the goblin (each 6 SP of their 10).
+	var page := {"id": "forced", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+		{"type": "force_action", "subject": "enemy", "enemy_index": 1, "what": "skill", "skill": "fire",
+			"target": "index", "target_index": 1, "timing": "turn"},
+		{"type": "force_action", "subject": "actor", "actor": "leader", "what": "skill", "skill": "fire",
+			"target": "index", "target_index": 1, "timing": "turn"}]}
+	_add_troop(_goblin_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "boss", "can_escape": false, "can_lose": true}, out)
+	# Turn 1 plays out with nobody asked: no ok is ever pressed here, so the battle could only
+	# move on if the party command never opened (the forced hero is not waiting for a command).
+	var reached := await _wait_until(func():
+		return not is_instance_valid(scene) or (scene.phase == "party" and scene.core.turn >= 2), 30.0)
+	assert_true(reached, "turn 2's party command opens (turn 1 needed no input)")
+	assert_eq(scene.core.enemies[0].get_resource("sp"), 4, "the goblin's forced fire ran on its turn")
+	assert_eq(scene.core.party[0].get_resource("sp"), 4, "the hero's forced fire ran on their turn")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
+func test_force_action_in_a_timed_battle() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_skill(_zapt())
+	_add_troop(_goblin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "boss", "can_escape": false, "can_lose": true, "battle_system": "atb"}, out)
+	await _open_actor_command(scene)
+	scene.atb_mode = "wait"     # time only moves when no command window is open
+	var goblin: RPGBattler = scene.core.enemies[0]
+	var hero: RPGBattler = scene.core.party[0]
+	# Right now: the goblin zaps the hero while the hero's window is open — out of turn, and
+	# without the goblin's gauge filling.
+	var hero_hp: int = hero.get_resource("hp")
+	await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "zapt",
+		"target": "index", "target_index": 1, "timing": "now"}], {"kind": "api", "id": "t"})
+	assert_eq(scene.phase, "actor", "the hero's command window is still open")
+	assert_true(hero.get_resource("hp") < hero_hp, "the hero was hit")
+	assert_eq(goblin.get_resource("sp"), 4, "zapt's SP were paid")
+	assert_false(scene.core.ready_queue.has(goblin), "the goblin's gauge was not filled by the force")
+	# At its next turn: both sides heal themselves (5 SP). Forcing the hero closes the open
+	# window (it no longer needs input), so time moves again and both turns come.
+	goblin.set_resource("sp", 10)
+	await env.rpg.run_commands([
+		{"type": "force_action", "subject": "actor", "actor": "leader", "what": "skill", "skill": "heal",
+			"target": "index", "target_index": 1, "timing": "turn"},
+		{"type": "force_action", "subject": "enemy", "enemy_index": 1, "what": "skill", "skill": "heal",
+			"target": "index", "target_index": 1, "timing": "turn"}], {"kind": "api", "id": "t"})
+	assert_true(await _wait_until(func():
+		return not is_instance_valid(scene) or (hero.get_resource("sp") == 5 and goblin.get_resource("sp") == 5), 30.0),
+		"both forced heals ran when their turns came (SP 10 -> 5)")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
+func test_force_action_skips_quietly_when_the_subject_cannot_act() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_troop({"id": "mixed", "name": "Mixed", "can_escape": true, "members": [
+		{"enemy": "goblin", "hidden": false, "position": [120, 150]},
+		{"enemy": "goblin", "hidden": false, "position": [200, 150]},
+		{"enemy": "slime", "hidden": true, "position": [260, 150]}], "pages": []})
+	var out := {}
+	var scene := _start_battle({"troop": "mixed", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var goblin: RPGBattler = scene.core.enemies[0]
+	var hero: RPGBattler = scene.core.party[0]
+	var hero_hp: int = hero.get_resource("hp")
+	# A hidden member and (after Change HP) a dead one: no error, nothing happens.
+	var r: RPGResult = await env.rpg.run_commands([{"type": "force_action", "enemy_index": 3,
+		"what": "skill", "skill": "fire", "target": "random", "timing": "now"}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "a hidden enemy skips quietly")
+	await env.rpg.run_commands([{"type": "change_hp_mp", "target": "enemy", "enemy_index": 1,
+		"resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true}], {"kind": "api", "id": "t"})
+	r = await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "fire",
+		"target": "random", "timing": "now"}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "a dead enemy skips quietly")
+	assert_eq(hero.get_resource("hp"), hero_hp, "nothing happened")
+	assert_eq(goblin.get_resource("sp"), 10, "no cost was paid")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
+func test_force_action_errors_and_summary() -> void:
+	_sample_env()
+	var r: RPGResult = await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1,
+		"what": "skill", "skill": "fire"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error(), "outside a battle it stops the event")
+	assert_true(r.message.contains("battle event"), r.message)
+	Engine.time_scale = 4.0
+	_add_troop(_goblin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "boss", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	r = await env.rpg.run_commands([{"type": "force_action", "enemy_index": 2, "what": "skill", "skill": "fire"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and r.message.contains("no enemy #2"), r.message)
+	r = await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "fireball"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and r.message.contains("does not exist"), r.message)
+	r = await env.rpg.run_commands([{"type": "force_action", "subject": "actor", "actor": "mira",
+		"what": "skill", "skill": "fire"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and r.message.contains("not in this battle"), r.message)
+	assert_eq(scene.core.party[0].get_resource("hp"), env.rpg.rules.max_resource(scene.core.party[0], "hp"), "nothing happened")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	var cmd: RPGCommand = env.rpg.registry.get_command("force_action")
+	assert_eq(cmd.summary({"enemy_index": 2, "skill": "power_strike"}), "Force Action: enemy #2 uses power_strike")
+	assert_eq(cmd.summary({"subject": "actor", "actor": "leader", "skill": "fire"}), "Force Action: leader uses fire")
+	assert_eq(cmd.summary({"enemy_index": 1, "skill": "fire", "target": "random"}), "Force Action: enemy #1 uses fire (random target)")
+	assert_eq(cmd.summary({"enemy_index": 1, "skill": "fire", "target": "index", "target_index": 2}), "Force Action: enemy #1 uses fire (target #2)")
+	assert_eq(cmd.summary({"enemy_index": 1, "item": "potion", "what": "item", "timing": "turn"}), "Force Action: enemy #1 uses potion, at its next turn")
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 
@@ -668,3 +841,26 @@ func test_validator_checks_enemy_targets() -> void:
 	assert_eq(w3.size(), 1, str(p3))
 	assert_eq(w3[0].severity, "warning")
 	assert_eq(w3[0].path, "events/0/pages/0/commands/0")
+
+
+func test_validator_checks_force_action() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "force_action", "enemy_index": 2, "what": "skill", "skill": "fire"},
+		{"type": "force_action", "enemy_index": 5, "what": "skill", "skill": "fire"},
+		{"type": "force_action", "subject": "actor", "actor": "hero", "what": "skill", "skill": "heal"}]}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
+	var msgs := probs.map(func(p): return "%s %s" % [p.severity, p.message])
+	assert_true(msgs.any(func(m): return m.begins_with("error") and m.contains("no enemy #5")), str(msgs))
+	assert_false(msgs.any(func(m): return m.contains("#2")), "enemy #2 is a member of the group: %s" % str(msgs))
+	# An actor subject has no enemy number to check.
+	assert_false(msgs.any(func(m): return m.contains("Force Action") and m.contains("hero")), str(msgs))
+	# On a map it can never work: the battle-only warning.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "switch", "id": "s"}, "then": [
+			{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "fire"}], "else": []}]}]}
+	var p2 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	var w := p2.filter(func(p): return str(p.message).contains("only works in a battle event"))
+	assert_eq(w.size(), 1, str(p2))
+	assert_eq(w[0].severity, "warning")

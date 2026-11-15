@@ -135,6 +135,8 @@ var _extra := {}               ## timed: battler -> extra actions left ("action_
 var _known_states := {}        ## hooks: battler -> state ids last reported
 var _defeated := {}            ## hooks: battlers reported as defeated (until revived)
 var _charged := {}             ## Charge Up: enemy -> damage multiplier waiting for its next attack
+var _forced_next := {}         ## battler -> action a battle event forced for its next turn
+var _last_target := {}         ## battler -> the first target of its most recent action
 var _forced := false          ## the result came from force_result()
 
 
@@ -215,6 +217,8 @@ func start() -> void:
 	_extra.clear()
 	_known_states.clear()
 	_defeated.clear()
+	_forced_next.clear()
+	_last_target.clear()
 	for b in all_battlers():
 		_known_states[b] = b.state_ids()
 		if b.is_dead():
@@ -266,7 +270,7 @@ func inputs_needed() -> Array:
 		return out
 	for i in party.size():
 		var b: RPGBattler = party[i]
-		if b.is_active() and rules.can_act(b):
+		if b.is_active() and rules.can_act(b) and not _forced_next.has(b):
 			out.append(i)
 	return out
 
@@ -299,6 +303,37 @@ func set_action(actor_index: int, action: Dictionary) -> bool:
 	return true
 
 
+## Battle-event forced action (Force Action). With timing "now" the battler performs the
+## action at once (outside the turn order; its own pending action is kept) and the result of
+## _execute() comes back — {} when it could not act. With timing "turn" the action is stored
+## for the battler's next turn and true comes back. A battler that cannot act (dead, hidden,
+## restricted) is skipped quietly.
+func force(b: RPGBattler, action: Dictionary, timing := "now") -> Variant:
+	if b == null or battle_over() != "" or not b.is_active() or not rules.can_act(b):
+		return {} if timing == "now" else false
+	if timing == "turn":
+		_forced_next[b] = action.duplicate(true)
+		return true
+	var keep := b.action
+	b.action = action.duplicate(true)
+	var res := _execute(b, _forced_targets(b, b.action))
+	b.action = keep
+	report_changes()
+	res.battle_over = battle_over()
+	return res
+
+
+## Targets a forced action uses: "last" is the first target of the battler's most recent
+## action (when it is still on the field). "index" and "random" fall back to the usual scope
+## resolution (the action's target index, or a random pick at -1).
+func _forced_targets(b: RPGBattler, action: Dictionary) -> Variant:
+	if str(action.get("target_mode", "last")) == "last":
+		var t: RPGBattler = _last_target.get(b)
+		if t != null and t.is_active():
+			return [t]
+	return null
+
+
 ## Executes the next action of the turn and returns a result for the UI:
 ## {user, action, kind, name, targets: [RPGBattler], effects: [{target, result}],
 ##  lines: [String], text, escaped, battle_over}
@@ -313,10 +348,16 @@ func next_action() -> Dictionary:
 	while not _queue.is_empty():
 		var b: RPGBattler = _queue.pop_front()
 		if not b.is_active() or not rules.can_act(b):
+			_forced_next.erase(b)
 			continue
 		var before := _vitals()
 		_hook("turn_started", [b])
-		var result := _execute(b)
+		var given: Variant = null
+		if _forced_next.has(b):
+			b.action = _forced_next[b]
+			given = _forced_targets(b, b.action)
+			_forced_next.erase(b)
+		var result := _execute(b, given)
 		report_changes()
 		if _vitals() != before:
 			checkpoint.emit("after_change")
@@ -380,11 +421,19 @@ func _build_queue() -> void:
 	var party_acts := not (turn == 1 and advantage in ["surprise", "back_attack", "pincer"])
 	if enemies_act:
 		for e in enemies:
-			if e.is_active() and rules.can_act(e):
+			if _forced_next.has(e):
+				# A battle event forced this enemy's action; it applies even if the enemy
+				# cannot act now (the entry is consumed either way, so it cannot go stale).
+				e.action = _forced_next[e]
+				_forced_next.erase(e)
+			elif e.is_active() and rules.can_act(e):
 				e.action = choose_enemy_action(e)
 	if party_acts:
 		for a in party:
-			if a.is_active() and rules.can_act(a) and a.action.is_empty():
+			if _forced_next.has(a):
+				a.action = _forced_next[a]
+				_forced_next.erase(a)
+			elif a.is_active() and rules.can_act(a) and a.action.is_empty():
 				a.action = {"kind": "attack", "target": -1}
 	var entries := []
 	var order := 0
@@ -411,7 +460,7 @@ func _build_queue() -> void:
 	_queue_built = true
 
 
-func _execute(b: RPGBattler) -> Dictionary:
+func _execute(b: RPGBattler, given_targets: Variant = null) -> Dictionary:
 	var action: Dictionary = b.action
 	var kind := str(action.get("kind", "wait"))
 	var res := {"user": b, "action": action, "kind": kind, "name": "", "targets": [], "effects": [],
@@ -432,7 +481,7 @@ func _execute(b: RPGBattler) -> Dictionary:
 				res.text = "\n".join(PackedStringArray(res.lines))
 				return res
 	if USABLE_KINDS.has(kind):
-		_execute_usable(b, action, res)
+		_execute_usable(b, action, res, false, given_targets)
 	else:
 		_execute_simple(b, kind, res, action)
 	# "Turn switch ON/OFF when used" (2003): applied once the action has run, hit or missed.
@@ -614,6 +663,7 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 				_execute_simple(b, res.kind, res, h.action)
 			return
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
+	_last_target[b] = targets[0] if not targets.is_empty() else _last_target.get(b)
 	rules.pay_cost(b, action)
 	match kind:
 		"attack":
@@ -891,7 +941,7 @@ func atb_advance_to_next() -> void:
 
 ## True when actor `b` has a full gauge and waits for the player's command.
 func needs_input(b: RPGBattler) -> bool:
-	return b != null and b.is_actor() and ready_queue.has(b) and b.is_active() and rules.can_act(b) and b.action.is_empty()
+	return b != null and b.is_actor() and ready_queue.has(b) and b.is_active() and rules.can_act(b) and b.action.is_empty() and not _forced_next.has(b)
 
 
 ## Full actors waiting for a command, in ready order.
@@ -947,17 +997,23 @@ func act(b: RPGBattler) -> Dictionary:
 	var skipped := not b.is_active() or not rules.can_act(b)
 	var res: Dictionary
 	if skipped:
+		_forced_next.erase(b)
 		res = {"user": b, "action": {"kind": "wait", "silent": true}, "kind": "wait", "name": "", "targets": [],
 			"effects": [], "lines": [], "text": "", "escaped": false, "battle_over": ""}
 	else:
 		_hook("turn_started", [b])
-		if b.is_enemy():
+		var given: Variant = null
+		if _forced_next.has(b):
+			b.action = _forced_next[b]
+			given = _forced_targets(b, b.action)
+			_forced_next.erase(b)
+		elif b.is_enemy():
 			b.action = choose_enemy_action(b)
 		elif b.action.is_empty():
 			b.action = {"kind": "attack", "target": -1}
 		if not _extra.has(b):
 			_extra[b] = 0 if str(b.action.get("kind", "")) == "escape" else maxi(1, rules.action_times(b)) - 1
-		res = _execute(b)
+		res = _execute(b, given)
 	res["skipped"] = skipped
 	res["ticks"] = []
 	if not skipped and int(_extra.get(b, 0)) > 0 and b.is_active() and rules.can_act(b) and not res.escaped and battle_over() == "":

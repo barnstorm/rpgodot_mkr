@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 82 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 83 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -127,6 +127,7 @@ There are 82 built-in commands. The *ID* is the command's `type` in the event JS
 | **Force Flee** | `force_flee` | Who flees (Enemy # / Every enemy / The party), Enemy # (1 = first in the group) |
 | **Transform Enemy** | `transform_enemy` | Enemy # (1 = first in the group), Becomes, HP (Keep HP (clamped to the new max) / Keep HP % / Refill HP), Clear states |
 | **End Battle** | `abort_battle` | Result (abort / win / lose), Give victory rewards |
+| **Force Action** | `force_action` | Subject (Enemy # / Actor), Enemy #, Actor, Uses (skill / item), Skill, Item, Target (last / random / #), Target #, Timing (right now / at its next turn) |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |
 | **Open Menu Screen** | `open_menu` |  |

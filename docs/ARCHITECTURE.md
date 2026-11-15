@@ -369,10 +369,11 @@ choice's own index.
 
 **Battle API.** While a battle runs, `RPG.battle` is an `RPGBattleFacade`
 (`runtime/battle/rpg_battle_facade.gd`); it is null before and after. The built-in battle
-commands (Enemy Appear, End Battle, the enemy targets of Change HP/SP / Change State /
-Recover All, Change Party Member during a fight) go through it, and so can extensions and
-custom commands — no reaching into `scene.core` or `scene.enemy_nodes`. Documented methods:
+commands (Enemy Appear, Force Action, End Battle, the enemy targets of Change HP/SP / Change
+State / Recover All, Change Party Member during a fight) go through it, and so can extensions
+and custom commands — no reaching into `scene.core` or `scene.enemy_nodes`. Documented methods:
 `scene()`, `core()`, `party()`, `enemies()`, `reveal(b)`, `add_enemy(id, position)`,
+`perform(b, action)` (await), `queue(b, action)`,
 `set_gauge(b, value)`, `refresh()`, `message(text, seconds)` (await), `flash(b, color)`,
 `node_of(b)`, `end(result, award := true)`, `refresh_party(temporary := [])`, `valid()`.
 They follow semantic versioning; anything prefixed `_` may change. For example, a custom
