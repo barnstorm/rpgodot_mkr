@@ -418,10 +418,28 @@ func _refresh_common_events() -> void:
 			continue
 		var key: String = "common:" + str(id)
 		var ok := _common_active(ce)
-		if ok and not scheduler.parallels.has(key) and _game_running():
+		var task: RPGScheduler.ParallelTask = scheduler.parallels.get(key)
+		if ok and task == null and _game_running():
 			scheduler.start_parallel(key, ce.get("commands", []), {"kind": "common_event", "id": id, "map": "", "event": ""}, null, func(): return _common_active(ce))
-		elif not ok and scheduler.parallels.has(key):
-			scheduler.stop_parallel(key, "condition switch off")
+		elif ok and task != null and task.paused:
+			# The condition switch came back on: a paused run carries on at its command.
+			scheduler.resume_parallel(key)
+		elif not ok and task != null:
+			# The condition switch went off: the classic rules pause the run in place and resume
+			# it when the switch returns; MV-style rules discard it (a later switch-on then starts
+			# the event from the top again).
+			if _parallel_switch_off() == "pause":
+				scheduler.pause_parallel(key)
+			else:
+				scheduler.stop_parallel(key, "condition switch off")
+
+
+## What a parallel common event's condition switch going off does to its run, per the rule system
+## (RPGRuleSystem.parallel_switch_off): "pause" (RM2000/2003) or "restart" (MV).
+func _parallel_switch_off() -> String:
+	if rules != null and rules.has_method("parallel_switch_off"):
+		return str(rules.parallel_switch_off())
+	return "restart"
 
 
 func _common_active(ce: Dictionary) -> bool:

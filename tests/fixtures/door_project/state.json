@@ -4,6 +4,7 @@
 		{"id": "door_unlocked", "label": "Door unlocked", "folder": "", "description": ""},
 		{"id": "autorun_on", "label": "Autorun on", "folder": "", "description": ""},
 		{"id": "parallel_on", "label": "Parallel on", "folder": "", "description": ""},
+		{"id": "clock_on", "label": "Clock on", "folder": "", "description": ""},
 		{"id": "touched", "label": "Touched", "folder": "", "description": ""}
 	],
 	"variables": [

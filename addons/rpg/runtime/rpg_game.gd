@@ -357,6 +357,12 @@ func refresh_party_graphics() -> void:
 	_apply_leader_graphic()
 
 
+## True under rules that restart parallel common events on a map change (MV); the classic rules
+## keep them running across the transfer (RPGRuleSystem.parallel_map_change).
+func _common_parallels_restart_on_map_change() -> bool:
+	return rpg.rules != null and rpg.rules.has_method("parallel_map_change") and str(rpg.rules.parallel_map_change()) == "restart"
+
+
 ## Map transfer (spec "Transfers"). Returns RPGResult.
 ## `caller` is the interpreter running the Transfer Player command, if any (see cancel_owned).
 ## `rebuild` forces the full path — shut the map down and set it up again — even when the map id is
@@ -392,9 +398,12 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 		transferring = false
 		rpg.scheduler.unlock_input("transfer")
 		return moved
-	# 3. Stop tasks owned by the current map.
+	# 3. Stop tasks owned by the current map; under the MV-style rules parallel common events
+	# restart from the top on the new map (the classic rules let them run on across the transfer).
 	if old_map != null:
 		await old_map.shutdown(caller)
+	if _common_parallels_restart_on_map_change():
+		rpg.scheduler.stop_common_parallels("map changed", caller)
 	# 4. Fade out.
 	if fade == "black" or fade == "white":
 		await rpg.screen.fade_out(0.25, Color.WHITE if fade == "white" else Color.BLACK)

@@ -1218,6 +1218,124 @@ func test_an_overlay_scene_can_opt_out_of_the_pause() -> void:
 	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel kept running under the overlay")
 
 
+# --- Parallel common events: switch off and map change (#78) -------------------------------------
+
+
+func _wait_until(cond: Callable, max_frames := 300) -> bool:
+	for i in max_frames:
+		if cond.call():
+			return true
+		await tree.process_frame
+	return cond.call()
+
+
+## A "clock" parallel common event on its own switch (parallel_on would drag the fixture map's
+## parallel_evt in too): ticks once per pass, waits, and counter marks passes that reached the end
+## of the list. self_off ends the list by turning the switch off.
+func _clock_event(wait_s: float, self_off: bool) -> Dictionary:
+	var cmds: Array = [
+		{"type": "set_variable", "id": "ticks", "operation": "add", "value": 1},
+		{"type": "wait", "seconds": wait_s},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+	if self_off:
+		cmds.append({"type": "set_switch", "id": "clock_on", "value": "off"})
+	return {"trigger": "parallel", "switch": "clock_on", "commands": cmds}
+
+
+func test_classic_rules_pause_a_parallel_common_event_and_resume_it() -> void:
+	# The door project runs the classic rules, where a condition switch going off freezes the run
+	# at its current command and a later switch-on carries on exactly there (RM2000/2003).
+	env.rpg.data.common_events["clock"] = _clock_event(1.5, true)
+	env.rpg.set_switch("clock_on", true)
+	await env.tree.create_timer(0.4).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "one pass started")
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "it is mid-wait")
+	env.rpg.set_switch("clock_on", false)
+	await env.tree.create_timer(0.6).timeout
+	var task: RPGScheduler.ParallelTask = env.rpg.scheduler.parallels.get("common:clock")
+	assert_true(task != null and task.paused, "the run is paused in place, not discarded")
+	await env.tree.create_timer(1.2).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "the wait stays frozen while paused")
+	env.rpg.set_switch("clock_on", true)
+	var finished: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("counter")) >= 1)
+	assert_true(finished, "the pass carried on where it stopped")
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "it did not restart from the top")
+
+
+func test_mv_rules_discard_a_parallel_common_event_and_restart_it_from_the_top() -> void:
+	env.rpg.rules.definition["parallel_switch_off"] = "restart"
+	env.rpg.data.common_events["clock"] = _clock_event(1.5, false)
+	env.rpg.set_switch("clock_on", true)
+	await env.tree.create_timer(0.4).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "one pass started")
+	env.rpg.set_switch("clock_on", false)
+	var gone: bool = await _wait_until(func(): return not env.rpg.scheduler.parallels.has("common:clock"))
+	assert_true(gone, "the run was discarded, not paused (MV behaviour)")
+	env.rpg.set_switch("clock_on", true)
+	var again: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(again, "the event started again from the top")
+
+
+func test_classic_rules_keep_a_parallel_common_event_running_across_a_map_change() -> void:
+	env.rpg.data.common_events["clock"] = _clock_event(0.05, false)
+	env.rpg.set_switch("clock_on", true)
+	var ticking: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(ticking, "the clock is ticking")
+	var task: Object = env.rpg.scheduler.parallels["common:clock"]
+	var before: int = env.rpg.state.get_variable("ticks")
+	var r: RPGResult = await env.game.transfer("house_inside", Vector2i(1, 1), "down", "none")
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	assert_true(env.rpg.scheduler.parallels.get("common:clock") == task, "the same task kept running across the transfer")
+	var grew: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) > before)
+	assert_true(grew, "it never stopped ticking")
+
+
+func test_mv_rules_restart_a_parallel_common_event_on_a_map_change() -> void:
+	env.rpg.rules.definition["parallel_map_change"] = "restart"
+	# One pass stuck in a long wait: a second tick can only come from a fresh start.
+	env.rpg.data.common_events["clock"] = _clock_event(30.0, false)
+	env.rpg.set_switch("clock_on", true)
+	var started: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 1)
+	assert_true(started, "the clock is ticking")
+	var r: RPGResult = await env.game.transfer("house_inside", Vector2i(1, 1), "down", "none")
+	assert_true(r.is_ok(), str(r))
+	var restarted: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(restarted, "the common event restarted from the top on the new map")
+
+
+## The fixture's parallel_evt page re-written into a transfer plus a trailing command, so the test
+## can see whether the pass continues after the map it belongs to has unloaded.
+func _porter_commands() -> Array:
+	return [
+		{"type": "transfer_player", "to": {"map": "house_inside", "position": [1, 1]}, "fade": "none"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+
+
+func test_the_rm2000_option_lets_a_transferring_map_parallel_finish_its_pass() -> void:
+	var ev: RPGEvent = env.game.map.get_event("parallel_evt")
+	ev.data["pages"][0]["commands"] = _porter_commands()
+	env.rpg.rules.definition["parallel_map_event_survives_map_change"] = true
+	env.rpg.set_switch("parallel_on", true)
+	var done: bool = await _wait_until(func(): return env.game.map != null and env.game.map.map_id == "house_inside" and int(env.rpg.state.get_variable("counter")) >= 1)
+	assert_true(done, "the pass finished on the new map (counter=%d)" % env.rpg.state.get_variable("counter"))
+	await env.tree.create_timer(0.3).timeout
+	assert_false(env.rpg.scheduler.parallels.has("event:town:parallel_evt"), "the spared task stopped once its pass ended")
+
+
+func test_without_the_option_a_transferring_map_parallel_stops_mid_pass() -> void:
+	var ev: RPGEvent = env.game.map.get_event("parallel_evt")
+	ev.data["pages"][0]["commands"] = _porter_commands()
+	env.rpg.set_switch("parallel_on", true)
+	var arrived: bool = await _wait_until(func(): return env.game.map != null and env.game.map.map_id == "house_inside" and not env.game.transferring)
+	assert_true(arrived, "the transfer itself completed")
+	await env.tree.create_timer(0.3).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "the pass did not continue after its map unloaded (MV behaviour)")
+	assert_false(env.rpg.scheduler.parallels.has("event:town:parallel_evt"), "the task was cancelled with its map")
+
+
 # --- Call Event (#60) ---------------------------------------------------------------------------
 
 func test_call_event_runs_a_page_with_the_called_event_as_this() -> void:

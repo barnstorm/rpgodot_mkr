@@ -47,6 +47,12 @@ class ParallelTask extends RefCounted:
 	var cancelled := false
 	var done := false
 	var rounds := 0
+	## True while the task sleeps in place (its condition switch went off under the classic rules):
+	## its interpreter holds its run and carries on at the same command when resumed.
+	var paused := false
+	## Set when a map change spares this task (the RM2000-style option: the parallel map event that
+	## ran the transfer finishes its pass on the new map, even though its map was unloaded).
+	var survives_map_free := false
 
 
 var rpg: Node
@@ -183,11 +189,13 @@ func _run_parallel(task: ParallelTask) -> void:
 		if task.cancelled:
 			break
 		# The event's map was freed (e.g. a failed transfer rolled back): stop cleanly so
-		# `stopped` is always emitted and the key never stays registered.
-		if task.had_event and not is_instance_valid(task.event):
+		# `stopped` is always emitted and the key never stays registered. A task spared by the
+		# RM2000-style transfer option runs its current pass on without its event.
+		if task.had_event and not is_instance_valid(task.event) and not task.survives_map_free:
 			break
 		task.interpreter = RPGInterpreter.new(rpg, task.owner, task.event)
 		task.interpreter.suspends_with_map = true
+		task.interpreter.paused = task.paused
 		task.rounds += 1
 		var r: RPGResult = await task.interpreter.run(task.commands)
 		if r.is_error():
@@ -196,7 +204,17 @@ func _run_parallel(task: ParallelTask) -> void:
 		if task.cancelled or r.is_cancelled():
 			break
 		await get_tree().process_frame
-		if task.cancelled or not task.eligible.is_valid() or not task.eligible.call():
+		# Paused between passes (the condition switch went off under the classic rules): hold
+		# before the eligibility check, so a resumed task carries on exactly as it was.
+		while task.paused and not task.cancelled:
+			await get_tree().process_frame
+		if task.cancelled:
+			break
+		# A spared task whose event is gone ran its last pass: RM2000's transfer quirk ends there,
+		# because the event no longer exists to re-check its conditions against.
+		if task.had_event and not is_instance_valid(task.event):
+			break
+		if not task.eligible.is_valid() or not task.eligible.call():
 			break
 	task.done = true
 	if parallels.get(task.key) == task:
@@ -215,18 +233,58 @@ func stop_parallel(key: String, reason := "stopped") -> ParallelTask:
 	return task
 
 
+## Pauses a parallel task in place: its interpreter sleeps at its current command (a running wait
+## freezes too) until resume_parallel, keeping the whole run so it carries on at that command.
+func pause_parallel(key: String) -> ParallelTask:
+	var task: ParallelTask = parallels.get(key)
+	if task == null:
+		return null
+	task.paused = true
+	if task.interpreter != null:
+		task.interpreter.paused = true
+	return task
+
+
+## Carries a paused parallel task on at the command it stopped at.
+func resume_parallel(key: String) -> ParallelTask:
+	var task: ParallelTask = parallels.get(key)
+	if task == null:
+		return null
+	task.paused = false
+	if task.interpreter != null:
+		task.interpreter.paused = false
+	return task
+
+
+## Stops every running parallel common event. MV-style rules do this on a map change, so they
+## start from the top on the new map (the classic rules let them run on). `caller` — a common
+## parallel running the transfer itself — is left to finish its own command, like cancel_owned.
+func stop_common_parallels(reason := "map changed", caller: RPGInterpreter = null) -> void:
+	for key in parallels.keys():
+		var task: ParallelTask = parallels[key]
+		if str(task.owner.get("kind", "")) == "common_event" and (caller == null or task.interpreter != caller):
+			stop_parallel(key, reason)
+
+
 ## Cancels parallel tasks and queued (not yet running) main requests whose owner matches, and
 ## waits until every cancelled task has cleaned up. `caller` is the interpreter asking for this
 ## (a parallel event running Transfer Player): it is cancelled too but not waited for, because it
-## is suspended inside this call and could never finish first.
-func cancel_owned(predicate: Callable, reason := "map unloaded", caller: RPGInterpreter = null) -> void:
+## is suspended inside this call and could never finish first. `spare` (optional) is asked per
+## matching parallel task and can keep one alive (the RM2000-style transfer option).
+func cancel_owned(predicate: Callable, reason := "map unloaded", caller: RPGInterpreter = null, spare := Callable()) -> void:
 	var waiting: Array[ParallelTask] = []
 	for key in parallels.keys():
 		var task: ParallelTask = parallels[key]
-		if predicate.call(task.owner):
-			stop_parallel(key, reason)
-			if not task.done and (caller == null or task.interpreter != caller):
-				waiting.append(task)
+		if not predicate.call(task.owner):
+			continue
+		if spare.is_valid() and spare.call(task):
+			# Spared (the RM2000-style option): the parallel that ran the transfer keeps its pass
+			# going on the new map, so it must also survive its event node being freed.
+			task.survives_map_free = true
+			continue
+		stop_parallel(key, reason)
+		if not task.done and (caller == null or task.interpreter != caller):
+			waiting.append(task)
 	var keep: Array[Ticket] = []
 	for t in queue:
 		if predicate.call(t.owner):
