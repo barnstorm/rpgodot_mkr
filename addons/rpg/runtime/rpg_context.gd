@@ -98,7 +98,9 @@ func run_event_page(ev: Node, commands: Array, label: String) -> RPGResult:
 	event = ev
 	_event_map = str(ev.map_id)
 	_event_id = str(ev.event_id)
+	interpreter.in_called_page += 1
 	var r: RPGResult = await interpreter.run_list(commands, label)
+	interpreter.in_called_page -= 1
 	event = prev_event
 	_event_map = prev_map
 	_event_id = prev_id

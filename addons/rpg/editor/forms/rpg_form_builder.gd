@@ -75,7 +75,7 @@ const CONDITION_FIELDS := {
 	"item": [{"key": "item_kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"}, {"key": "id", "kind": "ref", "ref": "item", "ref_from": "item_kind", "label": "Which one", "required": true}, {"key": "count", "kind": "int", "default": 1, "min": 1, "label": "At least"}],
 	"actor": [
 		{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true},
-		{"key": "check", "kind": "choice", "options": ["in_party", "name", "class", "skill", "weapon", "armor", "state"], "option_labels": ["Is in the party", "Name is", "Class is", "Has learned a skill", "Has a weapon equipped", "Has armour equipped", "Is affected by a state"], "default": "in_party", "label": "Check"},
+		{"key": "check", "kind": "choice", "options": ["in_party", "name", "class", "skill", "weapon", "armor", "state", "level", "hp", "sp"], "option_labels": ["Is in the party", "Name is", "Class is", "Has learned a skill", "Has a weapon equipped", "Has armour equipped", "Is affected by a state", "Level is", "HP is", "SP is"], "default": "in_party", "label": "Check"},
 		{"key": "value", "kind": "bool", "default": true, "label": "is in the party", "show_if": {"key": "check", "equals": ["in_party", null]}},
 		{"key": "name", "kind": "text", "label": "Name", "required": true, "show_if": {"key": "check", "equals": "name"}},
 		{"key": "class", "kind": "ref", "ref": "class", "label": "Class", "required": true, "show_if": {"key": "check", "equals": "class"}},
@@ -83,14 +83,23 @@ const CONDITION_FIELDS := {
 		{"key": "weapon", "kind": "ref", "ref": "weapon", "label": "Weapon", "required": true, "show_if": {"key": "check", "equals": "weapon"}},
 		{"key": "armor", "kind": "ref", "ref": "armor", "label": "Armour", "required": true, "show_if": {"key": "check", "equals": "armor"}},
 		{"key": "state", "kind": "ref", "ref": "state", "label": "State", "required": true, "show_if": {"key": "check", "equals": "state"}},
+		{"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Compare", "show_if": {"key": "check", "equals": ["level", "hp", "sp"]}},
+		{"key": "value", "kind": "operand", "default": 1, "min": 0, "label": "Value", "show_if": {"key": "check", "equals": ["level", "hp", "sp"]}},
+		{"key": "percent", "kind": "bool", "default": false, "label": "Percent (of max)", "show_if": {"key": "check", "equals": ["hp", "sp"]}},
 	],
 	"gold": [{"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Gold"}, {"key": "value", "kind": "operand", "default": 0, "min": 0, "label": "Amount"}],
 	"vehicle": [{"key": "id", "kind": "choice", "options": ["boat", "ship", "airship", "none"], "option_labels": ["Boat", "Ship", "Airship", "On foot (no vehicle)"], "default": "boat", "label": "Player is riding"}],
 	"facing": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "is facing"}],
-	"button": [{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button held down"}],
+	"button": [
+		{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button"},
+		{"key": "mode", "kind": "choice", "options": ["held", "pressed", "repeated"], "option_labels": ["is held down", "was just pressed", "is held down (repeating)"], "default": "held", "label": "Mode"},
+	],
+	"started_by": [{"key": "by", "kind": "choice", "options": ["action_button", "player_touch", "event_touch", "autorun", "parallel", "call"], "option_labels": ["The action button", "The player touching it", "It touching the player", "Autorun", "Parallel", "Call Event"], "default": "action_button", "label": "This event was started by"}],
+	"formula": [{"key": "text", "kind": "multiline", "label": "Formula", "required": true, "help": "The formula language (a and b are empty here): variables are v.name, e.g. v.chests >= 3; rand() and roll() use the project's RNG. A true result or non-zero number passes."}],
+	"can_pass": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "can step"}, {"key": "distance", "kind": "int", "default": 1, "min": 1, "max": 20, "label": "Cells"}],
 }
 ## Condition kinds offered only in Conditional Branch (they need a running event), not on pages.
-const BRANCH_ONLY_CONDITIONS := ["facing", "button"]
+const BRANCH_ONLY_CONDITIONS := ["facing", "button", "started_by", "can_pass"]
 ## Command fields that name a character on the map ("player", "this" or an event ID) and get a
 ## dropdown instead of a text box: {command type: [field keys]}.
 const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"], "show_balloon": ["target"]}

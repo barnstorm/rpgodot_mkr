@@ -295,6 +295,13 @@ static func _describe_condition(c: Dictionary) -> String:
 		"self_variable": return "self variable %s %s %s" % [c.get("name", ""), c.get("op", "=="), c.get("value", "")]
 		"variable": return "variable %s %s %s" % [c.get("id", ""), c.get("op", ">="), c.get("value", "")]
 		"item": return "has item %s" % c.get("id", "")
-		"actor": return "%s in party" % c.get("id", "")
+		"actor":
+			match str(c.get("check", "in_party")):
+				"level": return "%s level %s %s" % [c.get("id", ""), c.get("op", ">="), c.get("value", "")]
+				"hp", "sp": return "%s %s %s %s%s" % [c.get("id", ""), "HP" if c.get("check") == "hp" else "SP", c.get("op", ">="), c.get("value", ""), "%" if c.get("percent", false) else ""]
+			return "%s in party" % c.get("id", "")
 		"gold": return "gold %s %s" % [c.get("op", ">="), c.get("value", "")]
+		"started_by": return "started by %s" % c.get("by", "action_button")
+		"formula": return "formula %s" % str(c.get("text", "")).strip_edges()
+		"can_pass": return "%s can pass %s x%s" % [c.get("target", "player"), c.get("facing", "down"), c.get("distance", 1)]
 	return JSON.stringify(c)

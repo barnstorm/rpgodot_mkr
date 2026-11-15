@@ -39,6 +39,10 @@ static func describe_condition(c: Variant) -> String:
 				"weapon": return "%s has [%s] equipped" % [who, c.get("weapon", "")]
 				"armor": return "%s has [%s] equipped" % [who, c.get("armor", "")]
 				"state": return "%s is affected by [%s]" % [who, c.get("state", "")]
+				"level": return "%s's level %s %s" % [who, c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 1))]
+				"hp", "sp":
+					var unit := "%" if c.get("percent", false) else ""
+					return "%s's %s %s %s%s" % [who, "HP" if c.get("check") == "hp" else "SP", c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 1)), unit]
 			return "%s is %sin the party" % [who, "" if c.get("value", true) else "not "]
 		"gold": return "Gold %s %s" % [c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 0))]
 		"vehicle":
@@ -48,7 +52,21 @@ static func describe_condition(c: Variant) -> String:
 			var t := str(c.get("target", "player"))
 			var subject: String = {"player": "Player", "this": "This event", "": "This event"}.get(t, "[%s]" % t)
 			return "%s is facing %s" % [subject, c.get("facing", "down")]
-		"button": return "Button %s is held down" % str(c.get("button", "ok")).to_upper()
+		"button":
+			var b := "Button %s" % str(c.get("button", "ok")).to_upper()
+			match str(c.get("mode", "held")):
+				"pressed": return "%s was just pressed" % b
+				"repeated": return "%s is held down (repeating)" % b
+			return "%s is held down" % b
+		"started_by":
+			var labels := {"action_button": "the action button", "player_touch": "the player touching it",
+				"event_touch": "it touching the player", "autorun": "autorun", "parallel": "parallel", "call": "Call Event"}
+			return "This event was started by %s" % labels.get(str(c.get("by", "action_button")), str(c.get("by", "action_button")))
+		"formula": return "Formula: %s" % str(c.get("text", "")).strip_edges()
+		"can_pass":
+			var cp_t := str(c.get("target", "player"))
+			var cp_subject: String = {"player": "Player", "this": "This event", "": "This event"}.get(cp_t, "[%s]" % cp_t)
+			return "%s can step %s %d cell%s" % [cp_subject, c.get("facing", "down"), int(c.get("distance", 1)), "s" if int(c.get("distance", 1)) != 1 else ""]
 		"all": return "All of %d conditions" % c.get("conditions", []).size()
 		"any": return "Any of %d conditions" % c.get("conditions", []).size()
 		"not": return "Not (%s)" % describe_condition(c.get("condition"))

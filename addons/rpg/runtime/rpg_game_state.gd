@@ -742,7 +742,59 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return str(ch.facing) == str(cond.get("facing", "down"))
 		"button":
 			var action := "rpg_" + str(cond.get("button", "ok"))
-			return InputMap.has_action(action) and Input.is_action_pressed(action)
+			if not InputMap.has_action(action):
+				return false
+			match str(cond.get("mode", "held")):
+				"pressed":
+					return Input.is_action_just_pressed(action)
+				"repeated":
+					# Re-fires about every quarter second while held, like a text cursor.
+					return Input.is_action_just_pressed(action) or (Input.is_action_pressed(action) and Engine.get_process_frames() % 15 == 0)
+			return Input.is_action_pressed(action)
+		"started_by":
+			# Conditional Branch only: reads the event that is running the branch. A page runs either
+			# through its trigger or because Call Event opened it; inside a called page only "call" holds.
+			if ctx == null or not ctx.has_method("character"):
+				_err("Started by can only be checked in a Conditional Branch.")
+				return false
+			var by := str(cond.get("by", "action_button"))
+			if ctx.interpreter != null and ctx.interpreter.in_called_page > 0:
+				return by == "call"
+			var ev: Variant = ctx.character("this")
+			if ev == null or not ("trigger" in ev):
+				return false
+			return by == str(ev.trigger)
+		"formula":
+			# The formula language with empty a/b/s and the project's variables and RNG.
+			var r: Dictionary = RPGFormula.evaluate_text(str(cond.get("text", "")), {"a": {}, "b": {}, "v": variables, "s": {}, "rng": rng})
+			if not r.ok:
+				_err("Formula condition: %s." % r.error)
+				return false
+			var val: Variant = r.value
+			return bool(val) if val is bool else float(val) != 0.0
+		"can_pass":
+			# Conditional Branch only: walks cells with the map's navigation rules.
+			if ctx == null or not ctx.has_method("character"):
+				_err("Can pass can only be checked in a Conditional Branch.")
+				return false
+			var walker: Variant = ctx.character(str(cond.get("target", "player")))
+			if walker == null or not ("cell" in walker):
+				_err("Can pass: '%s' is not on this map." % cond.get("target", "player"))
+				return false
+			var dirs := {"down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT, "up": Vector2i.UP}
+			var d := Vector2i(dirs.get(str(cond.get("facing", "down")), Vector2i.ZERO))
+			if d == Vector2i.ZERO:
+				_err("Can pass: unknown facing '%s'." % cond.get("facing", "down"))
+				return false
+			var m: Node = ctx.map
+			if m == null:
+				return false
+			var cell: Vector2i = walker.cell
+			for i in clampi(int(cond.get("distance", 1)), 1, 20):
+				if not m.movement.can_move(walker, cell, d):
+					return false
+				cell += d
+			return true
 		"vehicle":
 			# Riding a given vehicle ("" / "none" = on foot).
 			var want := str(cond.get("id", cond.get("vehicle", "")))
@@ -769,7 +821,8 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 
 
 ## Actor condition: in the party (default), or name / class / skill learned / weapon or armour
-## equipped / state, by `check` ({kind: "actor", id, check, name | class | skill | weapon | armor | state}).
+## equipped / state, or a level / HP / SP test (with `op` and `value`; HP and SP may compare
+## percentages), by `check` ({kind: "actor", id, check, ...}).
 func _check_actor(cond: Dictionary) -> bool:
 	var id := str(cond.get("id", ""))
 	var check := str(cond.get("check", "in_party"))
@@ -789,6 +842,22 @@ func _check_actor(cond: Dictionary) -> bool:
 			return b is Object and "equips" in b and b.equips.values().has(str(cond.get(check, "")))
 		"state":
 			return b is Object and b.has_method("has_state") and b.has_state(str(cond.get("state", "")))
+		"level":
+			var lv := 0
+			if b is Dictionary:
+				lv = int(b.get("level", 0))
+			elif "level" in b:
+				lv = int(b.level)
+			return compare(lv, str(cond.get("op", ">=")), int(resolve_operand(cond.get("value", 1))))
+		"hp", "sp":
+			var res := RPGPartyUtil.get_res(b, check)
+			var want := int(resolve_operand(cond.get("value", 1)))
+			if cond.get("percent", false):
+				var mx := 9999
+				if rules != null and rules.has_method("max_resource"):
+					mx = int(rules.max_resource(b, check))
+				return compare(int(res * 100.0 / maxi(mx, 1)), str(cond.get("op", ">=")), want)
+			return compare(res, str(cond.get("op", ">=")), want)
 	_err("Unknown actor check '%s'." % check)
 	return false
 

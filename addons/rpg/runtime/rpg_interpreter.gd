@@ -31,6 +31,8 @@ var stack: Array = []
 var budget_hits := 0
 ## Current command (for the debug inspector).
 var current_command: Dictionary = {}
+## How many called event pages are on the stack (Call Event); started_by conditions read it.
+var in_called_page := 0
 
 var _frame := -1
 var _count := 0
