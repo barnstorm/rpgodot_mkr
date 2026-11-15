@@ -388,6 +388,20 @@ func test_e23_graphic_draws_the_chosen_frame() -> void:
 	await frames(1)
 
 
+func test_e23_forbid_overlap_is_a_page_option_checkbox() -> void:
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup(RPGEventEditor.PAGE_FIELDS, data, registry, {"map_id": "town"})
+	var labels := []
+	for f in RPGEventEditor.PAGE_FIELDS[3].fields:
+		labels.append(str(f.get("label", "")))
+	assert_true(labels.has("Forbid event overlap"), "the option is on the page form: %s" % str(labels))
+	form.set_value({"options": {"forbid_overlap": true}})
+	assert_eq(form.get_value().get("options", {}).get("forbid_overlap", false), true, "the checkbox round-trips")
+	form.queue_free()
+	await frames(1)
+
+
 func test_e23_move_route_character_is_a_dropdown() -> void:
 	var form := RPGFormBuilder.for_command("move_route", registry, data, {"map_id": "town"})
 	tree.root.add_child(form)

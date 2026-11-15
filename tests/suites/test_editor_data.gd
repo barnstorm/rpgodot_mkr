@@ -385,6 +385,16 @@ func test_movement_type_choices_validate() -> void:
 	assert_true(bad.any(func(x): return str(x.message).find("movement type") != -1), "diagonal is refused")
 
 
+func test_forbid_overlap_page_option_validates() -> void:
+	var mk_events := func(opts): return {"schema_version": 1, "map": "town", "events": [
+		{"id": "no_pile_up", "position": [1, 1], "pages": [
+			{"priority": "below", "options": opts, "commands": []}]}]}
+	var p := RPGValidator.structure("events", mk_events.call({"forbid_overlap": true}), registry)
+	assert_eq(p, [], "forbid_overlap is a legal page option")
+	var bad := RPGValidator.structure("events", mk_events.call({"forbid_overlap": "yes"}), registry)
+	assert_true(bad.any(func(x): return str(x.message).find("forbid_overlap") != -1), "it must be true or false")
+
+
 func test_used_by_lists_reads_and_sets() -> void:
 	var extra := {"id": "user", "name": "", "position": [4, 4], "pages": [{"commands": [
 		{"type": "set_switch", "id": "door_unlocked", "value": "on"},

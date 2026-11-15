@@ -14,6 +14,10 @@ var trigger := ""
 var erased := false
 var move_type := "fixed"
 var custom_route: Dictionary = {}
+## RM2003's Forbid Event Overlap page option: this event cannot move onto a cell held by another
+## event on its own layer (below/same/above). Only matters for below/above events — same-priority
+## ones already block each other.
+var forbid_overlap := false
 var _move_wait := 0.0
 ## Current patrol direction for vertical/horizontal movement (ZERO until it starts).
 var _line_dir := Vector2i.ZERO
@@ -78,6 +82,7 @@ func apply_page(idx: int) -> void:
 		set_graphic(null)
 		is_hidden = true
 		priority = "below"
+		forbid_overlap = false
 		_update_frame()
 		_page_changed_routes(old_route)
 		return
@@ -89,6 +94,7 @@ func apply_page(idx: int) -> void:
 	set_graphic(page.get("graphic"))
 	direction_fix = bool(opts.get("direction_fix", false))
 	through = bool(opts.get("through", false))
+	forbid_overlap = bool(opts.get("forbid_overlap", false))
 	priority = str(page.get("priority", "same"))
 	trigger = str(page.get("trigger", "action_button"))
 	var mvt: Dictionary = page.get("movement", {})
