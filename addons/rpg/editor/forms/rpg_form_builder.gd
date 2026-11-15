@@ -88,6 +88,7 @@ const BATTLE_CONDITION_FIELDS := {
 	"enemy_hp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
 	"actor_hp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
+	"turn_end": [],
 }
 
 var fields: Array = []

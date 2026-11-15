@@ -497,6 +497,24 @@ func test_vehicle_condition() -> void:
 	await frames(1)
 
 
+func test_turn_end_battle_condition() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var ce := RPGConditionEditor.new(data, null, true)
+	tree.root.add_child(ce)
+	assert_has(ce._kinds, "turn_end", "battle pages offer Turn end")
+	ce.set_value({"kind": "turn_end"})
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "round trip with no fields")
+	ce._on_kind(ce._kinds.find("turn_end"))
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "picking Turn end needs no fields")
+	var out := []
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, true)
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, false)
+	assert_eq(out.size(), 1, "turn end is a battle condition")
+	ce.queue_free()
+	await frames(1)
+
+
 func test_operand_editor_random_and_game_data() -> void:
 	var data := RPGProjectData.open(TMP + "/rpg")
 	var form := RPGFormBuilder.new()

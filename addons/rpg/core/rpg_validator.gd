@@ -31,7 +31,7 @@ const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
 const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
-const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "actor_hp", "switch"]
+const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "actor_hp", "switch", "turn_end"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 
 ## Singular reference kind -> database type.

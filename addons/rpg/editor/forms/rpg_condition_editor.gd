@@ -12,6 +12,7 @@ signal pick_location_requested(callback: Callable, current: Variant)
 const KIND_LABELS := {
 	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "item": "Item / weapon / armour held",
 	"actor": "Actor", "gold": "Gold", "turn": "Turn", "enemy_hp": "Enemy HP", "actor_hp": "Actor HP",
+	"turn_end": "Turn end",
 	"vehicle": "Vehicle", "facing": "Character facing", "button": "Button held down",
 }
 
@@ -94,7 +95,8 @@ func set_value(v: Variant) -> void:
 		i = _kinds.size() - 1
 	_kind_opt.select(i)
 	_build(kind)
-	if _fields_for(kind)[0].key == "_json":
+	var flds := _fields_for(kind)
+	if not flds.is_empty() and flds[0].key == "_json":
 		_form.set_value({"_json": _value})
 	else:
 		_form.set_value(_value)
