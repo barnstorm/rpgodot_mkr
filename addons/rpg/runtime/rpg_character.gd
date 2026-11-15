@@ -48,6 +48,9 @@ var _frame_size := Vector2i(24, 32)
 
 var _sheet_tex: Texture2D
 var _route_token: RPGCancelToken = null
+## The forced route (Set Move Route) playing now, or null: this character's own movement
+## pauses while it runs (MV's isMoveRouteForcing).
+var _forced_token: RPGCancelToken = null
 
 
 func _init() -> void:
@@ -345,6 +348,8 @@ func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool
 		for s in steps:
 			if token.is_cancelled or not is_inside_tree():
 				return false
+			if _forced_token != null and token != _forced_token and not await _pause_for_forced(token):
+				return false
 			if not await _route_step(s, skip, token, timeout):
 				return false
 		if not repeat:
@@ -353,10 +358,47 @@ func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool
 	return not token.is_cancelled
 
 
+## A forced route (Set Move Route) takes over the character: this route — the event's custom
+## autonomous one — pauses while it plays, then resumes from the same step (MV's
+## restoreMoveRoute). False when this route was cancelled while waiting.
+func _pause_for_forced(token: RPGCancelToken) -> bool:
+	while _forced_token != null and _forced_token != token:
+		if token.is_cancelled or not is_inside_tree():
+			return false
+		await get_tree().process_frame
+	return true
+
+
+## Set Move Route: like run_route, but marks the route as forced, so the character's own
+## movement pauses while it plays. The route runs on the token given (its own, never the
+## calling event's), so cancel_forced_route() ends just the route, not the event.
+func run_forced_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool:
+	if _forced_token != null and not _forced_token.is_cancelled:
+		_forced_token.cancel("replaced by a new move route")
+	_forced_token = token
+	var ok: bool = await run_route(route, token, timeout)
+	if _forced_token == token:
+		_forced_token = null
+	return ok
+
+
+## True while a forced route (Set Move Route) is playing.
+func is_route_forced() -> bool:
+	return _forced_token != null and not _forced_token.is_cancelled
+
+
+## Ends the forced route early (a page change under the VX Ace style rules does).
+func cancel_forced_route(why := "page changed") -> void:
+	if _forced_token != null:
+		_forced_token.cancel(why)
+
+
 ## Stops the move route running on its own token (an autonomous custom route, or a Move Route
 ## that does not wait). Used when the map is unloaded: a route parked on a {wait} step otherwise
 ## keeps its timer, waiter and suspended function alive after the map is gone (a leak at exit).
 func cancel_route(why := "map unloaded") -> void:
+	if _forced_token != null:
+		_forced_token.cancel(why)
 	if _route_token != null:
 		_route_token.cancel(why)
 

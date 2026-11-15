@@ -34,6 +34,8 @@ Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event wai
 
 An event's page can have a **Custom route** as its movement too, for guards who patrol — or a *Vertical* / *Horizontal* movement type, when a simple up-and-down patrol is all a guard needs.
 
+A forced route takes over: while it plays, the character's own movement (random, approach, a custom route) is paused, and a custom route resumes where it left off when the forced route ends. If the event's page changes mid-route, the VX Ace style [rule system](Rule-Systems.md) cancels the forced route, as MV does; the classic rules keep it, and a custom route restarts from its first step unless both pages use the same route.
+
 ## 3. Screen effects
 
 | Command | What it does |

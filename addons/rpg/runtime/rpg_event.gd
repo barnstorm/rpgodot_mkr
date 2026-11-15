@@ -19,6 +19,8 @@ var _move_wait := 0.0
 var _line_dir := Vector2i.ZERO
 var _running_ticket: RPGScheduler.Ticket = null
 var _route_running := false
+## Token of the custom-route pass in flight (cancelled when a page change resets the index).
+var _custom_token: RPGCancelToken = null
 var _locked_facing := ""
 ## What last started this event (debug inspector).
 var last_trigger := ""
@@ -64,6 +66,7 @@ func refresh() -> void:
 
 func apply_page(idx: int) -> void:
 	var old_trigger := trigger
+	var old_route := custom_route
 	page_index = idx
 	page = data.pages[idx] if idx >= 0 else {}
 	var key := parallel_key()
@@ -76,6 +79,7 @@ func apply_page(idx: int) -> void:
 		is_hidden = true
 		priority = "below"
 		_update_frame()
+		_page_changed_routes(old_route)
 		return
 	is_hidden = false
 	var opts: Dictionary = page.get("options", {})
@@ -94,8 +98,26 @@ func apply_page(idx: int) -> void:
 	frequency = int(mvt.get("frequency", 3))
 	custom_route = mvt.get("route", {})
 	z_index = {"below": 1, "same": 2, "above": 4}.get(priority, 2)
+	_page_changed_routes(old_route)
 	if trigger == "parallel":
 		_start_parallel()
+
+
+## What a page change does to running routes (RPG Maker parity): under the VX Ace style rules a
+## forced Move Route is cancelled, as MV does on a page change; RM2000/2003 (the classic rules)
+## keep it, but a custom route restarts from step 0 unless both pages use the same route
+## (EasyRPG's RefreshPage keeps the index only then).
+func _page_changed_routes(old_route: Dictionary) -> void:
+	if _vx_ace_style_rules():
+		cancel_forced_route("page changed")
+	if old_route != custom_route and _custom_token != null:
+		_custom_token.cancel("page changed")
+
+
+## True under the VX Ace style rules, whose timing follows the newer RPG Makers (a page change
+## cancels a forced move route); the classic rules keep it, as RM2000/2003 do.
+func _vx_ace_style_rules() -> bool:
+	return str(map.rpg.data.project.get("rules", "classic")) == "vx_ace"
 
 
 func parallel_key() -> String:
@@ -190,9 +212,9 @@ func _process(delta: float) -> void:
 
 
 ## Autonomous movement: random, approach or flee the player, a vertical/horizontal patrol,
-## or a custom route.
+## or a custom route. Pauses while a forced Move Route plays (Set Move Route takes over).
 func _autonomous(delta: float) -> void:
-	if move_type == "fixed" or _route_running:
+	if move_type == "fixed" or _route_running or is_route_forced():
 		return
 	_move_wait -= delta
 	if _move_wait > 0.0:
@@ -227,9 +249,13 @@ func _autonomous(delta: float) -> void:
 func _run_custom_route() -> void:
 	_route_running = true
 	var tok := RPGCancelToken.new()
+	_custom_token = tok
 	var r := custom_route.duplicate()
 	r["repeat"] = false
 	await run_route(r, tok)
+	if _custom_token != tok:
+		return  # A newer pass owns the flags (the page changed): leave its state alone.
+	_custom_token = null
 	_route_running = false
 	if not custom_route.get("repeat", true):
 		move_type = "fixed"
