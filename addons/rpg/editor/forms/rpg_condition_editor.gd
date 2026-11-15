@@ -12,7 +12,8 @@ signal pick_location_requested(callback: Callable, current: Variant)
 const KIND_LABELS := {
 	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "item": "Item / weapon / armour held",
 	"actor": "Actor", "gold": "Gold", "turn": "Turn", "enemy_hp": "Enemy HP", "actor_hp": "Actor HP",
-	"turn_end": "Turn end",
+	"turn_end": "Turn end", "actor_can_act": "Actor can act", "enemy_can_act": "Enemy can act",
+	"enemy_is_target": "Enemy is the target",
 	"vehicle": "Vehicle", "facing": "Character facing", "button": "Button held down",
 }
 
@@ -40,7 +41,7 @@ func _init(p_data: RPGProjectData = null, p_registry: RPGCommandRegistry = null,
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var table: Dictionary = RPGFormBuilder.BATTLE_CONDITION_FIELDS if battle else RPGFormBuilder.CONDITION_FIELDS
 	for k in table.keys():
-		if branch or not RPGFormBuilder.BRANCH_ONLY_CONDITIONS.has(k):
+		if (branch or not RPGFormBuilder.BRANCH_ONLY_CONDITIONS.has(k)) and not (branch and RPGFormBuilder.PAGE_ONLY_CONDITIONS.has(k)):
 			_kinds.append(k)
 	# Kinds the project's enabled extensions declare (manifest "conditions").
 	_ext_kinds = registry.condition_kinds() if registry != null else {}

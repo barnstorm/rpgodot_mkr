@@ -119,6 +119,7 @@ var _extra := {}               ## timed: battler -> extra actions left ("action_
 var _known_states := {}        ## hooks: battler -> state ids last reported
 var _defeated := {}            ## hooks: battlers reported as defeated (until revived)
 var _forced := false          ## the result came from force_result()
+var _last_action_targets: Array = []  ## targets of the most recently executed action
 
 
 func _init(p_party: Array = [], p_troop: Dictionary = {}, p_rules: RPGRuleSystem = null, p_rng: RPGRandom = null) -> void:
@@ -170,6 +171,7 @@ func start() -> void:
 	_result = ""
 	_forced = false
 	_rewards = {}
+	_last_action_targets.clear()
 	_page_runs.clear()
 	_queue.clear()
 	_queue_built = false
@@ -419,6 +421,9 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary) -> void:
 			res.lines.append_array(e.lines)
 		_:
 			res.lines.append(rules.term("wait", [b.name]))
+	# A guard targets its user; escape and wait target nothing. Neither leaves the last action's
+	# targets pointing at an enemy, so the branch check stops holding there.
+	_last_action_targets = [b] if kind == "guard" else []
 
 
 # --- hooks ---------------------------------------------------------------------------------------
@@ -544,6 +549,7 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			return
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
 	rules.pay_cost(b, action)
+	_last_action_targets = targets
 	match kind:
 		"attack":
 			res.lines.append(rules.term("attack", [b.name]))
@@ -1078,6 +1084,32 @@ func _switch_is(id: String, value: bool) -> bool:
 	if not switch_reader.is_valid():
 		return false
 	return bool(switch_reader.call(id)) == value
+
+
+## A Conditional Branch battle check (RM2000/2003): whether an actor in the party or an enemy
+## by its 0-based member index can act (present and not held back by a state), and whether an
+## enemy is the target of the action that just ran (true only for a single-enemy action).
+## Battlers that are not in the fight give false. The game state routes these kinds here
+## through the battle facade while a battle runs.
+func branch_check(kind: String, cond: Dictionary) -> bool:
+	match kind:
+		"actor_can_act":
+			for a in party:
+				if a.id == str(cond.get("id", "")):
+					return a.is_active() and rules.can_act(a)
+			return false
+		"enemy_can_act", "enemy_is_target":
+			var e: RPGBattler = null
+			for x in enemies:
+				if x.index == int(cond.get("index", 0)):
+					e = x
+					break
+			if e == null:
+				return false
+			if kind == "enemy_can_act":
+				return e.is_active() and rules.can_act(e)
+			return _last_action_targets.size() == 1 and _last_action_targets[0] == e
+	return false
 
 
 static func _compare(a: float, op: String, b: float) -> bool:

@@ -229,6 +229,8 @@ static func _condition_schema() -> Dictionary:
 		{"properties": {"kind": {"enum": ["all", "any"]}, "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}}}, "required": ["kind", "conditions"]},
 		{"properties": {"kind": {"const": "not"}, "condition": {"$ref": "#/$defs/condition"}}, "required": ["kind", "condition"]},
 		{"properties": {"kind": {"enum": ["turn", "enemy_hp", "actor_hp", "turn_end"]}}, "required": ["kind"]},
+		{"properties": {"kind": {"const": "actor_can_act"}, "id": {"$ref": "#/$defs/id"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"enum": ["enemy_can_act", "enemy_is_target"]}, "index": {"type": "integer", "minimum": 0}}, "required": ["kind"]},
 	]
 	for b in branches:
 		b["type"] = "object"
