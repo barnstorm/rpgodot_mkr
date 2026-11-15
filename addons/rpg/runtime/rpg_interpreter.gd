@@ -3,17 +3,19 @@ class_name RPGInterpreter
 extends RefCounted
 ## Runs a command list in order, pausing whenever a command waits.
 ## Lifecycle: IDLE -> RUNNING <-> WAITING -> COMPLETED | CANCELLED | FAILED.
-## Each interpreter has an owner, a cancellation token, a call stack with a depth limit and a
-## per-frame command budget: when the budget runs out it yields to the next frame, so an
-## endless loop without waits cannot freeze the game.
+## Each interpreter has an owner, a cancellation token, a per-frame command budget and a call
+## depth limit: when the budget runs out it yields to the next frame, so an endless loop without
+## waits cannot freeze the game. The budget matches RM2000/2003 (10,000 commands per frame); the
+## depth limit counts only common-event and page calls (100, like MV) — branches, loops and
+## choices nest freely.
 
 signal finished(result: RPGResult)
 signal state_changed(new_state: int)
 
 enum State { IDLE, RUNNING, WAITING, COMPLETED, CANCELLED, FAILED }
 
-const DEFAULT_DEPTH_LIMIT := 32
-const DEFAULT_BUDGET := 256
+const DEFAULT_DEPTH_LIMIT := 100
+const DEFAULT_BUDGET := 10000
 
 var rpg: Node
 ## {kind: "map_event"|"common_event"|"battle_event"|"api"|"test", map, event, page, id}
@@ -33,6 +35,8 @@ var budget_hits := 0
 var current_command: Dictionary = {}
 ## How many called event pages are on the stack (Call Event); started_by conditions read it.
 var in_called_page := 0
+## The chain of called common events and pages, newest last (the depth limit's error names it).
+var call_chain: Array[String] = []
 ## True for parallel-event interpreters: they sleep between commands while a menu-type screen or
 ## a battle suspends the map (RPG Maker's map scene), resuming at the same command when it closes.
 ## Main interpreters never sleep (the one that opened the screen is waiting on it).
@@ -47,6 +51,9 @@ func _init(p_rpg: Node, p_owner: Dictionary = {}, p_event: Node = null) -> void:
 	owner = p_owner
 	event = p_event
 	ctx = RPGContext.new(rpg, self, event, token)
+	# A project can tune the per-frame budget (project.json: "interpreter_budget").
+	if p_rpg != null and "data" in p_rpg and p_rpg.data != null:
+		budget = int(p_rpg.data.project.get("interpreter_budget", DEFAULT_BUDGET))
 
 
 func is_active() -> bool:
@@ -92,11 +99,8 @@ func run(commands: Array) -> RPGResult:
 
 
 ## Runs a nested list inside this interpreter (used by if/loop/choices and call_common_event).
+## Blocks (branches, loops, choices) nest freely: only calls count toward the depth limit.
 func run_list(list: Array, label := "") -> RPGResult:
-	if stack.size() >= depth_limit:
-		var e := RPGResult.error("Call depth limit (%d) reached in %s. Check for a common event or a called page calling itself." % [depth_limit, describe_owner()])
-		e.where = where()
-		return e
 	var frame := {"label": label, "list": list, "index": 0}
 	stack.append(frame)
 	var result := RPGResult.ok()
@@ -154,6 +158,26 @@ static func find_label(list: Array, label_name: String) -> int:
 		if c is Dictionary and str(c.get("type", "")) == "label" and str(c.get("name", "")) == label_name and not c.get("skip", false):
 			return j
 	return -1
+
+
+## Entering a called common event or event page (Call Common Event / Call Event). Returns "" when
+## the call may proceed, or the error that stops it: nested calls are capped at `depth_limit`
+## (100, like MV) and the error names the chain of calls that led there.
+func push_call(label: String) -> String:
+	if call_chain.size() >= depth_limit:
+		# Show how the chain was entered and where it loops; the middle is more of the same.
+		var shown := call_chain.duplicate()
+		if shown.size() > 7:
+			shown = shown.slice(0, 2) + ["...(%d calls)" % (shown.size() - 7)] + shown.slice(shown.size() - 5)
+		return "Call depth limit (%d) reached: %s. Check for a common event or a called page calling itself." % [depth_limit, " -> ".join(shown)]
+	call_chain.append(label)
+	return ""
+
+
+## Leaving a called common event or event page (its list finished, errored or was cancelled).
+func pop_call() -> void:
+	if not call_chain.is_empty():
+		call_chain.pop_back()
 
 
 ## Executes one command object.

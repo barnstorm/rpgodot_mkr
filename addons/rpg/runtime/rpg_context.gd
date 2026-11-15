@@ -92,6 +92,9 @@ func run_list(list: Variant, label := "") -> RPGResult:
 ## "this event", so self switches, self variables and \E[] codes in the page belong to it; the
 ## caller's event is restored afterwards.
 func run_event_page(ev: Node, commands: Array, label: String) -> RPGResult:
+	var err := interpreter.push_call(label)
+	if err != "":
+		return RPGResult.error(err)
 	var prev_event := event
 	var prev_map := _event_map
 	var prev_id := _event_id
@@ -101,6 +104,7 @@ func run_event_page(ev: Node, commands: Array, label: String) -> RPGResult:
 	interpreter.in_called_page += 1
 	var r: RPGResult = await interpreter.run_list(commands, label)
 	interpreter.in_called_page -= 1
+	interpreter.pop_call()
 	event = prev_event
 	_event_map = prev_map
 	_event_id = prev_id

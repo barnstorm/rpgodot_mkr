@@ -146,10 +146,49 @@ func test_recursion_hits_depth_limit_with_error() -> void:
 	var r: RPGResult = await env.rpg.run_common_event("recurse")
 	assert_true(r.is_error(), "depth limit is an error")
 	assert_true(r.message.contains("depth"), r.message)
+	assert_true(r.message.contains("recurse"), "the error names the call chain: %s" % r.message)
 	assert_false(env.rpg.scheduler.input_locked())
 
 
-func test_loop_without_wait_yields_instead_of_freezing() -> void:
+func test_call_event_recursion_names_the_chain() -> void:
+	# Depth limit errors list the called pages/common events, so a recursion is easy to spot.
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	chest.data["pages"].append({
+		"conditions": [], "graphic": null, "movement": {"type": "fixed"}, "options": {},
+		"priority": "same", "trigger": "action_button",
+		"commands": [{"type": "call_common_event", "id": "recurse"}],
+	})
+	var r: RPGResult = await env.rpg.run_commands([{"type": "call_event", "target": "id", "id": "chest", "page": 3}])
+	assert_true(r.is_error(), str(r))
+	assert_true(r.message.contains("common:recurse"), "the chain names the common event: %s" % r.message)
+	assert_true(r.message.contains("event:town/chest:2"), "and the called page: %s" % r.message)
+
+
+func test_deeply_nested_branches_do_not_hit_a_depth_limit() -> void:
+	# The depth limit counts only common-event and page calls (100, like MV); branches, loops and
+	# choices nest freely, as in every RPG Maker.
+	var cmds: Array = [{"type": "set_variable", "id": "counter", "operation": "set", "value": 7}]
+	for _i in 40:
+		cmds = [{"type": "if", "condition": {"kind": "variable", "id": "counter", "op": ">=", "value": 0}, "then": cmds, "else": []}]
+	var r: RPGResult = await env.rpg.run_commands(cmds)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 7, "the innermost command ran through 40 nested branches")
+
+
+func test_a_long_command_list_finishes_in_one_frame() -> void:
+	# RM2000/2003 runs up to 10,000 commands per interpreter per frame; the kit matches, so a
+	# 2,000-iteration loop (or a HUD redraw) is never shown half done.
+	var start := Engine.get_process_frames()
+	var r: RPGResult = await env.rpg.run_common_event("busy_loop")
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 2000)
+	assert_true(Engine.get_process_frames() - start <= 2, "finished within one frame")
+
+
+func test_the_budget_still_yields_with_a_small_setting() -> void:
+	# A project can lower the budget (project.json: "interpreter_budget"); the interpreter then
+	# spreads the work over frames instead of freezing the game.
+	env.rpg.data.project["interpreter_budget"] = 100
 	var start := Engine.get_process_frames()
 	var r: RPGResult = await env.rpg.run_common_event("busy_loop")
 	assert_true(r.is_ok(), str(r))
