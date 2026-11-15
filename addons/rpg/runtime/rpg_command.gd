@@ -118,6 +118,12 @@ static func describe_operand(v: Variant) -> String:
 		return "[%s]" % v.variable
 	if v is Dictionary and v.has("pointer"):
 		return "[*%s]" % v.pointer
+	if v is Dictionary and v.get("self_variable") is Dictionary:
+		var sv: Dictionary = v.self_variable
+		var who := str(sv.get("event", "this"))
+		if str(sv.get("map", "")) != "":
+			who = "%s@%s" % [who, sv.map]
+		return "%s.%s" % [who, sv.get("name", "?")]
 	if v is Dictionary and v.get("random") is Array and v.random.size() == 2:
 		return "random %s..%s" % [v.random[0], v.random[1]]
 	if v is Dictionary and v.get("game_data") is Dictionary:

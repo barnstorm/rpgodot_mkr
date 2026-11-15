@@ -33,9 +33,9 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Control Self Switch** | `set_self_switch` | Self switch, ON, Event (blank = this event) |
+| **Control Self Switch** | `set_self_switch` | Action, Self switch, ON, Event (blank = this event), Map (blank = this map) |
 | **Control Switch** | `set_switch` | Switch, Set to |
-| **Control Variable** | `set_variable` | Variable, Operation, Value |
+| **Control Variable** | `set_variable` | Target (One variable / Range / Indirect / Self variable), Variable, From, To, Holds the target's id, Name, Event (blank = this event), Map (blank = this map), Operation, Value |
 | **Get Location Info** | `get_location_info` | Store in, Info, Layer, X, Y |
 
 ## Party

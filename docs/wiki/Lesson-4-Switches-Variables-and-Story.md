@@ -9,6 +9,7 @@ A story needs memory: has the hero met the king? How many apples have they picke
 | **Switch** | ON or OFF, for the whole game | `farmer_quest_started` |
 | **Variable** | a value for the whole game: usually a whole number, or a decimal, true/false or text (set on the Switches and variables tab) | `apples` |
 | **Self switch** | ON or OFF (A, B, C, D) for one event | "this tree was picked" |
+| **Self variable** | a named value (number, true/false or text) for one event | `times_opened` on this chest |
 
 Switches and variables have **names**, not numbers: `talked_to_king`, not "Switch 0012". You create them on the Database's **Switches and variables** tab, or straight from any switch or variable field with **New…**: type the name and it exists.
 
@@ -43,7 +44,8 @@ Page conditions can be:
 | --- | --- |
 | Switch | a switch is ON (or OFF) |
 | Variable | a variable compares with a value: =, ≠, <, ≤, >, ≥ |
-| Self switch | one of this event's self switches is ON (or OFF) |
+| Self switch | one of this event's self switches is ON (or OFF) — or another event's, on any map |
+| Self variable | one of this event's self variables compares with a value — or another event's, on any map |
 | Item / weapon / armour held | the party has at least N of it |
 | Actor | an actor is in the party |
 
@@ -76,6 +78,10 @@ Page 1's condition makes the trees useless before the quest begins; page 2 makes
 
 The target can be one variable, a **range** of them (every declared variable between the two ends, in the order they were declared; random values re-roll for each one), or **indirect**: a variable whose *value is the id* of the variable to change. The value can be indirect the same way (**Pointer** mode reads the variable whose id another variable holds). **Control Switch** has the same target modes: a range turns every declared switch between its two ends ON or OFF (or flips them) at once, and the indirect target reads the switch's id from a variable.
 
+The fourth target is **Self variable**: a named value that belongs to one event instead of the whole game — `times_opened add 1` on a chest counts how often it was opened, and copies of the event each keep their own count. No need to declare it anywhere; the first value you store fixes its type, and after that the same rules as variables apply (numbers coerce into text, text that isn't a number is refused). A self variable works everywhere a value is needed: as an operand in **Control Variable** (Self variable mode), in **Conditional Branch** and as a page condition (*Self variable*), and in messages as `\E[times_opened]`.
+
+Self switches and self variables don't have to be this event's, either: fill in **Event** with another event's id, and **Map** to reach an event on another map (blank = this event, this map). A lever in one room can open a door two maps away, and a page can be gated on another event's self switch. **Control Self Switch** also has **Reset one event** and **Reset whole map**, which erase the self switches *and* self variables of that event (or every event on the map) — handy for a dungeon that re-locks itself.
+
 ## 4. Conditional Branch: the farmer checks
 
 Go back to the farmer's page 2 and replace its line:
@@ -97,7 +103,7 @@ Add page 3 with the condition `farmer_quest_done is ON` and the line "Thanks aga
 
 ## 5. Show it on screen
 
-Messages show variables and switches with codes: `\V[apples]` shows the number, `\S[farmer_quest_done]` shows ON or OFF. See [Message codes](Message-Codes.md).
+Messages show variables and switches with codes: `\V[apples]` shows the number, `\S[farmer_quest_done]` shows ON or OFF, and `\E[times_opened]` a self variable of the event showing the text (`\E[map/event/name]` for any other event's). See [Message codes](Message-Codes.md).
 
 ## 6. Check your work
 
@@ -112,5 +118,6 @@ On the editor side, **Tools > Event search** finds every event that uses a switc
 - Use a **Loop** with **Break Loop** to ask "How many apples will you sell? (Input Number)" until the answer is valid.
 - Use **Label** and **Jump to Label** to repeat a shop keeper's question.
 - Add a choice to the farmer that only appears while the party has a *Golden apple* (Show Choices' *Shown only while switch is ON*, with a switch you set when the golden apple is found).
+- Make a chest that pays out more every time: a self variable `times_opened`, then *Change Gold +* with the value `10 multiply times_opened`… or invent your own reward.
 
 Next: [Lesson 5: Cutscenes and common events](Lesson-5-Cutscenes-and-Common-Events.md).

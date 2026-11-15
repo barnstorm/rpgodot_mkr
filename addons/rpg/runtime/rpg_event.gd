@@ -275,6 +275,7 @@ static func _describe_condition(c: Dictionary) -> String:
 	match str(c.get("kind", "")):
 		"switch": return "switch %s is %s" % [c.get("id", ""), "ON" if c.get("value", true) else "OFF"]
 		"self_switch": return "self switch %s" % c.get("id", "")
+		"self_variable": return "self variable %s %s %s" % [c.get("name", ""), c.get("op", "=="), c.get("value", "")]
 		"variable": return "variable %s %s %s" % [c.get("id", ""), c.get("op", ">="), c.get("value", "")]
 		"item": return "has item %s" % c.get("id", "")
 		"actor": return "%s in party" % c.get("id", "")
