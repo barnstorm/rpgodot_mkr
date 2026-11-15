@@ -435,6 +435,26 @@ func test_rename_id_updates_every_typed_reference() -> void:
 	assert_eq(r4.data_by_file[path].events[4].id, "big_chest")
 
 
+## #55: a Control Switch range's "from"/"to" count as writes, so Used-by lists them and renames
+## rewrite them; the indirect target's variable ref stays a read.
+func test_set_switch_range_refs_are_sets_and_rename() -> void:
+	var extra := {"id": "ranger", "name": "", "position": [6, 6], "pages": [{"commands": [
+		{"type": "set_switch", "target": "range", "from": "door_unlocked", "to": "touched", "value": "on"},
+		{"type": "set_switch", "target": "pointer", "pointer": "counter", "value": "on"}]}]}
+	var path := RPGValidator.events_path(data, "town")
+	var files := _events_files([extra])
+	var u := RPGValidator.used_by(data, registry, "switch", "touched", files)
+	assert_true(u.any(func(x): return x.record == "ranger" and x.access == "set"), "range end is a set: %s" % str(u))
+	var uv := RPGValidator.used_by(data, registry, "variable", "counter", files)
+	assert_true(uv.any(func(x): return x.record == "ranger" and x.access == "read"), "pointer reads the variable: %s" % str(uv))
+	var r := RPGValidator.rename_id(data, registry, "switch", "touched", "poked", files)
+	assert_true(r.ok, r.error)
+	var ranger: Dictionary = r.data_by_file[path].events[r.data_by_file[path].events.size() - 1]
+	var cmd: Dictionary = ranger.pages[0].commands[0]
+	assert_eq(cmd.to, "poked", "range end renamed")
+	assert_eq(cmd.from, "door_unlocked", "range start untouched")
+
+
 # --------------------------------------------------------------------------------------------
 # Schema
 # --------------------------------------------------------------------------------------------

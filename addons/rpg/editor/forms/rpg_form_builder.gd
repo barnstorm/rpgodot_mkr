@@ -251,7 +251,7 @@ func missing_required() -> Array:
 	var out := []
 	for f in fields:
 		var k := str(f.get("key", ""))
-		if k == "" or not f.get("required", false) or not RPGCommand._visible(f, _value):
+		if k == "" or not f.get("required", false) or not RPGCommand._visible(f, _value, fields):
 			continue
 		var v: Variant = _value[k] if _value.has(k) else f.get("default")
 		if v == null or (typeof(v) == TYPE_STRING and str(v).strip_edges() == ""):
@@ -356,7 +356,7 @@ func _update_visibility() -> void:
 	for key in _editors:
 		var ed: Dictionary = _editors[key]
 		var f: Dictionary = ed.field
-		var vis := RPGCommand._visible(f, _value)
+		var vis := RPGCommand._visible(f, _value, fields)
 		if f.get("kind", "") == "commands" and options.get("hide_command_lists", false):
 			vis = false
 		if f.get("kind", "") == "variant" and variant_case(f, _value).is_empty():

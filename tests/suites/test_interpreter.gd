@@ -408,3 +408,66 @@ func test_variable_pointer_target_and_source() -> void:
 		{"type": "set_variable", "target": "pointer", "pointer": "scene_result", "operation": "set", "value": 1},
 	], {"kind": "api", "id": "ptr2"})
 	assert_true(r2.is_error(), str(r2))
+
+
+# --- Control Switch target modes (#55) ---------------------------------------------------------------
+
+
+func test_switch_target_range() -> void:
+	# Switches in state.json order: door_unlocked, autorun_on, parallel_on, touched.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "autorun_on", "to": "touched", "value": "on"},
+	], {"kind": "api", "id": "swrange"})
+	assert_true(r.is_ok(), str(r))
+	assert_false(env.rpg.get_switch("door_unlocked"), "before the range")
+	assert_true(env.rpg.get_switch("autorun_on"))
+	assert_true(env.rpg.get_switch("parallel_on"))
+	assert_true(env.rpg.get_switch("touched"))
+	# Reversed endpoints span the same switches; toggle flips each one where it stands.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "touched", "to": "autorun_on", "value": "toggle"},
+	], {"kind": "api", "id": "swrange2"})
+	assert_true(r2.is_ok(), str(r2))
+	assert_false(env.rpg.get_switch("autorun_on"))
+	assert_false(env.rpg.get_switch("parallel_on"))
+	assert_false(env.rpg.get_switch("touched"))
+
+
+func test_switch_range_is_atomic_and_indirect() -> void:
+	await env.rpg.run_commands([
+		{"type": "set_switch", "id": "autorun_on", "value": "on"},
+		{"type": "set_switch", "id": "door_unlocked", "value": "off"},
+	])
+	# A range naming an undeclared switch flips nothing.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "door_unlocked", "to": "ghost", "value": "on"},
+	], {"kind": "api", "id": "swatom"})
+	assert_true(r.is_error() and r.message.contains("ghost"), str(r))
+	assert_false(env.rpg.get_switch("door_unlocked"), "unchanged")
+	assert_true(env.rpg.get_switch("autorun_on"), "unchanged")
+	# Indirect: the switch id comes from a variable (RM2003's switch number from a variable).
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "touched"},
+		{"type": "set_switch", "target": "pointer", "pointer": "hero_name", "value": "on"},
+	], {"kind": "api", "id": "swptr"})
+	assert_true(r2.is_ok(), str(r2))
+	assert_true(env.rpg.get_switch("touched"))
+	var r3: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "ghost"},
+		{"type": "set_switch", "target": "pointer", "pointer": "hero_name", "value": "on"},
+	], {"kind": "api", "id": "swptr2"})
+	assert_true(r3.is_error(), str(r3))
+
+
+func test_switch_range_sets_pages_at_the_safe_point() -> void:
+	# The whole range lands, then pages re-check at the next safe point (the door's page 2 needs
+	# door_unlocked, the range's first switch).
+	var door: RPGEvent = env.game.map.get_event("town_house_door")
+	assert_eq(door.page_index, 0)
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "door_unlocked", "to": "touched", "value": "on"},
+	], {"kind": "api", "id": "swpage"})
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.rpg.get_switch("door_unlocked") and env.rpg.get_switch("touched"), "whole range set")
+	await frames(2)
+	assert_eq(door.page_index, 1, "pages re-checked after the range")
