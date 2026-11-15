@@ -952,6 +952,93 @@ func test_a_blocked_route_step_with_skip_still_skips() -> void:
 	assert_eq(ev.cell, Vector2i(11, 8), "both blocked steps were skipped, not waited on")
 
 
+# --- Map suspended behind screens (#69) ----------------------------------------------------------
+
+const QUICK_SCENE := "res://tests/fixtures/scenes/quick_scene.gd"
+
+
+## Opens a contract scene that never finishes, in the background, until `hold` seconds pass.
+func _hold_scene(hold: float, pause_map := true) -> void:
+	env.rpg.run_commands([
+		{"type": "run_scene", "scene": QUICK_SCENE, "args": {"never": true}, "timeout": hold, "pause_map": pause_map},
+	])
+
+
+func test_a_scene_pauses_parallels_and_wandering_npcs() -> void:
+	# Battle opens through run_contract_scene, so this is the battle path too.
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	var ev := await _place_chest(Vector2i(4, 3))
+	ev.move_type = "random"
+	ev.frequency = 5
+	ev._move_wait = 0.0
+	await _await_step(ev)
+	var parked := ev.cell
+	_hold_scene(0.8)
+	await env.tree.create_timer(0.2).timeout
+	assert_true(env.rpg.scheduler.map_suspended(), "the map is suspended while the scene is open")
+	var frozen: int = env.rpg.state.get_variable("ticks")
+	await env.tree.create_timer(0.35).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), frozen, "the parallel did not tick during the scene")
+	assert_eq(ev.cell, parked, "the wandering NPC did not move during the scene")
+	await env.tree.create_timer(0.5).timeout
+	assert_false(env.rpg.scheduler.map_suspended(), "the map resumed when the scene closed")
+	assert_true(env.rpg.state.get_variable("ticks") > frozen, "the parallel resumed")
+	var c := await _await_step(ev)
+	assert_true(c != parked, "the NPC resumed walking")
+
+
+func test_the_menu_pauses_the_map() -> void:
+	env.rpg.data.project["scenes"] = {"menu": "res://tests/fixtures/scenes/held_menu.gd"}
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	env.game.open_menu()
+	await frames(3)
+	assert_true(env.rpg.scheduler.map_suspended(), "the map is suspended while the menu is open")
+	assert_true(env.rpg.scheduler.input_locked(), "input is locked")
+	var frozen: int = env.rpg.state.get_variable("ticks")
+	await env.tree.create_timer(0.3).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), frozen, "the parallel did not tick behind the menu")
+	var m: Node = env.rpg.ui.scene_stack[0]
+	m.closed.emit()
+	await frames(3)
+	assert_false(env.rpg.scheduler.map_suspended(), "the map resumed when the menu closed")
+	await env.tree.create_timer(0.2).timeout
+	assert_true(env.rpg.state.get_variable("ticks") > frozen, "the parallel resumed")
+
+
+func test_a_parallels_wait_does_not_advance_behind_a_scene() -> void:
+	# counter: 1 while the 0.6 s wait runs, 2 after. The wait must not advance while the scene
+	# holds the map, even though 0.6 s of real time passes behind it.
+	env.rpg.data.common_events["probe"] = {"trigger": "parallel", "switch": "parallel_on", "commands": [
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": 1},
+		{"type": "wait", "seconds": 0.6},
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": 2},
+		{"type": "set_switch", "id": "parallel_on", "value": "off"},
+	]}
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.15).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 1, "the probe is mid-wait")
+	_hold_scene(0.5)
+	await env.tree.create_timer(0.75).timeout
+	assert_false(env.rpg.scheduler.map_suspended(), "the scene closed")
+	assert_eq(env.rpg.state.get_variable("counter"), 1, "the wait did not advance behind the scene")
+	await env.tree.create_timer(0.7).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 2, "the wait finished after the map resumed")
+
+
+func test_an_overlay_scene_can_opt_out_of_the_pause() -> void:
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	_hold_scene(0.6, false)
+	await env.tree.create_timer(0.2).timeout
+	assert_true(env.rpg.ui.scene_open(), "the overlay scene is open")
+	assert_false(env.rpg.scheduler.map_suspended(), "an overlay scene does not suspend the map")
+	var during: int = env.rpg.state.get_variable("ticks")
+	await env.tree.create_timer(0.3).timeout
+	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel kept running under the overlay")
+
+
 # --- Call Event (#60) ---------------------------------------------------------------------------
 
 func test_call_event_runs_a_page_with_the_called_event_as_this() -> void:

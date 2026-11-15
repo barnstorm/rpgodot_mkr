@@ -574,8 +574,10 @@ func open_menu() -> void:
 	var node: Node = rpg.ui.open_scene(rpg.ui.scene_path("menu"))
 	if node != null and node.has_signal("closed"):
 		rpg.scheduler.lock_input("menu")
+		rpg.scheduler.suspend_map("menu")
 		rpg.menu_opened.emit(node)
 		await node.closed
+		rpg.scheduler.resume_map("menu")
 		rpg.scheduler.unlock_input("menu")
 		rpg.ui.close_scene(node)
 		refresh_party_graphics()
@@ -588,7 +590,9 @@ func open_debug() -> void:
 	var node: Node = rpg.ui.open_scene(rpg.ui.scene_path("debug"))
 	if node != null and node.has_signal("closed"):
 		rpg.scheduler.lock_input("debug")
+		rpg.scheduler.suspend_map("debug")
 		await node.closed
+		rpg.scheduler.resume_map("debug")
 		rpg.scheduler.unlock_input("debug")
 		rpg.ui.close_scene(node)
 
@@ -674,7 +678,9 @@ func _process(_delta: float) -> void:
 		if node != null and node.has_method("setup"):
 			node.setup("save")
 			rpg.scheduler.lock_input("save")
+			rpg.scheduler.suspend_map("save")
 			await node.closed
+			rpg.scheduler.resume_map("save")
 			rpg.scheduler.unlock_input("save")
 			rpg.ui.close_scene(node)
 	if Input.is_action_just_pressed("rpg_overlay") and rpg.playtest and map != null:

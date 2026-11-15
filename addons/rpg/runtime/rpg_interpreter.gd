@@ -33,6 +33,10 @@ var budget_hits := 0
 var current_command: Dictionary = {}
 ## How many called event pages are on the stack (Call Event); started_by conditions read it.
 var in_called_page := 0
+## True for parallel-event interpreters: they sleep between commands while a menu-type screen or
+## a battle suspends the map (RPG Maker's map scene), resuming at the same command when it closes.
+## Main interpreters never sleep (the one that opened the screen is waiting on it).
+var suspends_with_map := false
 
 var _frame := -1
 var _count := 0
@@ -101,6 +105,8 @@ func run_list(list: Array, label := "") -> RPGResult:
 		if token.is_cancelled:
 			result = RPGResult.cancelled(token.reason)
 			break
+		if suspends_with_map:
+			await _sleep_while_suspended()
 		await _spend_budget()
 		if token.is_cancelled:
 			result = RPGResult.cancelled(token.reason)
@@ -193,6 +199,13 @@ func _spend_budget() -> void:
 		await rpg.get_tree().process_frame
 		_frame = Engine.get_process_frames()
 		_count = 1
+
+
+## A parallel sleeps here while a menu, shop, save screen or battle suspends the map, and
+## resumes at this exact command when the screen closes.
+func _sleep_while_suspended() -> void:
+	while rpg.scheduler.map_suspended() and not token.is_cancelled:
+		await rpg.get_tree().process_frame
 
 
 func _fail(msg: String) -> RPGResult:

@@ -57,7 +57,27 @@ var queue: Array[Ticket] = []
 var parallels: Dictionary = {}
 ## reason -> count. Anything here blocks player input (transfers, open scenes...).
 var input_locks: Dictionary = {}
+## reason -> count. While any is held the map is suspended, like RPG Maker's map scene behind a
+## menu, shop, save screen or battle: parallel events sleep and autonomous movement stops.
+## Message boxes never hold one.
+var scene_pauses: Dictionary = {}
 var paused := false
+
+
+## True while a menu-type screen or a battle suspends the map (parallels and wandering NPCs sleep).
+func map_suspended() -> bool:
+	return not scene_pauses.is_empty()
+
+
+func suspend_map(reason: String) -> void:
+	scene_pauses[reason] = int(scene_pauses.get(reason, 0)) + 1
+
+
+func resume_map(reason: String) -> void:
+	if scene_pauses.has(reason):
+		scene_pauses[reason] -= 1
+		if scene_pauses[reason] <= 0:
+			scene_pauses.erase(reason)
 
 
 func _init(p_rpg: Node = null) -> void:
@@ -157,11 +177,17 @@ func _run_parallel(task: ParallelTask) -> void:
 	# Start on the next frame so tasks started in one refresh run in a fixed order.
 	await get_tree().process_frame
 	while not task.cancelled:
+		# A menu-type screen or battle suspends the map: no new round starts until it closes.
+		while map_suspended() and not task.cancelled:
+			await get_tree().process_frame
+		if task.cancelled:
+			break
 		# The event's map was freed (e.g. a failed transfer rolled back): stop cleanly so
 		# `stopped` is always emitted and the key never stays registered.
 		if task.had_event and not is_instance_valid(task.event):
 			break
 		task.interpreter = RPGInterpreter.new(rpg, task.owner, task.event)
+		task.interpreter.suspends_with_map = true
 		task.rounds += 1
 		var r: RPGResult = await task.interpreter.run(task.commands)
 		if r.is_error():
@@ -234,6 +260,7 @@ func cancel_all(reason := "reset") -> void:
 	if mt != null and not mt.done:
 		await mt.finished
 	input_locks.clear()
+	scene_pauses.clear()
 
 
 func debug_snapshot() -> Dictionary:
@@ -247,4 +274,5 @@ func debug_snapshot() -> Dictionary:
 		"queue": queue.map(func(t): return t.key),
 		"parallels": par,
 		"locks": input_locks.duplicate(),
+		"suspended": scene_pauses.duplicate(),
 	}

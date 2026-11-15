@@ -65,6 +65,8 @@ Parallel event "waves"
 
 A parallel event shouldn't stop the player; avoid messages in it.
 
+While the menu, a shop, the save screen or a battle is open, parallel events and wandering NPCs sleep, and a Wait picks up where it left off when the screen closes — the map is suspended behind those screens, as in RPG Maker. Message boxes don't suspend it. (The Run Scene command can turn this off for an overlay scene, like a HUD, that runs on top of the live map.)
+
 ## 5. Common events
 
 A **common event** is a command list that belongs to the whole game, not to a map. Make them on the Database's **Common events** tab.
