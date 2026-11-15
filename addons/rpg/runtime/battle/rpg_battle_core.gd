@@ -1164,6 +1164,63 @@ func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
 	return b
 
 
+## Transform Enemy: the troop member at `member_index` (0-based) becomes an enemy built from
+## `enemy_id`. The battler keeps its slot (troop index, screen position, "appears later" flag,
+## turn state), and everything else (name, graphic record, stats, skills, rewards) comes from the
+## new record; the "A"/"B" suffix of a duplicated enemy moves to the new name. `hp_policy`:
+## "keep" carries each resource over clamped to its new maximum, "percent" carries its share of
+## the maximum over, "refill" starts the new enemy at full. States are kept unless `clear_states`.
+## Returns the battler, or null when the member or the enemy record does not exist.
+func transform(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	if member_index < 0 or member_index >= enemies.size():
+		return null
+	var b: RPGBattler = enemies[member_index]
+	var fresh: RPGBattler = rules.new_enemy_battler(enemy_id)
+	if fresh == null:
+		return null
+	var slot := {"index": b.index, "screen_position": b.screen_position, "hidden": b.hidden,
+		"guarding": b.guarding, "action": b.action, "escaped": b.escaped}
+	var shares := {}
+	var old_values := b.resources.duplicate()
+	for rid in old_values:
+		var m: int = rules.max_resource(b, rid)
+		shares[rid] = clampf(float(old_values[rid]) / float(m), 0.0, 1.0) if m > 0 else 1.0
+	# "Slime A" -> "Goblin A": the suffix marks the slot, not the record.
+	var old_name := str(rules.battler_record(b).get("name", b.name))
+	var suffix := b.name.substr(old_name.length()) if b.name.begins_with(old_name) else ""
+	b.id = fresh.id
+	b.name = fresh.name + suffix
+	b.class_id = fresh.class_id
+	b.level = fresh.level
+	b.base = fresh.base
+	b.equips = fresh.equips
+	b.skills = fresh.skills
+	b.custom = fresh.custom
+	b.resources = fresh.resources.duplicate(true)
+	match hp_policy:
+		"percent":
+			for rid in shares:
+				b.resources[rid] = roundi(float(shares[rid]) * rules.max_resource(b, rid))
+		"refill":
+			pass  # fresh comes from recover_all(): every resource is at its maximum
+		_:
+			for rid in old_values:
+				b.resources[rid] = clampi(int(old_values[rid]), 0, rules.max_resource(b, rid))
+	if clear_states:
+		b.states = []
+	b.index = slot.index
+	b.screen_position = slot.screen_position
+	b.hidden = slot.hidden
+	b.guarding = slot.guarding
+	b.action = slot.action
+	b.escaped = slot.escaped
+	_known_states[b] = b.state_ids()
+	if is_timed():
+		_speeds[b] = _speed_of(b)
+	_rewards.clear()  # the spoils follow the new record (rewards() reads battler_record(e))
+	return b
+
+
 ## Change Party Member during the battle: brings `party` in step with `wanted` (actor battlers;
 ## the battle scene passes the state's party through battle_members()). Added actors join with a
 ## fresh gauge in timed battles; removed actors leave the turn order and targeting, and victory

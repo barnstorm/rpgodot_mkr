@@ -76,6 +76,8 @@ The party commands reach the other side too: **Change HP / SP**, **Change State*
 
 **End Battle** (also in *Scenes*) stops the fight at once: *Abort* ends it like an escape with no rewards (RPG Maker's Abort Battle), *Win* takes the victory (with or without rewards) and *Lose* takes the defeat. The Battle Processing command that started the fight continues down the matching branch.
 
+**Transform Enemy** turns one of the group's members into a different enemy. It keeps its slot — its number in the group, its position on the battle screen, its *Appears later* flag (a hidden member transforms and stays hidden) and the *A*/*B* suffix of a duplicated enemy — while its stats, actions, graphic and rewards come from the new enemy. Pick what happens to its HP: *Keep* carries it over (clamped to the new maximum, so a goblin with 150 HP turned into a 40 HP slime starts at 40), *Keep percentage* carries its share of the maximum over, or *Start at full* refills it. States are kept unless *Remove its states* is on. Enemy HP conditions and victory rewards measure the new enemy from then on.
+
 **Change Party Member** works during a battle: an added actor joins the field at once (status row, side-view sprite and a turn gauge under ATB / CTB), a removed one leaves the fight, and victory EXP goes to the members present at the end. *Only for this battle* adds the actor for the fight and takes them out of the party again when it ends.
 
 For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.

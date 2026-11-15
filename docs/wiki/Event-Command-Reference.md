@@ -131,6 +131,7 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | **Return to Title Screen** | `return_to_title` |  |
 | **Run Scene** | `run_scene` | Scene, Arguments, Store result in, Timeout (0 = none), If cancelled |
 | **Shop Processing** | `shop` | Goods, Buy only |
+| **Transform Enemy** | `transform_enemy` | Enemy # (1 = first in the group), Transform into, HP (keep / percent / refill), Remove its states |
 
 ## Godot
 

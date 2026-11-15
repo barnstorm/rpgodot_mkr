@@ -400,43 +400,50 @@ func _make_backdrop(bg_name: String) -> void:
 
 func _make_enemies() -> void:
 	for e in core.enemies:
-		var rec := record("enemies", e.id)
-		var tex: Texture2D = rpg.ui.load_texture("battler", str(rec.get("battler", ""))) if rpg.ui and str(rec.get("battler", "")) != "" else null
-		if tex != null and RPGAssets.sheet_profile("battler", str(rec.get("battler", "")), str(rpg.data.profile.get("profile", "rm2k"))) == "rm2k":
-			# 2000/2003 Monster graphics copied in by hand (not through the importer) have no alpha:
-			# their background is palette colour 0, which is the top-left pixel. Key it.
-			tex = RPGCharset.prepared_texture(tex)
-		if tex == null:
-			tex = _silhouette(e.id)
-		var spr := TextureRect.new()
-		spr.texture = tex
-		# Battlers are painted for their maker's screen (2k 320, VX 544, MV 816 px wide); the stage
-		# is laid out at W, so VX/MV battlers shrink to keep their on-screen proportions.
-		var k := battler_scale(str(rec.get("battler", "")))
-		spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		spr.stretch_mode = TextureRect.STRETCH_SCALE
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if k >= 1.0 else CanvasItem.TEXTURE_FILTER_LINEAR
-		# A battler taller than the stage is shrunk to fit it (keeping its aspect).
-		var max_h := float(FIELD_H - 6)
-		if tex.get_height() * k > max_h:
-			k = max_h / tex.get_height()
-			spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		spr.size = (tex.get_size() * k).round()
-		var c: Vector2 = e.screen_position
-		if c == Vector2.ZERO:
-			c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
-		if battle_view == "side":
-			c = side_enemy_position(c)
-		# Centred on its troop position, but never below the stage floor or above its top edge.
-		var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
-		spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
-		spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		spr.visible = not e.hidden
-		var hue := float(rec.get("battler_hue", 0))
-		if hue != 0.0:
-			spr.self_modulate = Color.from_hsv(fposmod(hue / 360.0, 1.0), 0.35, 1.0)
-		field.add_child(spr)
-		enemy_nodes[e] = spr
+		_make_enemy_node(e)
+
+
+## One enemy's sprite, from its record's battler graphic (or a silhouette), placed at its troop
+## position and centred on the stage. Transform Enemy rebuilds a slot's node with this.
+func _make_enemy_node(e: RPGBattler) -> TextureRect:
+	var rec := record("enemies", e.id)
+	var tex: Texture2D = rpg.ui.load_texture("battler", str(rec.get("battler", ""))) if rpg.ui and str(rec.get("battler", "")) != "" else null
+	if tex != null and RPGAssets.sheet_profile("battler", str(rec.get("battler", "")), str(rpg.data.profile.get("profile", "rm2k"))) == "rm2k":
+		# 2000/2003 Monster graphics copied in by hand (not through the importer) have no alpha:
+		# their background is palette colour 0, which is the top-left pixel. Key it.
+		tex = RPGCharset.prepared_texture(tex)
+	if tex == null:
+		tex = _silhouette(e.id)
+	var spr := TextureRect.new()
+	spr.texture = tex
+	# Battlers are painted for their maker's screen (2k 320, VX 544, MV 816 px wide); the stage
+	# is laid out at W, so VX/MV battlers shrink to keep their on-screen proportions.
+	var k := battler_scale(str(rec.get("battler", "")))
+	spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	spr.stretch_mode = TextureRect.STRETCH_SCALE
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if k >= 1.0 else CanvasItem.TEXTURE_FILTER_LINEAR
+	# A battler taller than the stage is shrunk to fit it (keeping its aspect).
+	var max_h := float(FIELD_H - 6)
+	if tex.get_height() * k > max_h:
+		k = max_h / tex.get_height()
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	spr.size = (tex.get_size() * k).round()
+	var c: Vector2 = e.screen_position
+	if c == Vector2.ZERO:
+		c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
+	if battle_view == "side":
+		c = side_enemy_position(c)
+	# Centred on its troop position, but never below the stage floor or above its top edge.
+	var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
+	spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
+	spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spr.visible = not e.hidden
+	var hue := float(rec.get("battler_hue", 0))
+	if hue != 0.0:
+		spr.self_modulate = Color.from_hsv(fposmod(hue / 360.0, 1.0), 0.35, 1.0)
+	field.add_child(spr)
+	enemy_nodes[e] = spr
+	return spr
 
 
 ## Side view: a troop position (laid out for the front view across the whole 320 px stage) moved
@@ -855,6 +862,39 @@ func _shake() -> void:
 	var t := stage.create_tween()
 	for x in [4, -4, 3, -2, 0]:
 		t.tween_property(stage, "position:x", float(x), 0.04)
+
+
+## Transform Enemy (event command): the troop member at `member_index` (0-based) becomes an enemy
+## built from `enemy_id` (same slot: index, position, turn state). The old image flashes away, the
+## new one fades in at the same spot and "%1 transformed into %2!" shows; the status display and
+## CTB order strip follow. Awaits the message. Returns the transformed battler, or null when the
+## member or enemy record does not exist.
+func transform_enemy(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	if core == null or member_index < 0 or member_index >= core.enemies.size():
+		return null
+	var b: RPGBattler = core.enemies[member_index]
+	var old_name := b.name
+	var result: RPGBattler = core.transform(member_index, enemy_id, hp_policy, clear_states)
+	if result == null:
+		return null
+	var old: TextureRect = enemy_nodes.get(b)
+	if old != null:
+		old.queue_free()
+		enemy_nodes.erase(b)
+	var spr := _make_enemy_node(result)
+	if not result.hidden:
+		spr.modulate = Color(1, 1, 1, 0)
+		spr.visible = true
+		if auto or not is_inside_tree():
+			spr.modulate.a = 1.0
+		else:
+			spr.create_tween().tween_property(spr, "modulate:a", 1.0, 0.3)
+	_place_battler_nodes()
+	_refresh_order_strip()
+	refresh_after_event()
+	await say(_battle_term("transform", "%1 transformed into %2!", [old_name, result.name]), 0.45)
+	log_win.visible = false
+	return result
 
 
 ## Enemy Appear (event command): brings troop member `member_index` (-1: every hidden member)

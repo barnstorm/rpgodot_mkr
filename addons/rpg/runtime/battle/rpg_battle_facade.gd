@@ -70,6 +70,20 @@ func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
 	return b
 
 
+## Transform Enemy: the troop member at `member_index` (1-based, troop order) becomes an enemy
+## built from record `enemy_id`, keeping its slot (position, turn state) and "A"/"B" suffix.
+## `hp_policy`: "keep" carries resources over clamped to the new maximum, "percent" carries their
+## share over, "refill" starts full. States are kept unless `clear_states`. Awaits the transform
+## effect; returns the battler, or null when the member or record does not exist.
+func transform(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	var s := scene()
+	var c := core()
+	if s == null or c == null:
+		return null
+	var b: RPGBattler = await s.transform_enemy(member_index - 1, enemy_id, hp_policy, clear_states)
+	return b
+
+
 ## Timed battles (ATB / CTB): sets a battler's gauge, 0 (empty) to 1 (full).
 func set_gauge(b: RPGBattler, value: float) -> void:
 	var s := scene()
