@@ -37,6 +37,17 @@ Open your map's **Properties** (right-click it in the map tree):
 
 When a random battle starts there is a small chance of a **preemptive** attack (the party moves first) or a **surprise** attack (the enemies do): 5% and 3% when the party's average agility is at least the enemies', else 3% and 5%.
 
+**Battle start chances** (Database > System) add the RPG Maker 2003 openings on top of that, each with a percent chance on a random encounter:
+
+| Start | Gauges | Formation |
+| --- | --- | --- |
+| Initiative | party full, enemies empty | unchanged, "*The party strikes first!*" |
+| Back attack | enemies full, party empty | the group is mirrored and faces the other way |
+| Surround | party full, enemies empty | the group packs around the middle |
+| Pincer | enemies full, party empty | the group splits to both flanks — and there is no escaping |
+
+The chances share one roll (in the order above) and the rest of the encounters start normally. All 0 (the default): the preemptive / surprise roll above runs instead, so an existing game keeps its behavior. A map can override the chances for itself (**Map properties > Override battle start chances**), and a map's `encounters.start_odds_regions` swaps them per region — `{"regions": [3, 7], "odds": {"pincer": 100}}` for pincers in the mountains; an empty `regions` list is the catch-all for everywhere else. Gauges matter under ATB / CTB; in a turn-based battle initiative and surround play like a preemptive strike, a back attack and a pincer like a surprise attack.
+
 **Change Encounter** turns random battles off and on (for example during a cutscene).
 
 ## 4. A boss fight from an event
@@ -62,8 +73,10 @@ When a random battle starts there is a small chance of a **preemptive** attack (
 | Continue when lost | Without it, losing is game over; with it, the *If lost* branch runs |
 | Battle scene | Empty for the default battle, or your own scene (see [For programmers](For-Programmers.md)) |
 | Background | Empty for the map's battle background |
-| Advantage | Normal, preemptive or surprise |
+| Advantage | Normal, preemptive, surprise, or one of the [2003 starts](#3-random-encounters): initiative, back attack, surround, pincer — a pincer also blocks escaping |
 | Store outcome in | A variable that gets the result |
+
+**The defeat handler** (Database > System): when the party loses a battle *Continue when lost* is off for, a **Defeat handler** common event takes the place of Game Over — an inn, a "*you blacked out and crawled back*" scene. An optional **Defeat transfer** carries the party to a map first (with **Defeat facing**), then the common event runs and the event that started the battle goes on as though nothing happened. Without a handler, losing is Game Over as usual.
 
 ## 5. Battle events
 

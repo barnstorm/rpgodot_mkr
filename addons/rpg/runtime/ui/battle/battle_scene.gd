@@ -426,11 +426,14 @@ func _make_enemies() -> void:
 		var c: Vector2 = e.screen_position
 		if c == Vector2.ZERO:
 			c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
+		c = condition_enemy_position(c, e.index, core.advantage)
 		if battle_view == "side":
 			c = side_enemy_position(c)
 		# Centred on its troop position, but never below the stage floor or above its top edge.
 		var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
 		spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
+		if condition_mirrored(e.index, core.advantage):
+			spr.flip_h = true
 		spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		spr.visible = not e.hidden
 		var hue := float(rec.get("battler_hue", 0))
@@ -445,6 +448,26 @@ func _make_enemies() -> void:
 ## on the right.
 static func side_enemy_position(c: Vector2) -> Vector2:
 	return Vector2(round(18.0 + c.x * 0.52), c.y)
+
+
+## The 2003 battle starts move the enemies (#39): a back attack mirrors them to the far side of
+## the stage (they came from behind), a surround packs them around the middle (160 ± 16, as RPG
+## Maker spaces them), a pincer mirrors every other one so the group splits half and half.
+static func condition_enemy_position(c: Vector2, index: int, advantage: String) -> Vector2:
+	match advantage:
+		"back_attack":
+			return Vector2(W - c.x, c.y)
+		"surround":
+			return Vector2(W / 2.0 + (16.0 if index % 2 == 1 else -16.0), c.y)
+		"pincer":
+			return Vector2(W - c.x, c.y) if index % 2 == 0 else c
+	return c
+
+
+## True when the condition put this enemy on the far side, so its battler is mirrored to keep
+## facing the party.
+static func condition_mirrored(index: int, advantage: String) -> bool:
+	return advantage == "back_attack" or (advantage == "pincer" and index % 2 == 0)
 
 
 ## Side view: the band of the stage the party stands in (below the message line).
@@ -1052,6 +1075,14 @@ func _run() -> void:
 			await say(_battle_term("preemptive", "%1 got the jump on the enemy!", [_party_name()]), 0.6)
 		"surprise":
 			await say(_battle_term("surprise", "%1 was taken by surprise!", [_party_name()]), 0.6)
+		"initiative":
+			await say(_battle_term("initiative", "%1 strikes first!", [_party_name()]), 0.6)
+		"back_attack":
+			await say(_battle_term("back_attack", "The party was attacked from behind!"), 0.6)
+		"surround":
+			await say(_battle_term("surround", "The party is surrounded!"), 0.6)
+		"pincer":
+			await say(_battle_term("pincer", "A pincer attack! There is no escaping!"), 0.6)
 	log_win.visible = false
 	if core.is_timed():
 		await _run_timed()

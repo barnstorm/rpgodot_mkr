@@ -537,11 +537,39 @@ func _check_encounter() -> void:
 	var g: Dictionary = pick_encounter_group(map.props, map.region_at(cell), rpg.rng)
 	if g.is_empty():
 		return
-	# Preemptive strike or surprise attack (RPGBattleCore.encounter_advantage: MV's 5% / 3%).
+	# How the battle starts: the 2003 conditions (initiative / back attack / surround / pincer)
+	# when the System or this map sets their chances (#39), else the preemptive / surprise roll.
 	var adv := "normal"
 	if rpg.rules is RPGRuleSystem:
-		adv = RPGBattleCore.encounter_advantage(rpg.rules, rpg.state.party_battlers(), rpg.data.record("troops", str(g.troop)), _randf_range(0.0, 1.0))
+		var odds: Dictionary = encounter_start_odds(rpg.data.system if rpg.data != null else {}, map.props, map.region_at(cell))
+		if not odds.is_empty():
+			adv = RPGBattleCore.encounter_condition(odds, _randf_range(0.0, 1.0))
+		else:
+			adv = RPGBattleCore.encounter_advantage(rpg.rules, rpg.state.party_battlers(), rpg.data.record("troops", str(g.troop)), _randf_range(0.0, 1.0))
 	rpg.scheduler.request_main("encounter", [{"type": "battle", "troop": g.troop, "can_escape": true, "can_lose": false, "advantage": adv}], {"kind": "map_event", "map": map.map_id, "event": "(encounter)"}, null)
+
+
+## The 2003 battle-start chances a random encounter rolls (#39): the System's
+## "battle_start_odds", overridden by the map's "encounters.start_odds", overridden by the first
+## region-matching entry of "encounters.start_odds_regions" (empty regions: everywhere). Chances
+## are percentages 0..100; {} when nobody sets any, so the preemptive / surprise roll is used.
+static func encounter_start_odds(system: Dictionary, props: Dictionary, region: int) -> Dictionary:
+	var out: Dictionary = system.get("battle_start_odds", {}) if system.get("battle_start_odds", {}) is Dictionary else {}
+	var enc: Dictionary = props.get("encounters", {}) if props.get("encounters", {}) is Dictionary else {}
+	var map_odds: Variant = enc.get("start_odds")
+	if map_odds is Dictionary:
+		out = map_odds
+	for o in enc.get("start_odds_regions", []) if enc.get("start_odds_regions", []) is Array else []:
+		if o is Dictionary and (o.get("regions", []) is Array and (o.regions.is_empty() or o.regions.has(region))) and o.get("odds") is Dictionary:
+			out = o.odds
+			break
+	# Only chances that are set and non-zero count; anything else keeps the MV roll.
+	var clean := {}
+	for k in RPGBattleCore.START_CONDITIONS:
+		var v := float(out.get(k, 0))
+		if v > 0.0:
+			clean[k] = clampf(v, 0.0, 100.0) / 100.0
+	return clean
 
 
 ## The group a random encounter rolls from a map's `encounters.groups`: groups whose region list

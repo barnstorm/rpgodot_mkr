@@ -395,6 +395,116 @@ func test_preemptive_and_surprise() -> void:
 	assert_eq(users2, [p.party[0]], "preemptive: only the party acts on turn 1")
 
 
+# --- RM2003 battle starts (#39) -----------------------------------------------------------------------
+
+## The four 2003 start conditions: who starts full (timed) and who sits out turn 1 (turn based),
+## plus the pincer's no-escape rule.
+func test_start_condition_gauges_and_first_turn() -> void:
+	for adv in ["initiative", "surround"]:
+		var c := _core(["hero", "mira"], "slimes", "atb", 5, adv)
+		for a in c.party:
+			assert_eq(c.gauge(a), 1.0, "%s: the party starts full" % adv)
+		for e in c.enemies:
+			assert_eq(c.gauge(e), 0.0, "%s: the enemies start empty" % adv)
+		assert_true(c.next_input_actor() != null, "%s: a hero commands at once" % adv)
+	for adv in ["back_attack", "pincer"]:
+		var c := _core(["hero", "mira"], "slimes", "atb", 5, adv)
+		for a in c.party:
+			assert_eq(c.gauge(a), 0.0, "%s: the party starts empty" % adv)
+		for e in c.enemies:
+			assert_eq(c.gauge(e), 1.0, "%s: the enemies start full" % adv)
+		assert_true(c.next_auto_ready() != null and c.next_auto_ready().is_enemy(), "%s: an enemy strikes at once" % adv)
+	# Turn based: initiative / surround play like a preemptive strike, back attack / pincer like
+	# a surprise attack.
+	var ini := _core(["hero"], "slimes", "turn", 5, "initiative")
+	ini.begin_turn()
+	assert_eq(ini.inputs_needed(), [0], "initiative: the party commands turn 1")
+	ini.set_action(0, {"kind": "guard"})
+	var ini_users := []
+	var ir := ini.next_action()
+	while not ir.is_empty():
+		ini_users.append(ir.user)
+		ir = ini.next_action()
+	assert_eq(ini_users, [ini.party[0]], "initiative: only the party acts on turn 1")
+	var sur := _core(["hero"], "slimes", "turn", 5, "surround")
+	sur.begin_turn()
+	assert_eq(sur.inputs_needed(), [0], "surround: the party commands turn 1")
+	var back := _core(["hero"], "slimes", "turn", 5, "back_attack")
+	back.begin_turn()
+	assert_eq(back.inputs_needed(), [], "back attack: no commands on turn 1")
+	var pin := _core(["hero"], "slimes", "turn", 5, "pincer")
+	pin.begin_turn()
+	assert_eq(pin.inputs_needed(), [], "pincer: no commands on turn 1")
+
+
+## A pincer attack cannot be escaped even when the enemy group allows it.
+func test_pincer_blocks_escape() -> void:
+	var t: Dictionary = db.record("troops", "slimes").duplicate(true)
+	t["can_escape"] = true
+	assert_false(_core(["hero"], t, "atb", 5, "pincer").can_escape, "the pincer blocks escaping")
+	assert_true(_core(["hero"], t, "atb", 5).can_escape, "a normal start does not")
+	assert_true(_core(["hero"], t, "atb", 5, "back_attack").can_escape, "a back attack still allows it")
+
+
+## The 2003 formations: a back attack mirrors the group, a surround packs it around the middle,
+## a pincer splits it to both flanks; mirrored enemies face the party.
+func test_start_condition_formations() -> void:
+	var c := Vector2(120.0, 100.0)
+	assert_eq(Scene.condition_enemy_position(c, 0, "normal"), c, "a normal start keeps the formation")
+	assert_eq(Scene.condition_enemy_position(c, 3, "initiative"), c, "so does an initiative")
+	for i in 4:
+		assert_eq(Scene.condition_enemy_position(c, i, "back_attack").x, Scene.W - c.x, "back attack: enemy %d is mirrored" % i)
+	assert_eq(Scene.condition_enemy_position(c, 0, "surround").x, Scene.W / 2.0 - 16.0, "surround: even members left of the middle")
+	assert_eq(Scene.condition_enemy_position(c, 1, "surround").x, Scene.W / 2.0 + 16.0, "odd members right of it")
+	assert_eq(Scene.condition_enemy_position(c, 0, "pincer"), Vector2(Scene.W - c.x, c.y), "pincer: the even members mirror")
+	assert_eq(Scene.condition_enemy_position(c, 1, "pincer"), c, "the odd members stay put")
+	assert_true(Scene.condition_mirrored(0, "back_attack"), "back attack: everyone faces the party")
+	assert_false(Scene.condition_mirrored(0, "surround"), "surround: nobody is flipped")
+	assert_eq([Scene.condition_mirrored(0, "pincer"), Scene.condition_mirrored(1, "pincer"), Scene.condition_mirrored(2, "pincer")], [true, false, true], "pincer: every other enemy is flipped")
+	# Through a real side-view battle: the sprites land at the transformed spots, flipped.
+	_sample_env()
+	env.rpg.ui.auto_advance = false
+	var out := {}
+	var scene := _start_battle({"troop": "slimes", "battle_view": "side", "advantage": "back_attack", "can_escape": true, "can_lose": true}, out)
+	var xs := []
+	for e in scene.core.enemies:
+		var s: TextureRect = scene.enemy_nodes[e]
+		xs.append(s.position.x)
+		assert_true(s.flip_h, "back attack: %s faces the party" % e.name)
+	assert_true(xs[0] > xs[1], "the formation is mirrored: %s" % str(xs))
+	await _finish(scene, out)
+
+
+## The chances behind encounter_condition: one shared roll, in START_CONDITIONS order.
+func test_encounter_condition_rolls() -> void:
+	var odds := {"initiative": 0.2, "back_attack": 0.1, "surround": 0.05, "pincer": 0.05}
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.0), "initiative", "the lowest rolls")
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.199), "initiative", "initiative owns the first 20%")
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.2), "back_attack", "the boundary moves on")
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.31), "surround")
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.36), "pincer")
+	assert_eq(RPGBattleCore.encounter_condition(odds, 0.4), "normal", "the rest start normally")
+	assert_eq(RPGBattleCore.encounter_condition({}, 0.0), "normal", "no chances: always normal")
+	var big := {"initiative": 0.9, "back_attack": 0.9}
+	assert_eq(RPGBattleCore.encounter_condition(big, 0.99), "back_attack", "chances past 100%: the roll always lands in one")
+
+
+## Where the encounter odds come from: the System's defaults, a map's override, and the first
+## region override that matches the tile's region. Percent goes in, 0..1 comes out.
+func test_encounter_start_odds_precedence() -> void:
+	var sys := {"battle_start_odds": {"initiative": 10, "back_attack": 5}}
+	assert_eq(RPGPlayer.encounter_start_odds(sys, {}, 0), {"initiative": 0.1, "back_attack": 0.05}, "the System's chances, as fractions")
+	var map_odds := {"encounters": {"start_odds": {"surround": 50, "pincer": 25}}}
+	assert_eq(RPGPlayer.encounter_start_odds(sys, map_odds, 0), {"surround": 0.5, "pincer": 0.25}, "a map's override replaces the System's")
+	assert_eq(RPGPlayer.encounter_start_odds(sys, {"encounters": {"start_odds": {"initiative": 0}}}, 0), {}, "an all-zero override: no special starts here")
+	var regions := {"encounters": {"start_odds": {"initiative": 100}, "start_odds_regions": [
+		{"regions": [3, 7], "odds": {"pincer": 100}},
+		{"regions": [], "odds": {"back_attack": 100}}]}}
+	assert_eq(RPGPlayer.encounter_start_odds({}, regions, 5), {"back_attack": 1.0}, "a region-free row is the fallback")
+	assert_eq(RPGPlayer.encounter_start_odds({}, regions, 7), {"pincer": 1.0}, "a region match wins over it")
+	assert_eq(RPGPlayer.encounter_start_odds({}, {"encounters": {"start_odds": {"initiative": 150}}}, 0), {"initiative": 1.0}, "a chance is clamped at 100")
+
+
 func test_states_that_skip_turns_still_work() -> void:
 	var core := _core(["hero"], "slimes", "atb", 4)
 	var hero: RPGBattler = core.party[0]
@@ -667,6 +777,17 @@ func test_encounter_advantage_rolls() -> void:
 	assert_eq(scene.core.advantage, "surprise", "Battle Processing passes the advantage on")
 	await _wait_until(func(): return done.has("r"), 20.0)
 	assert_true(done.has("r"), "the battle ends")
+	# A 2003 start passes through too — and a pincer blocks escaping (#39).
+	var done2 := {}
+	var run2 := func():
+		done2.r = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_escape": true, "can_lose": true, "advantage": "pincer"}], {"kind": "api", "id": "t"})
+	run2.call()
+	assert_true(await _wait_until(func(): return not env.rpg.ui.scene_stack.is_empty()), "the pincer battle opens")
+	var scene2: Node = env.rpg.ui.scene_stack[-1]
+	assert_eq(scene2.core.advantage, "pincer", "a 2003 start passes through")
+	assert_false(scene2.core.can_escape, "the pincer blocks escaping even though the group allows it")
+	await _wait_until(func(): return done2.has("r"), 20.0)
+	assert_true(done2.has("r"), "the pincer battle ends")
 
 
 ## RM2003 random appearance (#41): a member below its Appear % misses the fight but behaves like

@@ -61,6 +61,14 @@ func _wait_until(cond: Callable, seconds := 10.0) -> bool:
 	return cond.call()
 
 
+## Whether the game over screen is open right now.
+func _game_over_shown() -> bool:
+	for s in env.rpg.ui.scene_stack:
+		if is_instance_valid(s) and s.get_script() != null and str(s.get_script().resource_path).ends_with("game_over.gd"):
+			return true
+	return false
+
+
 ## Turn-based: the Fight / Escape command is open.
 func _open_party_command(scene: Node) -> void:
 	assert_true(await _wait_until(func(): return is_instance_valid(scene) and scene.phase == "party"), "the party command opens")
@@ -454,6 +462,66 @@ func test_force_flee_errors() -> void:
 	assert_eq(cmd.summary({"target": "party"}), "Force Flee: the party")
 	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
 	await _finish(scene, out)
+
+
+# --- the defeat handler (#39) --------------------------------------------------------------------------
+
+
+## The System's defeat handler: when the party falls, a common event (and optional transfer)
+## takes the place of Game Over, and the event that started the battle goes on. Without one —
+## or when it names no common event — Game Over comes as before.
+func test_defeat_handler_instead_of_game_over() -> void:
+	_sample_env()
+	await env.start_on("town", Vector2i(14, 12), "up")
+	var data: RPGProjectData = env.rpg.data
+	data.variables["rescue_ran"] = {"id": "rescue_ran", "label": "Rescue ran", "type": "int"}
+	data.variables["battle_outcome"] = {"id": "battle_outcome", "label": "Battle outcome", "type": "string"}
+	data.state_defs["variables"].append({"id": "rescue_ran", "label": "Rescue ran", "type": "int"})
+	data.state_defs["variables"].append({"id": "battle_outcome", "label": "Battle outcome", "type": "string"})
+	data.common_events["rescue"] = {"id": "rescue", "name": "Rescue", "trigger": "none", "switch": "", "commands": [
+		{"type": "set_variable", "id": "rescue_ran", "operation": "set", "value": 1},
+		{"type": "recover_all", "target": "party"}]}
+	data.system["defeat_event"] = "rescue"
+	data.system["defeat_transfer"] = {"map": "house_inside", "position": [1, 1]}
+	data.system["defeat_facing"] = "down"
+	# A group whose page fells the whole party on turn 1: a certain loss, whatever the rolls.
+	_add_troop(_later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1, "every": 1}], "span": "every_check", "commands": [
+		{"type": "change_hp_mp", "target": "party", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true}]}]))
+	var r1: Dictionary = await _fight({"type": "battle", "troop": "later", "can_escape": false, "result": "battle_outcome"})
+	assert_true(r1.r != null and r1.r.is_ok(), "the battle ran to its loss: %s" % [r1.r])
+	assert_eq(str(env.rpg.get_variable("battle_outcome")), "lose", "the party fell")
+	assert_eq(int(env.rpg.get_variable("rescue_ran")), 1, "the common event ran")
+	assert_true(env.rpg.state.actor("hero").is_alive(), "it healed the fallen party")
+	assert_true(await _wait_until(func(): return env.game.map != null and env.game.map.map_id == "house_inside" and not env.game.transferring), "the party was carried to the defeat map")
+	assert_eq(env.game.player.cell, Vector2i(1, 1))
+	assert_eq(env.game.player.facing, "down", "the defeat facing applies")
+	assert_eq(int(env.rpg.state.game_data({"kind": "counter", "field": "defeats"})), 1, "the defeat still counts")
+	await frames(5)
+	assert_false(_game_over_shown(), "no Game Over: the handler took its place")
+	# A handler that names no common event is no handler: Game Over as before. The battle scene
+	# runs in auto mode while ui auto advance stays off, so the game over screen waits to be
+	# seen instead of closing itself at once; the message box alone runs on auto because the
+	# battle event's text would otherwise wait for a click.
+	env.rpg.state.new_game()
+	data.system["defeat_event"] = "ghost"
+	env.rpg.ui.auto_advance = false
+	env.rpg.ui.message_box.auto_advance = true
+	var r2 := {"r": null}
+	var run2 := func(): r2.r = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_escape": false, "result": "battle_outcome"}], {"kind": "api", "id": "t"})
+	run2.call()
+	var end2 := Time.get_ticks_msec() + 20000
+	while r2.r == null and Time.get_ticks_msec() < end2:
+		for s in env.rpg.ui.scene_stack:
+			if is_instance_valid(s) and s.get("core") != null:
+				s.auto = true
+				if s.phase != "":
+					if s.phase == "party":
+						s.cmd_list.select(0)
+					s.handle_action("ok")
+		await tree.process_frame
+	assert_true(r2.r != null, "the second battle ends")
+	assert_eq(str(env.rpg.get_variable("battle_outcome")), "lose", "the party falls again")
+	assert_true(await _wait_until(func(): return _game_over_shown(), 10.0), "a missing handler shows Game Over as before")
 
 
 # --- the validator -----------------------------------------------------------------------------------

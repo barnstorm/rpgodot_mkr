@@ -162,6 +162,34 @@ func _ready() -> void:
 	add.text = "Add enemy group"
 	add.pressed.connect(func(): _add_enc_row({"troop": "", "weight": 10, "regions": []}))
 	box.add_child(add)
+	# RM2003 battle start chances (#39): this map can override the System's odds. The percents
+	# add up; the rest of the encounters start normally. Per-region overrides live in
+	# encounters.start_odds_regions (data level, see the wiki).
+	var odds: Dictionary = enc.get("start_odds", {}) if enc.get("start_odds", {}) is Dictionary else {}
+	var od_cb := CheckBox.new()
+	od_cb.button_pressed = not odds.is_empty()
+	od_cb.text = "Override battle start chances"
+	box.add_child(od_cb)
+	_f["enc_odds_on"] = od_cb
+	var od_row := HBoxContainer.new()
+	box.add_child(od_row)
+	var od_spins: Array = []
+	for k in ["initiative", "back_attack", "surround", "pincer"]:
+		var sl := Label.new()
+		sl.text = k.capitalize() + " %"
+		od_row.add_child(sl)
+		var s := SpinBox.new()
+		s.min_value = 0
+		s.max_value = 100
+		s.value = int(odds.get(k, 0))
+		s.editable = od_cb.button_pressed
+		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		od_row.add_child(s)
+		_f["enc_odds_" + k] = s
+		od_spins.append(s)
+	od_cb.toggled.connect(func(on: bool) -> void:
+		for s2 in od_spins:
+			s2.editable = on)
 	var notes := TextEdit.new()
 	notes.text = str(props.get("notes", ""))
 	notes.custom_minimum_size = Vector2(300, 60)
@@ -469,7 +497,23 @@ func _on_ok() -> void:
 			if s.strip_edges().is_valid_int():
 				regions.append(s.strip_edges().to_int())
 		groups.append({"troop": troop.get_item_metadata(troop.selected), "weight": int(row.get_child(1).value), "regions": regions})
-	out["encounters"] = {"steps": int(_f.enc_steps.value), "groups": groups}
+	# Build on the old encounters dict so keys the dialog does not edit (start_odds_regions)
+	# survive an OK; the override is dropped when it is off or every chance is 0.
+	var encounters: Dictionary = (props.get("encounters", {}) if props.get("encounters", {}) is Dictionary else {}).duplicate()
+	encounters["steps"] = int(_f.enc_steps.value)
+	encounters["groups"] = groups
+	if _f.enc_odds_on.button_pressed:
+		var od := {}
+		for k in ["initiative", "back_attack", "surround", "pincer"]:
+			if int(_f["enc_odds_" + k].value) > 0:
+				od[k] = int(_f["enc_odds_" + k].value)
+		if od.is_empty():
+			encounters.erase("start_odds")
+		else:
+			encounters["start_odds"] = od
+	else:
+		encounters.erase("start_odds")
+	out["encounters"] = encounters
 	out["notes"] = _f.notes.text
 	if _custom_form != null:
 		out["custom"] = _custom_form.get_value()
