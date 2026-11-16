@@ -65,7 +65,16 @@ Page 2   (condition: Self switch A is ON)
 
 Page 1's condition makes the trees useless before the quest begins; page 2 makes each tree give only one apple. Copy the event (right-click > *Copy*, then *Paste* on another tree) to make three trees. Each copy has its own self switches.
 
-**Control Variable** can *set*, *add*, *subtract*, *multiply*, *divide* or take the remainder (*mod*). The value can be a **number**, another **variable**, a **random** number between two values, or **game data**: how many of an item the party holds, gold, steps, play time, party size, an actor's level, EXP or stats.
+**Control Variable** can *set*, *add*, *subtract*, *multiply*, *divide* or take the remainder (*mod*). The value can be a **number**, another **variable**, a **random** number between two values, or **game data**: how many of an item the party holds, gold, steps, play time, party size, an actor's level, EXP, stats or the item id in one of its equip slots. Game data also covers:
+
+- **Character** — where someone is: the player, this event, an event by ID, or a follower number (0 is right behind the player). The fields are X and Y (map cells), screen X and Y (pixels, for picture HUDs), and direction. Direction uses RPG Maker's numbers — 2 down, 4 left, 6 right, 8 up — so tutorials port straight over.
+- **Map id** — the id of the map the running event is on.
+- **Party member** — the actor id in a party slot (0 is the leader; empty when there is no one in that slot).
+- **Last used** — what the most recent battle action used and targeted: the item or skill, the actor who acted, and the actor or enemy it targeted. The values stick after the battle ends.
+- **Counter** — saves, battles, victories, defeats or escapes so far.
+- **Enemy** — one enemy's HP or other stat during a battle (battle events read these live).
+
+The target can be one variable, a **range** of them (every declared variable between the two ends, in the order they were declared; random values re-roll for each one), or **indirect**: a variable whose *value is the id* of the variable to change. The value can be indirect the same way (**Pointer** mode reads the variable whose id another variable holds).
 
 ## 4. Conditional Branch: the farmer checks
 

@@ -92,9 +92,9 @@ func check_condition(cond: Dictionary) -> bool:
 	return state.check_condition(cond, map_id(), event_id(), self)
 
 
-## Resolves a number field that may be a literal or {variable: id}.
+## Resolves a number field that may be a literal, {variable: id}, {pointer: id} or game data.
 func operand(v: Variant) -> Variant:
-	return state.resolve_operand(v)
+	return state.resolve_operand(v, self)
 
 
 # --- waiting (every wait is cancellable) -------------------------------------

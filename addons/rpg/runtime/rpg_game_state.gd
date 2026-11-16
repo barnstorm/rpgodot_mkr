@@ -70,6 +70,12 @@ var errors: Array[String] = []
 ## Common events reserved by items and skills used outside battle ("Common Event" effects,
 ## RPGRuleSystem.common_events), run by the map once the menu has closed. Not saved.
 var reserved_common_events: Array[String] = []
+## Play counters Game Data can read (RPG Maker's Other: saves, battles, wins, defeats, escapes).
+var counters: Dictionary = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
+## Game Data "last used": what the most recent battle action used and targeted
+## ({item, skill, actor, target_actor, target_enemy}). Battle actions fill it; the values stay
+## until the next battle changes them.
+var last_used: Dictionary = {}
 
 
 func _init(p_data: RPGProjectData = null) -> void:
@@ -90,6 +96,21 @@ func take_reserved_common_events() -> Array[String]:
 	return out
 
 
+## Increments a play counter (see `counters`) by one.
+func bump_counter(key: String) -> void:
+	if not counters.has(key):
+		_err("Unknown counter '%s'." % key)
+		return
+	counters[key] = int(counters[key]) + 1
+
+
+## Records Game Data "last used" values (see `last_used`); only the given keys change. Battle
+## actions call this with what they used and targeted.
+func record_last_used(values: Dictionary) -> void:
+	for k in values:
+		last_used[k] = values[k]
+
+
 ## Resets to a new game using definitions and the System record.
 func new_game() -> void:
 	switches.clear()
@@ -103,6 +124,8 @@ func new_game() -> void:
 	play_time = 0.0
 	steps = 0
 	walk_steps = 0
+	last_used.clear()
+	counters = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
 	riding = ""
 	vehicles = RPGVehicles.initial_state(data) if data else {}
 	access = {"menu": true, "save": true, "encounters": true}
@@ -432,21 +455,30 @@ static func compare(a: Variant, op: String, b: Variant) -> bool:
 	return false
 
 
-func resolve_operand(v: Variant) -> Variant:
+## Resolves an operand ({variable}, {pointer}, {random}, {game_data}) to its value. `ctx` (the
+## running command's context) is needed by game data that reads the map or the running battle.
+func resolve_operand(v: Variant, ctx: Object = null) -> Variant:
 	if v is Dictionary:
 		if v.has("variable"):
 			return get_variable(v.variable)
+		if v.has("pointer"):
+			# Indirect source: the value of the variable whose id another variable holds.
+			return get_variable(str(get_variable(str(v.pointer))))
 		if v.has("random"):
 			var r: Array = v.random
 			return rng.randi_range(int(r[0]), int(r[1])) if rng != null else randi_range(int(r[0]), int(r[1]))
 		if v.get("game_data") is Dictionary:
-			return game_data(v.game_data)
+			return game_data(v.game_data, ctx)
 	return v
 
 
 ## RPG Maker's "Game Data" operand: {kind: item|weapon|armor, id} (count held), gold, steps,
-## play_time (seconds), party_size, or {kind: actor, id, field: level|exp|<resource>|<stat>}.
-func game_data(g: Dictionary) -> Variant:
+## play_time (seconds), party_size, {kind: actor, id, field} (level, exp, a resource, an equip
+## slot's item id, or a stat), {kind: character, target, field} (x, y, direction, screen_x,
+## screen_y), map_id, {kind: party_member, slot} (the actor id in that slot), {kind: last_used,
+## what}, {kind: counter, which}, or {kind: enemy, index, field} (a stat of an enemy in the
+## running battle). Kinds that read the map or the battle need `ctx`.
+func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 	var kind := str(g.get("kind", ""))
 	match kind:
 		"item", "items":
@@ -468,20 +500,108 @@ func game_data(g: Dictionary) -> Variant:
 			if b == null:
 				_err("Game data: actor '%s' is not available." % g.get("id", ""))
 				return 0
-			var field := str(g.get("field", "level"))
-			if field == "level":
-				return int(b.level)
-			if field == "exp":
-				return int(b.exp)
-			if b.resources.has(field):
-				return int(b.resources[field])
-			if rules != null and rules.has_method("stat_block"):
-				var blk: Dictionary = rules.stat_block(b)
-				if blk.has(field):
-					return blk[field]
-			_err("Game data: actors have no '%s'." % field)
-			return 0
+			var fv: Variant = _battler_field(b, str(g.get("field", "level")))
+			if fv == null:
+				_err("Game data: actors have no '%s'." % g.get("field", "level"))
+				return 0
+			return fv
+		"character":
+			return _character_data(g, ctx)
+		"map_id":
+			if ctx == null or not ("map_id" in ctx):
+				_err("Game data: the map id needs a running command (use it in an event).")
+				return ""
+			return str(ctx.map_id())
+		"party_member":
+			var slot := int(g.get("slot", 0))
+			return str(party[slot]) if slot >= 0 and slot < party.size() else ""
+		"last_used":
+			return last_used.get(str(g.get("what", "item")), "")
+		"counter":
+			var which := str(g.get("which", "battles"))
+			if not counters.has(which):
+				_err("Game data: unknown counter '%s'." % which)
+				return 0
+			return int(counters[which])
+		"enemy":
+			var core: Variant = _battle_core(ctx)
+			if core == null:
+				_err("Game data: enemy stats only work in a battle.")
+				return 0
+			var idx := int(g.get("index", 0))
+			var e: Array = core.enemies
+			if idx < 0 or idx >= e.size():
+				_err("Game data: there is no enemy number %d." % idx)
+				return 0
+			var ev: Variant = _battler_field(e[idx], str(g.get("field", "hp")))
+			if ev == null:
+				_err("Game data: enemies have no '%s'." % g.get("field", "hp"))
+				return 0
+			return ev
 	_err("Game data: unknown kind '%s'." % kind)
+	return 0
+
+
+## One value of an actor or enemy battler: level, exp, a resource, the item id in an equip slot
+## (the slot's name is the field), or a base stat. Returns null when there is no such field.
+func _battler_field(b: Variant, field: String) -> Variant:
+	if field == "level":
+		return int(b.level)
+	if field == "exp":
+		return int(b.exp)
+	if b is Object and "resources" in b and b.resources.has(field):
+		return int(b.resources[field])
+	if b is Object and "equips" in b and b.equips.has(field):
+		return str(b.equips[field])
+	if rules != null and rules.has_method("stat_block"):
+		var blk: Dictionary = rules.stat_block(b)
+		if blk.has(field):
+			return blk[field]
+	return null
+
+
+## The running battle's core through a command context, or null (no battle).
+func _battle_core(ctx: Object) -> Variant:
+	if ctx != null and "battle" in ctx and ctx.battle != null and ctx.battle.has_method("core"):
+		return ctx.battle.core()
+	return null
+
+
+## Directions as RPG Maker numbers them (RM2000/2003 Control Variables), for ports and HUD math.
+const RM_DIRECTIONS := {"down": 2, "left": 4, "right": 6, "up": 8}
+
+
+## Game data "character": where a character is. `target` is "player", "this", an event id, or
+## "follower" with `index` (0 = right behind the player). `field` is x, y (map cells), direction
+## (the numbers above), or screen_x / screen_y (pixels on screen, for picture HUDs).
+func _character_data(g: Dictionary, ctx: Object) -> Variant:
+	if ctx == null or not ctx.has_method("character"):
+		_err("Game data: character needs a running event (use it in a command).")
+		return 0
+	var target := str(g.get("target", "player"))
+	var ch: Variant = null
+	if target == "follower":
+		var fs: Variant = ctx.map.player.followers if ctx.map != null and ctx.map.get("player") != null else []
+		var fi := int(g.get("index", 0))
+		ch = fs[fi] if fs is Array and fi >= 0 and fi < (fs as Array).size() else null
+	else:
+		ch = ctx.character(target)
+	if ch == null:
+		_err("Game data: '%s' is not on this map." % target)
+		return 0
+	var field := str(g.get("field", "x"))
+	match field:
+		"x":
+			return int(ch.cell.x)
+		"y":
+			return int(ch.cell.y)
+		"direction":
+			return int(RM_DIRECTIONS.get(str(ch.facing), 0))
+		"screen_x":
+			return int(round(ch.global_position.x)) if ch is Node2D else 0
+		"screen_y":
+			return int(round(ch.global_position.y)) if ch is Node2D else 0
+	_err("Game data: a character has no '%s'." % field)
 	return 0
 
 
@@ -494,7 +614,7 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return get_switch(cond.get("id", "")) == bool(cond.get("value", true))
 		"variable":
 			var cur: Variant = get_variable(cond.get("id", ""))
-			var rhs: Variant = resolve_operand(cond.get("value", 0))
+			var rhs: Variant = resolve_operand(cond.get("value", 0), ctx)
 			var t := variable_type(cond.get("id", ""))
 			if t == "bool" or t == "string":
 				var op: String = cond.get("op", "==")
@@ -528,7 +648,7 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			var want := str(cond.get("id", cond.get("vehicle", "")))
 			return riding == ("" if want == "none" else want)
 		"gold":
-			return compare(gold, cond.get("op", ">="), int(resolve_operand(cond.get("value", 0))))
+			return compare(gold, cond.get("op", ">="), int(resolve_operand(cond.get("value", 0), ctx)))
 		"all":
 			for c in cond.get("conditions", []):
 				if not check_condition(c, map_id, event_id, ctx):
@@ -625,6 +745,8 @@ func to_dict() -> Dictionary:
 		"music_overrides": music_overrides.duplicate(true),
 		"map_overrides": map_overrides.duplicate(true),
 		"windowskin": windowskin,
+		"counters": counters.duplicate(),
+		"last_used": last_used.duplicate(),
 	}
 
 
@@ -668,6 +790,11 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 	music_overrides = d.get("music_overrides", {}).duplicate(true) if d.get("music_overrides") is Dictionary else {}
 	map_overrides = d.get("map_overrides", {}).duplicate(true) if d.get("map_overrides") is Dictionary else {}
 	windowskin = str(d.get("windowskin", ""))
+	counters = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
+	if d.get("counters") is Dictionary:
+		for k in counters:
+			counters[k] = int(d.counters.get(k, 0))
+	last_used = d.get("last_used", {}).duplicate() if d.get("last_used") is Dictionary else {}
 	changed.emit()
 
 

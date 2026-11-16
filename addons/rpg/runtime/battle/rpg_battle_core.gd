@@ -102,6 +102,10 @@ var switch_reader: Callable
 var condition_reader: Callable
 ## Called with (item_id) to give back an item whose action a hook cancelled or replaced.
 var item_refund: Callable
+## Called with a Dictionary of Game Data "last used" values ({item, skill, actor, target_actor,
+## target_enemy}; only the keys the action fills) after each action that really happens. Wired by
+## the battle scene to the game state. Unset: nothing is recorded.
+var last_used_recorder: Callable
 ## The object battle hooks are reported to (has battle_hook(name, args, mode) -> {args, cancel}),
 ## normally the RPG service. Null: no hooks.
 var hooks: Object = null
@@ -419,6 +423,7 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary) -> void:
 		"guard":
 			b.guarding = true
 			res.lines.append(rules.term("guard", [b.name]))
+			_record_last_used(b, kind, {}, [])
 		"escape":
 			var e := attempt_escape()
 			res.escaped = e.success
@@ -428,6 +433,27 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary) -> void:
 	# A guard targets its user; escape and wait target nothing. Neither leaves the last action's
 	# targets pointing at an enemy, so the branch check stops holding there.
 	_last_action_targets = [b] if kind == "guard" else []
+
+
+## Reports what an action used and targeted to `last_used_recorder`. Only actions that really
+## happen (costs paid) are reported; a guard reports just who guarded.
+func _record_last_used(b: RPGBattler, kind: String, u: Dictionary, targets: Array) -> void:
+	if not last_used_recorder.is_valid():
+		return
+	var out := {}
+	if (kind == "item" or kind == "skill") and str(u.get("id", "")) != "":
+		out[kind] = str(u.id)
+	if b.is_actor():
+		out["actor"] = b.id
+	for t in targets:
+		if t.is_actor():
+			out["target_actor"] = t.id
+			break
+	for t in targets:
+		if t.is_enemy():
+			out["target_enemy"] = t.index
+			break
+	last_used_recorder.call(out)
 
 
 # --- hooks ---------------------------------------------------------------------------------------
@@ -554,6 +580,7 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
 	rules.pay_cost(b, action)
 	_last_action_targets = targets
+	_record_last_used(b, kind, u, targets)
 	match kind:
 		"attack":
 			res.lines.append(rules.term("attack", [b.name]))

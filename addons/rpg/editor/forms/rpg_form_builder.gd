@@ -45,10 +45,20 @@ const COMMAND_LIST_SCRIPT := "res://addons/rpg/editor/event_editor/rpg_command_l
 const TROOP_EDITOR_SCRIPT := "res://addons/rpg/editor/database/rpg_troop_editor.gd"
 const TILE_PICKER_SCRIPT := "res://addons/rpg/editor/forms/rpg_tile_picker.gd"
 ## Operand modes (RPGGameState.resolve_operand): a number, {variable}, {random: [a, b]},
-## {game_data: {kind, id?, field?}} (RPGGameState.game_data).
-const OPERAND_MODES := ["Number", "Variable", "Random", "Game data"]
-const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor"]
-const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor"]
+## {game_data: {kind, ...}} (RPGGameState.game_data), {pointer: id} (the value of the variable
+## whose id that variable holds).
+const OPERAND_MODES := ["Number", "Variable", "Random", "Game data", "Pointer"]
+const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
+const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor", "Character", "Map id", "Party member", "Last used", "Counter", "Enemy"]
+## Character game data: targets (an event's ID is typed in directly) and fields.
+const CHAR_TARGETS := ["player", "this", "follower", "event"]
+const CHAR_TARGET_LABELS := ["Player", "This event", "Follower…", "Event…"]
+const CHARACTER_GAME_FIELDS := ["x", "y", "direction", "screen_x", "screen_y"]
+const CHARACTER_GAME_FIELD_LABELS := ["X (map cell)", "Y (map cell)", "Direction (2=down 4=left 6=right 8=up)", "Screen X (pixels)", "Screen Y (pixels)"]
+const LAST_USED_WHATS := ["item", "skill", "actor", "target_actor", "target_enemy"]
+const LAST_USED_LABELS := ["Item", "Skill", "Actor", "Target actor", "Target enemy"]
+const COUNTER_WHICHES := ["saves", "battles", "victories", "defeats", "escapes"]
+const COUNTER_LABELS := ["Saves", "Battles", "Victories", "Defeats", "Escapes"]
 
 ## Rule-system stat and resource lists per project root (actor fields of Game data operands).
 static var _rule_lists_cache: Dictionary = {}
@@ -828,7 +838,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var mode := OptionButton.new()
 	for m in OPERAND_MODES:
 		mode.add_item(m)
-	mode.tooltip_text = "A fixed number, a variable's value, a random number, or game data (items held, gold, an actor's level...)"
+	mode.tooltip_text = "A fixed number, a variable's value, a random number, game data (items held, gold, an actor's level...), or a variable chosen by another variable"
 	var sb := SpinBox.new()
 	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sb.min_value = float(f.get("min", -9999999))
@@ -857,8 +867,17 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var gfield := OptionButton.new()
 	gfield.tooltip_text = "Which number of the actor"
 	var lists := rule_lists(data)
+	# Actor fields: level, EXP, equip slots (the slot's name is the field: the item id in it),
+	# resources, then stats.
 	var field_ids: Array = ["level", "exp"]
 	var field_labels: Array = ["Level", "Experience"]
+	if data != null:
+		for a in data.db.get("actors", {}).values():
+			if a is Dictionary and a.get("equips") is Dictionary:
+				for slot in a.equips:
+					if not field_ids.has(str(slot)):
+						field_ids.append(str(slot))
+						field_labels.append(str(slot).capitalize())
 	for r in lists.resources:
 		field_ids.append(str(r.id))
 		field_labels.append(str(r.get("label", r.id)))
@@ -868,9 +887,56 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 			field_labels.append(str(st.get("label", st.id)))
 	for i in field_ids.size():
 		gfield.add_item(field_labels[i])
-	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield]:
+	# Enemy fields: its resources and stats (enemies have no level or EXP to read).
+	var enemy_ids: Array = []
+	var enemy_labels: Array = []
+	for r in lists.resources:
+		enemy_ids.append(str(r.id))
+		enemy_labels.append(str(r.get("label", r.id)))
+	for st in lists.stats:
+		if not enemy_ids.has(str(st.id)):
+			enemy_ids.append(str(st.id))
+			enemy_labels.append(str(st.get("label", st.id)))
+	# Pointer: the variable whose value is the id of the real source variable.
+	var pp := RPGRefPicker.new("variable", data, [], false)
+	# Character: which character (an event's ID is typed in), then which position number.
+	var ct := OptionButton.new()
+	for l in CHAR_TARGET_LABELS:
+		ct.add_item(l)
+	var ce := LineEdit.new()
+	ce.placeholder_text = "Event ID"
+	ce.custom_minimum_size.x = 90.0
+	var fi := SpinBox.new()
+	fi.min_value = 0
+	fi.max_value = 99
+	fi.prefix = "number"
+	fi.tooltip_text = "Which follower (0 is right behind the player)"
+	var cf := OptionButton.new()
+	for l in CHARACTER_GAME_FIELD_LABELS:
+		cf.add_item(l)
+	# Party member: the slot number (0 is the leader).
+	var pm := SpinBox.new()
+	pm.min_value = 0
+	pm.max_value = 99
+	pm.prefix = "slot"
+	# Last used (what the most recent battle action used and targeted) and play counters.
+	var lu := OptionButton.new()
+	for l in LAST_USED_LABELS:
+		lu.add_item(l)
+	var cn := OptionButton.new()
+	for l in COUNTER_LABELS:
+		cn.add_item(l)
+	# Enemy: which enemy (0 is the first) and which of its numbers.
+	var ei := SpinBox.new()
+	ei.min_value = 0
+	ei.max_value = 99
+	ei.prefix = "enemy #"
+	var ef := OptionButton.new()
+	for i in enemy_ids.size():
+		ef.add_item(enemy_labels[i])
+	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef]:
 		hb.add_child(c)
-	var state := {"v": null, "fields": field_ids}
+	var state := {"v": null, "fields": field_ids, "enemy_fields": enemy_ids}
 	var gkind := func() -> String:
 		return GAME_DATA_KINDS[gk.selected] if gk.selected >= 0 else "gold"
 	var show := func() -> void:
@@ -879,10 +945,22 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 		vp.visible = m == 1
 		rlo.visible = m == 2
 		rhi.visible = m == 2
+		pp.visible = m == 4
 		gk.visible = m == 3
 		var k: String = gkind.call()
 		gref.visible = m == 3 and k in ["item", "weapon", "armor", "actor"]
 		gfield.visible = m == 3 and k == "actor"
+		var is_char := m == 3 and k == "character"
+		var ct_sel := ct.selected if ct.selected >= 0 else 0
+		ct.visible = is_char
+		ce.visible = is_char and CHAR_TARGETS[ct_sel] == "event"
+		fi.visible = is_char and CHAR_TARGETS[ct_sel] == "follower"
+		cf.visible = is_char
+		pm.visible = m == 3 and k == "party_member"
+		lu.visible = m == 3 and k == "last_used"
+		cn.visible = m == 3 and k == "counter"
+		ei.visible = m == 3 and k == "enemy"
+		ef.visible = ei.visible
 		if gref.visible:
 			gref.set_ref_kind(k)
 	var read := func() -> Variant:
@@ -900,16 +978,34 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				var g: Dictionary = out3.get("game_data", {})
 				var k: String = gkind.call()
 				g["kind"] = k
+				for opt in ["id", "field", "target", "index", "slot", "what", "which"]:
+					g.erase(opt)
 				if k in ["item", "weapon", "armor", "actor"]:
 					g["id"] = str(gref.get_value()) if gref.get_value() != null else ""
-				else:
-					g.erase("id")
-				if k == "actor":
-					g["field"] = str(state.fields[gfield.selected]) if gfield.selected >= 0 else "level"
-				else:
-					g.erase("field")
+				match k:
+					"actor":
+						g["field"] = str(state.fields[gfield.selected]) if gfield.selected >= 0 else "level"
+					"character":
+						var t: String = CHAR_TARGETS[ct.selected] if ct.selected >= 0 else "player"
+						g["target"] = ce.text.strip_edges() if t == "event" else t
+						if t == "follower":
+							g["index"] = int(fi.value)
+						g["field"] = CHARACTER_GAME_FIELDS[cf.selected] if cf.selected >= 0 else "x"
+					"party_member":
+						g["slot"] = int(pm.value)
+					"last_used":
+						g["what"] = LAST_USED_WHATS[lu.selected] if lu.selected >= 0 else "item"
+					"counter":
+						g["which"] = COUNTER_WHICHES[cn.selected] if cn.selected >= 0 else "battles"
+					"enemy":
+						g["index"] = int(ei.value)
+						g["field"] = str(state.enemy_fields[ef.selected]) if ef.selected >= 0 else "hp"
 				out3["game_data"] = g
 				return out3
+			4:
+				var out4: Dictionary = state.v.duplicate(true) if state.v is Dictionary and state.v.has("pointer") else {}
+				out4["pointer"] = str(pp.get_value())
+				return out4
 		return sb.value if is_float else int(sb.value)
 	var emit := func(_a = null) -> void:
 		show.call()
@@ -920,12 +1016,22 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	vp.value_changed.connect(emit)
 	rlo.value_changed.connect(emit)
 	rhi.value_changed.connect(emit)
+	pp.value_changed.connect(emit)
 	gk.item_selected.connect(func(_i):
 		# A new kind starts without the old kind's record.
 		gref.set_value("")
 		emit.call())
 	gref.value_changed.connect(emit)
 	gfield.item_selected.connect(emit)
+	ct.item_selected.connect(emit)
+	ce.text_changed.connect(emit)
+	fi.value_changed.connect(emit)
+	cf.item_selected.connect(emit)
+	pm.value_changed.connect(emit)
+	lu.item_selected.connect(emit)
+	cn.item_selected.connect(emit)
+	ei.value_changed.connect(emit)
+	ef.item_selected.connect(emit)
 	var setter := func(v: Variant) -> void:
 		state.v = v
 		if v is Dictionary and v.get("random") is Array:
@@ -946,6 +1052,33 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				state.fields.append(fld)
 				gfield.add_item("⚠ %s" % fld)
 			gfield.select(state.fields.find(fld))
+			var t := str(g.get("target", "player"))
+			var ti := CHAR_TARGETS.find(t)
+			if ti < 0:
+				# An event id (or anything else): show it in the Event line.
+				ti = CHAR_TARGETS.find("event")
+				ce.text = t
+			ct.select(ti)
+			fi.set_value_no_signal(float(int(g.get("index", 0))))
+			var cfl := str(g.get("field", "x"))
+			var ci := CHARACTER_GAME_FIELDS.find(cfl)
+			cf.select(ci if ci >= 0 else 0)
+			pm.set_value_no_signal(float(int(g.get("slot", 0))))
+			var wl := LAST_USED_WHATS.find(str(g.get("what", "item")))
+			lu.select(wl if wl >= 0 else 0)
+			var cl := COUNTER_WHICHES.find(str(g.get("which", "battles")))
+			cn.select(cl if cl >= 0 else 0)
+			ei.set_value_no_signal(float(int(g.get("index", 0))))
+			var efl := str(g.get("field", "hp"))
+			var efi: int = state.enemy_fields.find(efl)
+			if efi < 0:
+				state.enemy_fields.append(efl)
+				ef.add_item("⚠ %s" % efl)
+				efi = state.enemy_fields.size() - 1
+			ef.select(efi)
+		elif v is Dictionary and v.has("pointer"):
+			mode.select(4)
+			pp.set_value(str(v.pointer))
 		elif v is Dictionary:
 			mode.select(1)
 			vp.set_value(str(v.get("variable", "")))

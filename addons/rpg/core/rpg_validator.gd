@@ -30,7 +30,13 @@ const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right
 ## Vehicle condition ids ("none" / "" = on foot).
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
-const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
+const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
+## Game data "counter" values (RPGGameState.counters).
+const COUNTER_KINDS := ["saves", "battles", "victories", "defeats", "escapes"]
+## Game data "last_used" values (RPGGameState.last_used).
+const LAST_USED_KINDS := ["item", "skill", "actor", "target_actor", "target_enemy"]
+## Game data "character" fields (RPGGameState._character_data).
+const CHARACTER_FIELDS := ["x", "y", "direction", "screen_x", "screen_y"]
 const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]
 ## Enemy action pattern condition kinds (RPGBattleCore._enemy_condition).
 const ENEMY_CONDITION_KINDS := ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"]
@@ -61,7 +67,7 @@ const FIX_HINT := {
 	"common_event": "Create the common event in Database > Common events, or pick another one.",
 }
 ## Command fields that write the referenced switch/variable (everything else reads).
-const SETTER_FIELDS := {"set_switch": ["id"], "set_variable": ["id"], "input_number": ["variable"]}
+const SETTER_FIELDS := {"set_switch": ["id"], "set_variable": ["id", "from", "to"], "input_number": ["variable"]}
 const SETTER_KEYS := ["result", "roll_into"]
 ## Commands whose free-form strings may mention IDs (renames warn instead of rewriting).
 const SCRIPT_COMMANDS := ["call_method", "emit_signal", "run_scene"]
@@ -519,14 +525,42 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 		return
 	if v is Dictionary and RPGIds.is_valid(v.get("variable")):
 		return
+	if v is Dictionary and RPGIds.is_valid(v.get("pointer")):
+		return
 	if v is Dictionary and v.get("random") is Array and v.random.size() == 2 and typeof(v.random[0]) in [TYPE_INT, TYPE_FLOAT] and typeof(v.random[1]) in [TYPE_INT, TYPE_FLOAT]:
 		return
 	if v is Dictionary and v.get("game_data") is Dictionary:
-		if GAME_DATA_KINDS.has(str(v.game_data.get("kind", ""))):
-			return
-		out.append(problem("error", file, rec, "value", path + "/game_data/kind", "Unknown game data '%s'." % v.game_data.get("kind", ""), "Use item, weapon, armor, gold, steps, play_time, party_size or actor."))
+		_game_data_structure(v.game_data, file, rec, path + "/game_data", out)
 		return
-	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
+	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
+
+
+## Structure of a {game_data: {...}} operand: the kind must exist and its fields must be plausible.
+## IDs inside game data name records; references() checks those separately.
+static func _game_data_structure(g: Dictionary, file: String, rec: String, path: String, out: Array) -> void:
+	var kind := str(g.get("kind", ""))
+	if not GAME_DATA_KINDS.has(kind):
+		out.append(problem("error", file, rec, "value", path + "/kind", "Unknown game data '%s'." % kind, "Use item, weapon, armor, gold, steps, play_time, party_size, actor, character, map_id, party_member, last_used, counter or enemy."))
+		return
+	match kind:
+		"character":
+			var f := str(g.get("field", "x"))
+			if not CHARACTER_FIELDS.has(f):
+				out.append(problem("error", file, rec, "value", path + "/field", "A character has no '%s'." % f, "Use x, y, direction, screen_x or screen_y."))
+			if str(g.get("target", "player")) == "follower" and g.has("index") and (typeof(g.index) != TYPE_INT or int(g.index) < 0):
+				out.append(problem("error", file, rec, "value", path + "/index", "The follower number must be 0 or more.", ""))
+		"party_member":
+			if g.has("slot") and (typeof(g.slot) != TYPE_INT or int(g.slot) < 0):
+				out.append(problem("error", file, rec, "value", path + "/slot", "The party slot must be 0 or more.", ""))
+		"enemy":
+			if g.has("index") and (typeof(g.index) != TYPE_INT or int(g.index) < 0):
+				out.append(problem("error", file, rec, "value", path + "/index", "The enemy number must be 0 or more.", ""))
+		"counter":
+			if not COUNTER_KINDS.has(str(g.get("which", "battles"))):
+				out.append(problem("error", file, rec, "value", path + "/which", "Unknown counter '%s'." % g.get("which", ""), "Use saves, battles, victories, defeats or escapes."))
+		"last_used":
+			if not LAST_USED_KINDS.has(str(g.get("what", "item"))):
+				out.append(problem("error", file, rec, "value", path + "/what", "Unknown last used '%s'." % g.get("what", ""), "Use item, skill, actor, target_actor or target_enemy."))
 
 
 static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array, where := "branch") -> void:
@@ -746,6 +780,8 @@ static func _field(f: Dictionary, siblings: Array, holder: Variant, key: Variant
 		"operand":
 			if v is Dictionary and v.has("variable"):
 				_add_ref(acc, ctx, "variable", v, "variable", path + "/variable", "read", false, str(f.get("key", key)))
+			elif v is Dictionary and v.has("pointer"):
+				_add_ref(acc, ctx, "variable", v, "pointer", path + "/pointer", "read", false, str(f.get("key", key)))
 		"operand_pair":
 			if v is Array:
 				for i in v.size():

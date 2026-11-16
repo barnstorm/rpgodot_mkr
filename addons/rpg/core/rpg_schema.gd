@@ -24,6 +24,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 	defs["operand"] = {"oneOf": [
 		{"type": "number"},
 		{"type": "object", "required": ["variable"], "properties": {"variable": {"$ref": "#/$defs/id"}}},
+		{"type": "object", "required": ["pointer"], "properties": {"pointer": {"$ref": "#/$defs/id"}}},
 		{"type": "object", "required": ["random"], "properties": {"random": {"type": "array", "minItems": 2, "maxItems": 2}}},
 		{"type": "object", "required": ["game_data"], "properties": {"game_data": {"type": "object", "required": ["kind"]}}},
 	]}

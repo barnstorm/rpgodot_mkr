@@ -448,6 +448,61 @@ func test_sample_goblin_page() -> void:
 	assert_eq(fired, [[2, "goblin_snarls", "The goblin snarls!"]])
 
 
+# --- Game Data "last used" (recorded per action that really happens) -----------------------
+
+
+func test_last_used_recorder_reports_actions() -> void:
+	var core := _core(["hero", "mira"], "slimes", 42)
+	var recorded := []
+	core.last_used_recorder = func(d: Dictionary): recorded.append(d.duplicate())
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "guard"}))
+	assert_true(core.set_action(1, {"kind": "skill", "skill": "fire", "target": 1}))
+	var r := core.next_action()
+	while not r.is_empty():
+		r = core.next_action()
+	core.end_turn()
+	# A guard reports only who guarded; a skill reports the skill, its actor and the enemy targeted.
+	assert_true(recorded.has({"actor": "hero"}), "guard: %s" % str(recorded))
+	assert_true(recorded.has({"skill": "fire", "actor": "mira", "target_enemy": 1}), "skill: %s" % str(recorded))
+
+
+func test_last_used_recorder_items_and_refused_actions() -> void:
+	var core := _core(["hero"], "slimes", 3)
+	var recorded := []
+	core.last_used_recorder = func(d: Dictionary): recorded.append(d.duplicate())
+	core.party[0].set_resource("hp", 30)
+	core.begin_turn()
+	# The hero does not know fire: the action is refused and reports nothing.
+	assert_false(core.set_action(0, {"kind": "skill", "skill": "fire", "target": 0}))
+	assert_true(core.set_action(0, {"kind": "item", "item": "potion", "target": 0}))
+	var r := core.next_action()
+	while not r.is_empty():
+		r = core.next_action()
+	core.end_turn()
+	# The hero's refused skill never reported; the item action did, with actor and target.
+	assert_eq(recorded[0], {"item": "potion", "actor": "hero", "target_actor": "hero"}, str(recorded))
+	# The slimes strike back: an enemy action names its target but not an "actor".
+	for i in range(1, recorded.size()):
+		assert_eq(recorded[i], {"target_actor": "hero"}, str(recorded))
+
+
+func test_last_used_recorder_attack_and_enemies() -> void:
+	var core := _core(["hero"], "slimes", 7)
+	var recorded := []
+	core.last_used_recorder = func(d: Dictionary): recorded.append(d.duplicate())
+	_auto_battle(core)
+	# Some action attacked an enemy, and the slimes struck back at the hero.
+	var seen_target_enemy := false
+	var seen_target_actor := false
+	for d in recorded:
+		seen_target_enemy = seen_target_enemy or d.has("target_enemy")
+		seen_target_actor = seen_target_actor or d.has("target_actor")
+	assert_true(seen_target_enemy, "an action targeted an enemy: %s" % str(recorded))
+	assert_true(seen_target_actor, "an enemy targeted the hero: %s" % str(recorded))
+	assert_false(recorded.is_empty())
+
+
 func test_escape_from_slimes() -> void:
 	var core := _core(["hero"], "slimes", 8)
 	var escaped := false
