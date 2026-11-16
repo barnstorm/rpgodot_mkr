@@ -191,6 +191,19 @@ func life_resource() -> String:
 	return str(definition.get("life_resource", "hp"))
 
 
+## The spell resource ("sp" in classic, "mp" in VX Ace), for MP conditions and costs; "" when the
+## ruleset declares no second resource. Declared as "magic_resource" in the definition, else the
+## first resource that is not the life one.
+func magic_resource() -> String:
+	var m := str(definition.get("magic_resource", ""))
+	if _res_defs.has(m):
+		return m
+	for r in _res_order:
+		if str(r) != life_resource():
+			return str(r)
+	return ""
+
+
 func death_state() -> String:
 	return str(definition.get("death_state", "knockout"))
 

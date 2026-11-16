@@ -292,6 +292,13 @@ func test_enemy_conditions_and_slip_have_forms() -> void:
 	le.set_value([{"condition": {"kind": "turn", "every": 3, "n": 3}, "rating": 6, "skill": "attack"}])
 	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in action patterns")
 	assert_eq(le.get_value()[0].condition, {"kind": "turn", "every": 3, "n": 3}, "round trip")
+	le.set_value([
+		{"condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "rating": 6, "skill": "attack"},
+		{"condition": {"kind": "mp", "op": "<", "percent": 25}, "rating": 6, "skill": "guard"},
+	])
+	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in the #9 conditions")
+	assert_eq(le.get_value()[0].condition, {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "variable round trip")
+	assert_eq(le.get_value()[1].condition, {"kind": "mp", "op": "<", "percent": 25}, "mp round trip")
 	le.queue_free()
 	await frames(1)
 
@@ -489,12 +496,74 @@ func test_vehicle_condition() -> void:
 	ce._on_kind(ce._kinds.find("vehicle"))
 	assert_eq(ce.get_value(), {"kind": "vehicle", "id": "boat"}, "new vehicle condition")
 	var out := []
-	RPGValidator._condition_structure({"kind": "vehicle", "id": "airship"}, "f", "r", "p", out, false)
+	RPGValidator._condition_structure({"kind": "vehicle", "id": "airship"}, "f", "r", "p", out, "map")
 	assert_eq(out.size(), 0, str(out))
-	RPGValidator._condition_structure({"kind": "vehicle", "id": "car"}, "f", "r", "p", out, false)
+	RPGValidator._condition_structure({"kind": "vehicle", "id": "car"}, "f", "r", "p", out, "map")
 	assert_eq(out.size(), 1, "unknown vehicle reported")
 	ce.queue_free()
 	await frames(1)
+
+
+func test_turn_end_battle_condition() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var ce := RPGConditionEditor.new(data, null, true)
+	tree.root.add_child(ce)
+	assert_has(ce._kinds, "turn_end", "battle pages offer Turn end")
+	ce.set_value({"kind": "turn_end"})
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "round trip with no fields")
+	ce._on_kind(ce._kinds.find("turn_end"))
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "picking Turn end needs no fields")
+	var out := []
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, "battle_page")
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, "branch")
+	assert_eq(out.size(), 1, "turn end is not a branch condition")
+	ce.queue_free()
+	await frames(1)
+
+
+## The branch-only battle checks (#50): offered where they work, hidden where they cannot.
+func test_battle_branch_condition_kinds() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	# A Conditional Branch in a battle event: the battle table plus the branch-only checks.
+	var ce := RPGConditionEditor.new(data, null, true, {}, true)
+	tree.root.add_child(ce)
+	for k in ["turn", "enemy_hp", "actor_hp", "actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_has(ce._kinds, k, "battle branches offer %s" % k)
+	assert_false(ce._kinds.has("turn_end"), "turn end is never a branch")
+	ce.set_value({"kind": "actor_can_act", "id": "hero"})
+	assert_eq(ce.get_value(), {"kind": "actor_can_act", "id": "hero"}, "round trip")
+	ce._on_kind(ce._kinds.find("enemy_is_target"))
+	assert_eq(ce.get_value(), {"kind": "enemy_is_target", "index": 0}, "new condition defaults to the first enemy")
+	ce.queue_free()
+	await frames(1)
+	# A battle page: the branch-only checks are gone.
+	var page := RPGConditionEditor.new(data, null, true)
+	tree.root.add_child(page)
+	for k in ["actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_false(page._kinds.has(k), "battle pages do not offer %s" % k)
+	page.queue_free()
+	await frames(1)
+	# A branch on a map: none of the battle checks.
+	var map_branch := RPGConditionEditor.new(data, null, false, {}, true)
+	tree.root.add_child(map_branch)
+	for k in ["turn", "enemy_hp", "actor_hp", "turn_end", "actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_false(map_branch._kinds.has(k), "map branches do not offer %s" % k)
+	map_branch.queue_free()
+	await frames(1)
+	# The validator's view of the same split.
+	var out := []
+	RPGValidator._condition_structure({"kind": "actor_can_act", "id": "hero"}, "f", "r", "p", out, "battle")
+	assert_eq(out.size(), 0, str(out))
+	var bad_id := []
+	RPGValidator._condition_structure({"kind": "actor_can_act"}, "f", "r", "p", bad_id, "battle")
+	assert_eq(bad_id.size(), 1, "the actor is required")
+	var bad_index := []
+	RPGValidator._condition_structure({"kind": "enemy_can_act", "index": -1}, "f", "r", "p", bad_index, "common")
+	assert_eq(bad_index.size(), 1, "a negative enemy index is reported")
+	var as_page := []
+	RPGValidator._condition_structure({"kind": "enemy_is_target", "index": 0}, "f", "r", "p", as_page, "battle_page")
+	assert_eq(as_page.size(), 1, "branch-only kinds are not page conditions")
 
 
 func test_operand_editor_random_and_game_data() -> void:
