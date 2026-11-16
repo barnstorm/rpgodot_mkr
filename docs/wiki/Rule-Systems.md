@@ -20,6 +20,7 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - Regeneration and each state's damage apply on the map every 20 steps.
 - Item and skill **effects** *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle — an enemy just goes; a whole party escaping ends the fight as an escape).
 - MV/MZ **scopes**: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
+- MV **invocation fields**: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss — through the rules' `gain_on_use`).
 
 Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 

@@ -665,6 +665,11 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
 	_last_target[b] = targets[0] if not targets.is_empty() else _last_target.get(b)
 	rules.pay_cost(b, action)
+	# VX Ace/MV TP Gain: charged once per use — not per target or repeat, and even on a miss —
+	# so it is taken from the rules right after the cost is paid.
+	var gained := rules.gain_on_use(b, action)
+	if not gained.is_empty():
+		res["user_changes"] = gained
 	match kind:
 		"attack":
 			res.lines.append(rules.term("attack", [b.name]))
@@ -690,7 +695,9 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			elif t.is_enemy() and not used.has("target_enemy"):
 				used["target_enemy"] = int(t.index)
 		note_use.call(used)
-	var repeats := maxi(1, int(action.get("times", 1)))
+	# Repeats (VX Ace/MV "Repeat" 1-9) come from the usable; an explicit action "times" (a forced
+	# 2003 double attack) overrides them.
+	var repeats := maxi(1, int(action.get("times", int(u.get("repeats", 1)))))
 	if kind == "attack":
 		repeats += int(rules.trait_sum(b, "extra_attack"))
 	# Charge Up (2003): the stored multiplier boosts every hit of this attack, then it is spent
@@ -711,13 +718,26 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			if base_hook.is_valid():
 				v = int(base_hook.call(user, target, act, v))
 			return int(round(v * m)) if m != 1.0 else v
-	for t in targets:
+	# MV repeats: every repeat re-rolls hit and damage (each apply_action is a fresh roll), and a
+	# random scope re-picks its targets per repeat. Other scopes keep a target's repeats together
+	# (a Repeat 3 skill strikes one foe three times before moving to the next).
+	var apply_one := func(t: RPGBattler) -> void:
+		var r := rules.apply_action(b, t, action)
+		res.effects.append({"target": t, "result": r})
+		res.lines.append_array(r.lines)
+	if str(u.get("scope", "")) == "random_enemies":
 		for k in repeats:
-			if k > 0 and not t.is_active():
-				break
-			var r := rules.apply_action(b, t, action)
-			res.effects.append({"target": t, "result": r})
-			res.lines.append_array(r.lines)
+			if k > 0:
+				targets = resolve_targets(b, u, int(action.get("target", -1)))
+			for t in targets:
+				if t.is_active():
+					apply_one.call(t)
+	else:
+		for t in targets:
+			for k in repeats:
+				if k > 0 and not t.is_active():
+					break
+				apply_one.call(t)
 	if wrapped:
 		rules.damage_filter = Callable()
 	# The Escape effect (VX Ace / MV): whoever it hits leaves the battle — an actor can escape

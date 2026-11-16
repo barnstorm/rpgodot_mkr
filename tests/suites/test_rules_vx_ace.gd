@@ -190,11 +190,17 @@ func test_tp() -> void:
 	rules.add_state(bruno, "charger")
 	rules.apply_action(eric, bruno, {"kind": "skill", "skill": "hit100"})
 	assert_eq(bruno.get_resource("tp"), 30, "TP Charge Rate 200% doubles the gain")
-	# TP Gain of the skill goes to the user when it hits.
+	# TP Gain of the skill is charged to the user once per use (gain_on_use, beside pay_cost),
+	# not per hit.
 	var slime := rules.new_enemy_battler("slime")
-	var g := rules.apply_action(eric, slime, {"kind": "skill", "skill": "charge"})
-	assert_eq(g.user_changes, {"tp": 10})
+	rules.apply_action(eric, slime, {"kind": "skill", "skill": "hit100"})
+	assert_eq(eric.get_resource("tp"), 0, "the hit itself no longer charges it")
+	assert_eq(rules.gain_on_use(eric, {"kind": "skill", "skill": "charge"}), {"tp": 10})
 	assert_eq(eric.get_resource("tp"), 10)
+	eric.set_resource("tp", 95)
+	rules.gain_on_use(eric, {"kind": "skill", "skill": "charge"})
+	assert_eq(eric.get_resource("tp"), 100, "the gain stops at the TP maximum")
+	eric.set_resource("tp", 10)
 	# TP costs.
 	assert_false(rules.can_use(eric, {"kind": "skill", "skill": "tp_burst"}), "needs 20 TP")
 	assert_true(rules.can_use(bruno, {"kind": "skill", "skill": "tp_burst"}))
@@ -306,6 +312,33 @@ func test_action_times_in_battle_round() -> void:
 	core.finish()
 	for a in core.party:
 		assert_eq(a.get_resource("tp"), 0, "TP cleared after battle")
+
+
+## MV TP Gain in battle (#45): charged once per use — not per target, not per repeat — and
+## reported as the action's user_changes.
+func test_tp_gain_charged_once_per_use_in_battle() -> void:
+	db.add("skills", {"id": "spark_all", "name": "Spark All", "formula": "1", "hit_type": "certain",
+		"variance": 0, "scope": "all_enemies", "repeats": 2, "tp_gain": 10})
+	var eric := rules.new_actor_battler("eric")
+	eric.skills.append("spark_all")
+	var troop := {"id": "t2", "members": [{"enemy": "slime"}, {"enemy": "slime"}]}
+	var core := RPGBattleCore.new([eric], troop, rules, RPGRandom.new(99))
+	core.start()
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "skill", "skill": "spark_all", "target": -1}))
+	var effects := []
+	var user_changes := {}
+	var r := core.next_action()
+	while not r.is_empty():
+		if r.user == eric:
+			effects = r.effects
+			user_changes = r.get("user_changes", {})
+		r = core.next_action()
+	core.end_turn()
+	core.finish()
+	assert_eq(effects.size(), 4, "2 foes x 2 repeats")
+	assert_eq(user_changes, {"tp": 10}, "charged once for the whole use")
+	assert_eq(rules.gain_on_use(eric, {"kind": "skill", "skill": "spark_all"}), {"tp": 10})
 
 
 func test_exp_curve() -> void:

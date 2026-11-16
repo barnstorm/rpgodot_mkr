@@ -253,6 +253,99 @@ func test_random_enemies_scope_hits_once_per_pick() -> void:
 	assert_eq(total, 12, "4 damage a hit")
 
 
+## MV's Repeat (#45): a Repeat 3 skill strikes one foe three times before moving on, and a
+## random scope re-picks its targets per repeat (3 picks x 2 repeats = 6 hits).
+func test_repeats_strike_the_target_that_many_times() -> void:
+	db.add("skills", {"id": "triple_slap", "name": "Triple Slap", "scope": "one_enemy",
+		"hit_type": "certain", "formula": "4", "variance": 0, "repeats": 3})
+	var core := _core(["hero"], "slimes", 5)
+	core.party[0].skills.append("triple_slap")
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "skill", "skill": "triple_slap", "target": 0}))
+	var effects := []
+	var r := core.next_action()
+	while not r.is_empty():
+		if r.user == core.party[0] and str(r.get("kind", "")) == "skill":
+			effects = r.effects
+		r = core.next_action()
+	core.end_turn()
+	assert_eq(effects.size(), 3, "three repeats")
+	var total := 0
+	for fe in effects:
+		total += int(fe.result.damage)
+		assert_eq(fe.target, core.enemies[0], "all on the aimed foe")
+	assert_eq(total, 12, "4 damage a hit")
+
+
+func test_repeats_stop_when_the_target_dies() -> void:
+	db.add("skills", {"id": "slime_bane", "name": "Slime Bane", "scope": "one_enemy",
+		"hit_type": "certain", "formula": "40", "variance": 0, "repeats": 3})
+	var core := _core(["hero"], "slimes", 5)
+	core.party[0].skills.append("slime_bane")
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "skill", "skill": "slime_bane", "target": 0}))
+	var effects := []
+	var r := core.next_action()
+	while not r.is_empty():
+		if r.user == core.party[0] and str(r.get("kind", "")) == "skill":
+			effects = r.effects
+		r = core.next_action()
+	core.end_turn()
+	assert_eq(effects.size(), 1, "the slime (40 HP) dies to the first repeat")
+	assert_eq(int(effects[0].result.damage), 40)
+
+
+func test_random_scope_repicks_its_targets_per_repeat() -> void:
+	db.add("skills", {"id": "double_storm", "name": "Double Storm", "scope": "random_enemies",
+		"random_count": 3, "hit_type": "certain", "formula": "4", "variance": 0, "repeats": 2})
+	var core := _core(["hero"], "slimes", 5)
+	core.party[0].skills.append("double_storm")
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "skill", "skill": "double_storm", "target": -1}))
+	var effects := []
+	var r := core.next_action()
+	while not r.is_empty():
+		if r.user == core.party[0] and str(r.get("kind", "")) == "skill":
+			effects = r.effects
+		r = core.next_action()
+	core.end_turn()
+	assert_eq(effects.size(), 6, "3 picks x 2 repeats, each pick rolled separately")
+	assert_true(effects.any(func(fe): return fe.target == core.enemies[1]) \
+		or effects.all(func(fe): return fe.target == core.enemies[0]),
+		"the re-pick may land anywhere")
+
+
+## The skill's Speed joins the turn-order roll (#45): +50 puts the hero (AGI 10) ahead of the
+## bats (AGI 14), -50 behind both.
+func test_skill_speed_orders_the_turn() -> void:
+	db.add("skills", {"id": "quick_jab", "name": "Quick Jab", "hit_type": "certain",
+		"formula": "4", "variance": 0, "speed": 50})
+	db.add("skills", {"id": "slow_swing", "name": "Slow Swing", "hit_type": "certain",
+		"formula": "4", "variance": 0, "speed": -50})
+	var fast := _core(["hero"], "bats", 11)
+	fast.party[0].skills.append("quick_jab")
+	fast.begin_turn()
+	assert_true(fast.set_action(0, {"kind": "skill", "skill": "quick_jab", "target": 0}))
+	var users := []
+	var r := fast.next_action()
+	while not r.is_empty():
+		users.append(r.user)
+		r = fast.next_action()
+	fast.end_turn()
+	assert_true(users[0] == fast.party[0], "a +50 skill acts before the AGI 14 bats")
+	var slow := _core(["hero"], "bats", 11)
+	slow.party[0].skills.append("slow_swing")
+	slow.begin_turn()
+	assert_true(slow.set_action(0, {"kind": "skill", "skill": "slow_swing", "target": 0}))
+	users = []
+	r = slow.next_action()
+	while not r.is_empty():
+		users.append(r.user)
+		r = slow.next_action()
+	slow.end_turn()
+	assert_true(users[-1] == slow.party[0], "a -50 skill acts after both bats")
+
+
 func test_turn_order_and_checkpoints() -> void:
 	var core := _core(["hero"], "bats", 11)
 	var seen := []
