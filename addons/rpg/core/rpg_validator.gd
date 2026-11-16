@@ -30,7 +30,7 @@ const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right
 ## Vehicle condition ids ("none" / "" = on foot).
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
-const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
+const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
 const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "actor_hp", "switch"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 
@@ -449,14 +449,16 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 		return
 	if v is Dictionary and RPGIds.is_valid(v.get("variable")):
 		return
+	if v is Dictionary and RPGIds.is_valid(v.get("pointer")):
+		return
 	if v is Dictionary and v.get("random") is Array and v.random.size() == 2 and typeof(v.random[0]) in [TYPE_INT, TYPE_FLOAT] and typeof(v.random[1]) in [TYPE_INT, TYPE_FLOAT]:
 		return
 	if v is Dictionary and v.get("game_data") is Dictionary:
 		if GAME_DATA_KINDS.has(str(v.game_data.get("kind", ""))):
 			return
-		out.append(problem("error", file, rec, "value", path + "/game_data/kind", "Unknown game data '%s'." % v.game_data.get("kind", ""), "Use item, weapon, armor, gold, steps, play_time, party_size or actor."))
+		out.append(problem("error", file, rec, "value", path + "/game_data/kind", "Unknown game data '%s'." % v.game_data.get("kind", ""), "Use item, gold, steps, play_time, party_size, actor, character, map id, party member, last used, counter or enemy."))
 		return
-	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
+	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
 
 
 static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array) -> void:

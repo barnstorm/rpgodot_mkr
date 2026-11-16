@@ -550,6 +550,12 @@ func test_operand_editor_random_and_game_data() -> void:
 	assert_eq(out.size(), 0, str(out))
 	RPGValidator._operand_structure({"game_data": {"kind": "bogus"}}, "f", "r", "p", out)
 	assert_eq(out.size(), 1)
+	# The #54 operand shapes validate too: pointer sources and the new game data kinds.
+	RPGValidator._operand_structure({"pointer": "holder"}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	for kind in ["character", "map_id", "party_member", "last_used", "counter", "enemy"]:
+		RPGValidator._operand_structure({"game_data": {"kind": kind}}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
 	form.queue_free()
 	await frames(1)
 
