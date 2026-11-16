@@ -179,6 +179,61 @@ func test_enemy_ai_conditions() -> void:
 		assert_eq(core.choose_enemy_action(goblin).kind, "attack", "no SP, no power strike")
 
 
+func test_enemy_ai_condition_list() -> void:
+	# The #9 kinds, one phase each so a single action qualifies at a time (a rating 4 apart from
+	# the best never enters the weighted pool, so every pick is deterministic).
+	db.add("enemies", {"id": "tactician", "name": "Tactician",
+		"stats": {"mhp": 200, "msp": 40, "agi": 20},
+		"actions": [
+			{"skill": "attack", "rating": 4, "condition": {"kind": "always"}},
+			{"skill": "guard", "rating": 9, "condition": {"kind": "mp", "op": "<=", "percent": 25}},
+			{"skill": "wait", "rating": 9, "condition": {"kind": "state", "state": "poison"}},
+			{"skill": "wait", "rating": 8, "condition": {"kind": "enemies_alive", "op": "<=", "count": 1}},
+			{"skill": "guard", "rating": 7, "condition": {"kind": "variable", "variable": "boss_rage", "op": "==", "against": 1}},
+		]})
+	var troop := {"id": "tactics", "members": [{"enemy": "tactician"}, {"enemy": "slime"}]}
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], troop, rules, RPGRandom.new(1))
+	core.start()
+	core.turn = 1
+	var t: RPGBattler = core.enemies[0]
+	assert_eq(core.choose_enemy_action(t).kind, "attack", "nothing holds: plain attack")
+	t.set_resource("sp", 0)
+	assert_eq(core.choose_enemy_action(t).kind, "guard", "own MP at 0% <= 25%: guard")
+	t.set_resource("sp", 40)
+	t.add_state("poison", 3)
+	assert_eq(core.choose_enemy_action(t).kind, "wait", "poisoned: wait")
+	t.remove_state("poison")
+	core.enemies[1].set_resource("hp", 0)
+	assert_false(core.enemies[1].is_active(), "the slime is down")
+	assert_eq(core.choose_enemy_action(t).kind, "wait", "alone on its side (1 <= 1 alive): wait")
+	core.enemies[1].set_resource("hp", 40)
+	core.condition_reader = func(c): return str(c.get("kind")) == "variable" and str(c.get("id")) == "boss_rage" and int(c.get("value", 0)) == 1
+	assert_eq(core.choose_enemy_action(t).kind, "guard", "boss_rage == 1 (ref 'variable', operand 'against'): guard")
+
+
+func test_enemy_ai_party_level_condition() -> void:
+	db.add("enemies", {"id": "veteran", "name": "Veteran",
+		"stats": {"mhp": 200, "agi": 20},
+		"actions": [
+			{"skill": "attack", "rating": 4, "condition": {"kind": "always"}},
+			{"skill": "guard", "rating": 9, "condition": {"kind": "party_level", "op": ">=", "level": 10}},
+			{"skill": "wait", "rating": 8, "condition": {"kind": "party_level", "pick": "highest", "op": ">=", "level": 10}},
+		]})
+	var troop := {"id": "levels", "members": [{"enemy": "veteran"}]}
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero", 5), rules.new_actor_battler("mira", 5)], troop, rules, RPGRandom.new(1))
+	core.start()
+	core.turn = 1
+	var v: RPGBattler = core.enemies[0]
+	assert_eq(core.choose_enemy_action(v).kind, "attack", "party average 5, highest 5: plain attack")
+	core.party[1].level = 10
+	assert_eq(core.choose_enemy_action(v).kind, "wait", "average 7.5 but highest 10: wait")
+	core.party[0].level = 10
+	var kinds := {}
+	for i in 30:
+		kinds[core.choose_enemy_action(v).kind] = true
+	assert_true(kinds.has("guard") and kinds.has("wait"), "average and highest both qualify, both stay in the weighted pool: %s" % str(kinds))
+
+
 func _page_ids(pages: Array) -> Array:
 	var out := []
 	for p in pages:

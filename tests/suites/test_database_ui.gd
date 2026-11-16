@@ -292,6 +292,13 @@ func test_enemy_conditions_and_slip_have_forms() -> void:
 	le.set_value([{"condition": {"kind": "turn", "every": 3, "n": 3}, "rating": 6, "skill": "attack"}])
 	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in action patterns")
 	assert_eq(le.get_value()[0].condition, {"kind": "turn", "every": 3, "n": 3}, "round trip")
+	le.set_value([
+		{"condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "rating": 6, "skill": "attack"},
+		{"condition": {"kind": "mp", "op": "<", "percent": 25}, "rating": 6, "skill": "guard"},
+	])
+	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in the #9 conditions")
+	assert_eq(le.get_value()[0].condition, {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "variable round trip")
+	assert_eq(le.get_value()[1].condition, {"kind": "mp", "op": "<", "percent": 25}, "mp round trip")
 	le.queue_free()
 	await frames(1)
 

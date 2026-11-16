@@ -32,6 +32,8 @@ const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
 const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
 const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]
+## Enemy action pattern condition kinds (RPGBattleCore._enemy_condition).
+const ENEMY_CONDITION_KINDS := ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"]
 ## Battle commands a command_used condition can name (action kinds of RPGBattleCore).
 const BATTLE_COMMAND_KINDS := ["attack", "skill", "item", "guard", "escape"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
@@ -177,11 +179,17 @@ static func structure(file_kind: String, data: Variant, registry: RPGCommandRegi
 						out.append(problem("error", file, rec, "trigger", base + "/trigger", "Common event '%s' has an unknown trigger '%s'." % [rec, ce.get("trigger")], "Use none, autorun or parallel."))
 					_commands_structure(ce.get("commands", []), registry, file, rec, base + "/commands", out)
 		"database":
-			if _id_list_structure(data, "records", "record", file, out) and db_type == "troops":
-				for i in data.records.size():
-					var tr: Variant = data.records[i]
-					if tr is Dictionary:
-						_troop_structure(tr, registry, file, "records/%d" % i, out)
+			if _id_list_structure(data, "records", "record", file, out):
+				if db_type == "troops":
+					for i in data.records.size():
+						var tr: Variant = data.records[i]
+						if tr is Dictionary:
+							_troop_structure(tr, registry, file, "records/%d" % i, out)
+				elif db_type == "enemies":
+					for i in data.records.size():
+						var en: Variant = data.records[i]
+						if en is Dictionary:
+							_enemy_structure(en, file, "records/%d" % i, out)
 		"system":
 			if not (data.get("system", null) is Dictionary):
 				out.append(problem("error", file, "", "system", "system", "system.json needs a \"system\" object.", ""))
@@ -450,6 +458,40 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 			_condition_structure(c.get("condition"), file, rec, path + "/condition", out, battle)
 	if kind in ["switch", "variable", "item", "actor", "actor_hp", "actor_mp", "actor_turns", "command_used"] and not RPGIds.is_valid(c.get("id")):
 		out.append(problem("error", file, rec, "condition", path + "/id", "This %s condition has no valid ID." % kind, "Pick a %s from the list." % kind))
+
+
+static func _enemy_structure(en: Dictionary, file: String, base: String, out: Array) -> void:
+	var rec := str(en.get("id", ""))
+	var acts: Variant = en.get("actions", [])
+	if not (acts is Array):
+		out.append(problem("error", file, rec, "actions", base + "/actions", "Action patterns must be a list.", ""))
+		return
+	for j in acts.size():
+		var a: Variant = acts[j]
+		if a is Dictionary:
+			_enemy_condition_structure(a.get("condition", {}), file, rec, "%s/actions/%d/condition" % [base, j], out)
+
+
+## One enemy action-pattern condition. The variable kind stores its ref under "variable" (or
+## "id" when hand-written like a page condition) and its operand under "against" (or "value").
+static func _enemy_condition_structure(c: Variant, file: String, rec: String, path: String, out: Array) -> void:
+	if not (c is Dictionary):
+		out.append(problem("error", file, rec, "condition", path, "A condition must be an object with a \"kind\".", ""))
+		return
+	var kind := str(c.get("kind", "always"))
+	if not ENEMY_CONDITION_KINDS.has(kind):
+		out.append(problem("error", file, rec, "condition", path + "/kind", "Unknown condition kind '%s'." % kind, "Use one of: %s." % ", ".join(PackedStringArray(ENEMY_CONDITION_KINDS))))
+		return
+	if kind in ["hp", "mp", "party_level", "enemies_alive", "variable"] and c.has("op") and not OPS.has(str(c.get("op"))):
+		out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % c.get("op"), "Use ==, !=, <, <=, > or >=."))
+	if kind == "state" and not RPGIds.is_valid(c.get("state")):
+		out.append(problem("error", file, rec, "condition", path + "/state", "This state condition has no valid state.", "Pick a state from the list."))
+	if kind == "variable":
+		if not RPGIds.is_valid(c.get("variable", c.get("id", null))):
+			out.append(problem("error", file, rec, "condition", path + "/variable", "This variable condition has no valid variable.", "Pick a variable from the list."))
+		_operand_structure(c.get("against", c.get("value", 0)), file, rec, path + "/against", out)
+	if kind == "switch" and not RPGIds.is_valid(c.get("id")):
+		out.append(problem("error", file, rec, "condition", path + "/id", "This switch condition has no valid ID.", "Pick a switch from the list."))
 
 
 static func _operand_structure(v: Variant, file: String, rec: String, path: String, out: Array) -> void:
@@ -859,8 +901,17 @@ static func _db_refs(t: String, d: Dictionary, ctx: Dictionary, registry: RPGCom
 						if acts[j] is Dictionary and not ["attack", "guard", "wait", "escape"].has(str(acts[j].get("skill", ""))):
 							_add_ref(acc, ctx, "skill", acts[j], "skill", "%s/actions/%d/skill" % [base, j], "read", false, "actions")
 						var cond: Variant = acts[j].get("condition") if acts[j] is Dictionary else null
-						if cond is Dictionary and str(cond.get("kind", "")) == "switch" and cond.has("id"):
-							_add_ref(acc, ctx, "switch", cond, "id", "%s/actions/%d/condition/id" % [base, j], "read", false, "actions")
+						if cond is Dictionary:
+							var ck := str(cond.get("kind", "always"))
+							if ck == "switch" and cond.has("id"):
+								_add_ref(acc, ctx, "switch", cond, "id", "%s/actions/%d/condition/id" % [base, j], "read", false, "actions")
+							elif ck == "state" and cond.has("state"):
+								_add_ref(acc, ctx, "state", cond, "state", "%s/actions/%d/condition/state" % [base, j], "read", false, "actions")
+							elif ck == "variable":
+								if cond.has("variable"):
+									_add_ref(acc, ctx, "variable", cond, "variable", "%s/actions/%d/condition/variable" % [base, j], "read", false, "actions")
+								elif cond.has("id"):
+									_add_ref(acc, ctx, "variable", cond, "id", "%s/actions/%d/condition/id" % [base, j], "read", false, "actions")
 				var drops: Variant = r.get("drops", [])
 				if drops is Array:
 					for j in drops.size():

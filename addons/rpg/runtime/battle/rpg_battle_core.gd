@@ -967,6 +967,8 @@ func _enemy_action_dict(a: Dictionary) -> Dictionary:
 	return {"kind": "skill", "skill": sk, "target": -1}
 
 
+## One action-pattern condition. Shared helpers (_turn_matches, _hp_percent, _mp_percent,
+## _compare, _switch_is) keep the semantics the same as the troop page conditions (#9).
 func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 	if not (c is Dictionary) or c.is_empty():
 		return true
@@ -977,8 +979,44 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
 		"hp":
 			return _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
+		"mp":
+			if rules.magic_resource() == "":
+				return false
+			return _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+		"state":
+			return e.has_state(str(c.get("state", "")))
+		"party_level":
+			var levels := []
+			for a in party:
+				if a.is_active():
+					levels.append(float(a.level))
+			if levels.is_empty():
+				return false
+			var lv := levels.max()
+			if str(c.get("pick", "average")) != "highest":
+				lv = levels.reduce(func(s, x): return s + x, 0.0) / levels.size()
+			return _compare(lv, str(c.get("op", ">=")), float(c.get("level", 1)))
+		"enemies_alive":
+			var alive := 0
+			for foe in enemies:
+				if foe.is_active():
+					alive += 1
+			return _compare(float(alive), str(c.get("op", ">=")), float(c.get("count", 1)))
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
+		"variable":
+			# Same variable semantics as page conditions, through condition_reader. The editor
+			# stores the ref under "variable" (the condition's "id" is the switch's key), so both
+			# spellings are accepted here; "against" is the editor's name for the operand.
+			if condition_reader.is_valid():
+				var cc := {
+					"kind": "variable",
+					"id": str(c.get("variable", c.get("id", ""))),
+					"op": str(c.get("op", "==")),
+					"value": c.get("against", c.get("value", 0)),
+				}
+				return bool(condition_reader.call(cc))
+			return false
 	return false
 
 
