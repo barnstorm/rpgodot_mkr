@@ -20,6 +20,19 @@ const NO_DESTINATION := Vector2i(-1, -1)
 const PATH_SEARCH_LIMIT := 2500
 var _marker: Node2D
 
+## Pan Screen (RM2000/2003): while `camera_locked` the camera stops following the player, though
+## pans still scroll the locked screen. Everything is kept in node-local pixels so a map's display
+## scale never enters the math: `_lock_origin`/`_lock_cam` pin the world point the screen froze at,
+## `_pan_offset` is the scroll away from it, and `_pan_queue` chains pans one after another.
+var camera_locked := false
+var _lock_origin := Vector2.ZERO
+var _lock_cam := Vector2.ZERO
+var _pan_offset := Vector2.ZERO
+var _pan_tween: Tween = null
+var _pan_queue: Array = []
+var _pan_target := Vector2.ZERO
+var _pan_speed := 64.0
+
 
 func _init() -> void:
 	super._init()
@@ -38,7 +51,8 @@ func _ready() -> void:
 func setup_camera() -> void:
 	var s: Vector2i = map.size
 	var px := s * tile_size
-	camera.position = Vector2(0, -tile_size / 2.0)
+	if not camera_locked:
+		camera.position = Vector2(0, -tile_size / 2.0)
 	# A tileset drawn smaller than the project's tile size (the 16 px starter art in a 48 px MV
 	# project) is zoomed so tiles fill the screen as they would in that RPG Maker.
 	var k: int = map.display_scale() if map.has_method("display_scale") else 1
@@ -58,6 +72,125 @@ func setup_camera() -> void:
 		camera.limit_top = -(vs.y - px.y) / 2
 		camera.limit_bottom = camera.limit_top + vs.y
 	camera.reset_smoothing()
+	# A teleport inside the same map keeps the lock: the screen stays frozen at the locked point
+	# even though the player moved (only a map change, or unlock, ends it).
+	if camera_locked:
+		camera.position = _lock_cam + (_lock_origin - position) + _pan_offset
+
+
+# --- camera lock and pan (Pan Screen) -----------------------------------------------------------
+
+## Locks the camera (RM2000/2003's Pan Screen Lock): it stops following the player. A pan still
+## running carries its remainder over, so the scroll continues seamlessly on the locked screen.
+func lock_camera() -> void:
+	if not camera_locked and _pan_tween != null:
+		_pan_queue.push_front({"delta": _pan_target - camera.position, "speed": _pan_speed})
+		_pan_tween.kill()
+		_pan_tween = null
+	camera_locked = true
+	_lock_origin = position
+	_lock_cam = camera.position
+	_pan_offset = Vector2.ZERO
+	_pump_pans()
+
+
+## Unlocks the camera with no snap, as RPG Maker does: it stays exactly where the lock held it and
+## resumes following from there. A pan scrolling the locked screen carries its remainder over too.
+func unlock_camera() -> void:
+	if camera_locked and _pan_tween != null:
+		_pan_queue.push_front({"delta": _pan_target - _pan_offset, "speed": _pan_speed})
+		_pan_tween.kill()
+		_pan_tween = null
+	camera_locked = false
+	camera.position = _lock_cam + (_lock_origin - position) + _pan_offset
+	_pump_pans()
+
+
+## Queues a pan of `delta_px` map pixels at `px_per_sec`. Pans run one after another, as in RPG
+## Maker's Pan Screen waiting for the previous scroll.
+func queue_pan(delta_px: Vector2, px_per_sec: float) -> void:
+	_pan_queue.append({"delta": delta_px, "speed": maxf(px_per_sec, 1.0)})
+	_pump_pans()
+
+
+## Queues a pan back to the hero-centred screen (Pan Screen's Reset / return), which pans onto the
+## player even while locked.
+func queue_pan_to_center(px_per_sec: float) -> void:
+	_pan_queue.append({"to_center": true, "speed": maxf(px_per_sec, 1.0)})
+	_pump_pans()
+
+
+## True while a pan runs or others wait behind it (the Scroll Map command's wait covers the queue).
+func camera_panning() -> bool:
+	return _pan_tween != null or not _pan_queue.is_empty()
+
+
+func _pump_pans() -> void:
+	if _pan_tween != null or _pan_queue.is_empty():
+		return
+	var p: Dictionary = _pan_queue.pop_front()
+	var speed: float = p.get("speed", 64.0)
+	# Unlocked pans move the camera itself; locked pans move the offset the compensation adds.
+	var from := _pan_offset if camera_locked else camera.position
+	var to: Vector2
+	if p.has("to_center"):
+		to = Vector2(0, -tile_size / 2.0)
+		if camera_locked:
+			to -= _lock_cam + (_lock_origin - position)
+	else:
+		to = from + p.delta
+	_pan_target = to
+	_pan_speed = speed
+	var secs: float = from.distance_to(to) / speed
+	_pan_tween = create_tween()
+	_pan_tween.finished.connect(_pan_finished)
+	if camera_locked:
+		_pan_tween.tween_property(self, "_pan_offset", to, maxf(secs, 0.01))
+	else:
+		_pan_tween.tween_property(camera, "position", to, maxf(secs, 0.01))
+
+
+func _pan_finished() -> void:
+	_pan_tween = null
+	_pump_pans()
+
+
+## Forgets the lock and every pending pan. A map change calls this (the new map sets the camera up
+## afresh); a same-map transfer does not, keeping the lock.
+func reset_camera() -> void:
+	camera_locked = false
+	if _pan_tween != null:
+		_pan_tween.kill()
+	_pan_tween = null
+	_pan_queue.clear()
+	_pan_offset = Vector2.ZERO
+
+
+## The camera state a save keeps (node-local, so it restores on any map scale).
+func camera_save() -> Dictionary:
+	return {
+		"locked": camera_locked,
+		"pos": [camera.position.x, camera.position.y],
+		"lock_origin": [_lock_origin.x, _lock_origin.y],
+		"lock_cam": [_lock_cam.x, _lock_cam.y],
+		"pan_offset": [_pan_offset.x, _pan_offset.y],
+	}
+
+
+func camera_restore(d: Dictionary) -> void:
+	if d.is_empty():
+		return
+	camera_locked = bool(d.get("locked", false))
+	camera.position = _vec2(d.get("pos", [0, -tile_size / 2.0]))
+	_lock_origin = _vec2(d.get("lock_origin", [0, 0]))
+	_lock_cam = _vec2(d.get("lock_cam", [0, 0]))
+	_pan_offset = _vec2(d.get("pan_offset", [0, 0]))
+
+
+func _vec2(v: Variant) -> Vector2:
+	if v is Array and v.size() >= 2:
+		return Vector2(float(v[0]), float(v[1]))
+	return Vector2.ZERO
 
 
 func debug_through() -> bool:
@@ -73,6 +206,17 @@ func input_allowed() -> bool:
 func _process(delta: float) -> void:
 	super._process(delta)
 	_update_marker()
+	if camera_locked:
+		# Hold the screen at the world point it was locked at, whatever the player does; a running
+		# pan still scrolls it through _pan_offset.
+		camera.position = _lock_cam + (_lock_origin - position) + _pan_offset
+	if _pan_tween != null and map != null and map.rpg != null:
+		# A menu-type screen or battle freezes a running pan, like everything else on the map
+		# (pause/play are flag sets here, so one of them every frame is fine).
+		if map.rpg.scheduler.map_suspended():
+			_pan_tween.pause()
+		else:
+			_pan_tween.play()
 	if map == null:
 		return
 	if not input_allowed():
