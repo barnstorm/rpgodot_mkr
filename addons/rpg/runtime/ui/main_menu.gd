@@ -26,7 +26,7 @@ const COMMAND_FALLBACK := {"item": "Items", "skill": "Skills", "equip": "Equip",
 const HP_COLOUR := Color(1.0, 0.62, 0.25)
 const SP_COLOUR := Color(0.38, 0.68, 1.0)
 const FIELD_OCCASIONS := ["always", "menu", "field"]
-const ALLY_SCOPES := ["one_ally", "all_allies", "one_dead_ally", "all_dead_allies", "self", "user"]
+const ALLY_SCOPES := ["one_ally", "one_ally_any", "all_allies", "all_allies_any", "one_dead_ally", "all_dead_allies", "self", "user"]
 
 var mode := "command"
 var pending := ""                # skill, equip or status while choosing an actor
@@ -663,7 +663,7 @@ func open_target(u: Dictionary) -> void:
 
 
 func _all_targets() -> bool:
-	return str(using.get("scope", "")) in ["all_allies", "all_dead_allies"]
+	return str(using.get("scope", "")) in ["all_allies", "all_allies_any", "all_dead_allies"]
 
 
 func _place_target_cursor() -> void:

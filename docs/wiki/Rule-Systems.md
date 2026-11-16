@@ -19,6 +19,7 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - Actors can use a skill type (Magic, Special) only when their class or actor adds it with an *Add Skill Type* trait, as in Ace.
 - Regeneration and each state's damage apply on the map every 20 steps.
 - Item and skill **effects** *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle — an enemy just goes; a whole party escaping ends the fight as an escape).
+- MV/MZ **scopes**: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
 
 Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 

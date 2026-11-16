@@ -59,6 +59,7 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 - Features: Element Rate, State Rate, Ex-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, and HP/MP Regen.
 - Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.
 - Item and skill effects *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle).
+- MV/MZ scopes: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 

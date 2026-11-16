@@ -44,7 +44,7 @@ const HP_COLOUR := Color(1.0, 0.62, 0.25)
 const SP_COLOUR := Color(0.38, 0.68, 1.0)
 const BATTLE_OCCASIONS := ["always", "battle"]
 const ENEMY_SCOPES := ["one_enemy"]
-const ALLY_PICK_SCOPES := ["one_ally", "one_dead_ally"]
+const ALLY_PICK_SCOPES := ["one_ally", "one_ally_any", "one_dead_ally"]
 ## Status window columns: name, then the two resources (gauge widths), then states in the rest.
 const STATUS_ROW_W := 228.0
 const STATUS_NAME_W := 60.0

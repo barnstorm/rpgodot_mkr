@@ -1338,7 +1338,7 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 	if u.is_empty():
 		res.error = "unknown action %s" % str(action)
 		return _finish(res)
-	var for_dead: bool = u.scope in ["one_dead_ally", "all_dead_allies"]
+	var for_dead: bool = u.scope in ["one_dead_ally", "all_dead_allies", "one_ally_any", "all_allies_any"]
 	if target.is_dead() and not for_dead:
 		res.lines.append(term("nothing"))
 		return _finish(res)
