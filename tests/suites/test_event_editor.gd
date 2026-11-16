@@ -413,6 +413,14 @@ func test_e23_condition_kinds_and_choices_summary() -> void:
 		assert_has(battle.kinds(), k, "battle page condition kind")
 	assert_false(page.kinds().has("enemy_hp"), "enemy HP is a battle page condition")
 	battle.queue_free()
+	# The battle-only kinds (#50) are Conditional Branch conditions, not troop page conditions.
+	var battle_branch := RPGConditionEditor.new(data, registry, true, {}, true)
+	for k in ["actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_has(battle_branch.kinds(), k, "battle branch condition kind")
+	var battle_page := RPGConditionEditor.new(data, registry, true, {})
+	assert_false(battle_page.kinds().has("actor_can_act"), "Actor can act is a branch condition")
+	battle_branch.queue_free()
+	battle_page.free()
 	tree.root.add_child(branch)
 	branch.set_value({"kind": "actor", "id": "hero", "check": "skill", "skill": "heal", "class": "warrior"})
 	branch.form().set_field("skill", "fire")

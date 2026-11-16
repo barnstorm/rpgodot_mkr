@@ -78,8 +78,9 @@ const CONDITION_FIELDS := {
 	"facing": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "is facing"}],
 	"button": [{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button held down"}],
 }
-## Condition kinds offered only in Conditional Branch (they need a running event), not on pages.
-const BRANCH_ONLY_CONDITIONS := ["facing", "button"]
+## Condition kinds offered only in Conditional Branch (they need a running event or a battle),
+## not on pages.
+const BRANCH_ONLY_CONDITIONS := ["facing", "button", "actor_can_act", "enemy_can_act", "enemy_is_target"]
 ## Command fields that name a character on the map ("player", "this" or an event ID) and get a
 ## dropdown instead of a text box: {command type: [field keys]}.
 const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"], "show_balloon": ["target"]}
@@ -99,6 +100,10 @@ const BATTLE_CONDITION_FIELDS := {
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
 	"variable": [{"key": "id", "kind": "ref", "ref": "variable", "label": "Variable", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}],
 	"turn_end": [],
+	# Battle Conditional Branch only (#50): offered with battle_conditions, never on map events.
+	"actor_can_act": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}],
+	"enemy_can_act": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
+	"enemy_is_target": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
 }
 
 var fields: Array = []

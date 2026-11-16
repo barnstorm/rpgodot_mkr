@@ -529,6 +529,9 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return riding == ("" if want == "none" else want)
 		"gold":
 			return compare(gold, cond.get("op", ">="), int(resolve_operand(cond.get("value", 0))))
+		"actor_can_act", "enemy_can_act", "enemy_is_target":
+			# Conditional Branch in a battle (#50); all are false outside one.
+			return _check_battle_condition(kind, cond, ctx)
 		"all":
 			for c in cond.get("conditions", []):
 				if not check_condition(c, map_id, event_id, ctx):
@@ -546,6 +549,43 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 		return bool(r) if r != null else false
 	_err("Unknown condition kind '%s'." % kind)
 	return false
+
+
+## Battle-only Conditional Branch kinds (#50): actor_can_act ({id}: in the fight and not held
+## back by a state), enemy_can_act ({index}), enemy_is_target ({index}: a target of the action
+## that most recently ran, while an after_action battle event checks it). All are false outside
+## a battle, so a common event with them still works when called from a map.
+func _check_battle_condition(kind: String, cond: Dictionary, ctx: Object) -> bool:
+	var core := _battle_core_of(ctx)
+	if core == null:
+		return false
+	match kind:
+		"actor_can_act":
+			for a in core.party:
+				if a.id == str(cond.get("id", "")):
+					return a.is_active() and core.rules.can_act(a)
+			return false
+		"enemy_can_act":
+			for e in core.enemies:
+				if e.index == int(cond.get("index", 0)):
+					return e.is_active() and core.rules.can_act(e)
+			return false
+		"enemy_is_target":
+			for t in core.current_targets:
+				if t.is_enemy() and t.index == int(cond.get("index", 0)):
+					return true
+			return false
+	return false
+
+
+## The running battle's core through the command context, or null outside a battle.
+func _battle_core_of(ctx: Object) -> RPGBattleCore:
+	if ctx == null or not ("battle" in ctx):
+		return null
+	var facade: Variant = ctx.battle
+	if facade is RPGBattleFacade and facade.valid():
+		return facade.core()
+	return null
 
 
 ## Actor condition: in the party (default), or name / class / skill learned / weapon or armour

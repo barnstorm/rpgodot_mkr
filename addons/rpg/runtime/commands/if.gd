@@ -32,6 +32,9 @@ static func describe_condition(c: Variant) -> String:
 				"state": return "%s is affected by [%s]" % [who, c.get("state", "")]
 			return "%s is %sin the party" % [who, "" if c.get("value", true) else "not "]
 		"gold": return "Gold %s %s" % [c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 0))]
+		"actor_can_act": return "[%s] can act" % c.get("id", "")
+		"enemy_can_act": return "Enemy #%d can act" % (int(c.get("index", 0)) + 1)
+		"enemy_is_target": return "Enemy #%d is the current target" % (int(c.get("index", 0)) + 1)
 		"vehicle":
 			var v := str(c.get("id", c.get("vehicle", "")))
 			return "Player is on foot" if v in ["", "none"] else "Player is riding the %s" % v

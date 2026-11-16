@@ -306,6 +306,45 @@ func test_troop_page_variable_condition_runs_mid_battle() -> void:
 	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
 
 
+## The battle-only Conditional Branch kinds (#50), checked inside a battle event that runs at
+## every checkpoint: auto battle attacks the first living enemy, so enemy #0 is the target of
+## the hero's actions and the hidden #1 can neither act nor be targeted.
+func test_if_command_battle_condition_kinds() -> void:
+	_sample_env()
+	for f in ["hero_acts", "first_acts", "hidden_acts", "first_hit", "hidden_hit"]:
+		env.rpg.data.switches[f] = {"id": f, "label": f.capitalize()}
+	_add_troop(_later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1, "every": 1}],
+		"span": "every_check", "commands": [
+			{"type": "if", "condition": {"kind": "actor_can_act", "id": "hero"},
+				"then": [{"type": "set_switch", "id": "hero_acts", "value": "on"}], "else": []},
+			{"type": "if", "condition": {"kind": "enemy_can_act", "index": 0},
+				"then": [{"type": "set_switch", "id": "first_acts", "value": "on"}], "else": []},
+			{"type": "if", "condition": {"kind": "enemy_can_act", "index": 1},
+				"then": [{"type": "set_switch", "id": "hidden_acts", "value": "on"}], "else": []},
+			{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0},
+				"then": [{"type": "set_switch", "id": "first_hit", "value": "on"}], "else": []},
+			{"type": "if", "condition": {"kind": "enemy_is_target", "index": 1},
+				"then": [{"type": "set_switch", "id": "hidden_hit", "value": "on"}], "else": []},
+		]}]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _finish(scene, out)
+	assert_true(env.rpg.get_switch("hero_acts"), "the hero can act")
+	assert_true(env.rpg.get_switch("first_acts"), "the visible slime can act")
+	assert_false(env.rpg.get_switch("hidden_acts"), "the hidden slime cannot act")
+	assert_true(env.rpg.get_switch("first_hit"), "enemy #0 is the hero's target")
+	assert_false(env.rpg.get_switch("hidden_hit"), "the hidden enemy is never targeted")
+
+
+## Outside a battle the same kinds are simply false, so a common event with them still runs.
+func test_battle_condition_kinds_are_false_outside_a_battle() -> void:
+	_sample_env()
+	var st: RPGGameState = env.rpg.state
+	assert_false(st.check_condition({"kind": "actor_can_act", "id": "hero"}))
+	assert_false(st.check_condition({"kind": "enemy_can_act", "index": 0}))
+	assert_false(st.check_condition({"kind": "enemy_is_target", "index": 0}))
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 
@@ -358,6 +397,32 @@ func test_validator_checks_troop_condition_kinds() -> void:
 	var ev := {"id": "e", "position": [1, 1], "pages": [{"conditions": [{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2}], "commands": []}]}
 	var p3 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
 	assert_true(p3.any(func(p): return str(p.message).contains("Unknown condition kind 'enemy_turns'")), str(p3))
+
+
+func test_validator_checks_battle_branch_conditions() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var good := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "if", "condition": {"kind": "actor_can_act", "id": "hero"},
+			"then": [{"type": "set_switch", "id": "rain", "value": "on"}], "else": []},
+		{"type": "if", "condition": {"kind": "enemy_can_act", "index": 0}, "then": [], "else": []},
+		{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []},
+	]}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [good]}, reg, "troops.json")
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	# The actor kind still needs an actor.
+	var bad := _later_troop([{"id": "p", "conditions": [], "commands": [
+		{"type": "if", "condition": {"kind": "actor_can_act", "id": ""}, "then": [], "else": []}]}])
+	var msgs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json").map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+	# On a map they can never be true: a warning, not an error (a common event may be called in battle).
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}
+	var p2 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	var w := p2.filter(func(p): return str(p.message).contains("only checked during a battle"))
+	assert_eq(w.size(), 1, str(p2))
+	assert_eq(w[0].severity, "warning")
+	assert_eq(w[0].path, "events/0/pages/0/commands/0/condition/kind")
 
 
 func test_validator_checks_enemy_action_conditions() -> void:

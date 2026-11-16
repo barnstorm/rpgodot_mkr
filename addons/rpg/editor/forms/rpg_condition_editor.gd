@@ -14,6 +14,7 @@ const KIND_LABELS := {
 	"actor": "Actor", "gold": "Gold", "turn": "Turn", "enemy_hp": "Enemy HP", "actor_hp": "Actor HP",
 	"enemy_mp": "Enemy MP", "actor_mp": "Actor MP", "enemy_turns": "Enemy turns taken", "actor_turns": "Actor turns taken",
 	"command_used": "Command used", "turn_end": "Turn end",
+	"actor_can_act": "Actor can act", "enemy_can_act": "Enemy can act", "enemy_is_target": "Enemy is the target",
 	"vehicle": "Vehicle", "facing": "Character facing", "button": "Button held down",
 }
 

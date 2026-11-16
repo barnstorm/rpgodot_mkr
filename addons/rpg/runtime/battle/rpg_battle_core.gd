@@ -109,6 +109,9 @@ var hooks: Object = null
 var _queue: Array = []
 var _queue_built := false
 var _result := ""
+## Targets of the action most recently executed: the enemy_is_target condition (#50) reads it
+## while a battle event runs at the after_action checkpoint. Guard targets the guarder itself.
+var current_targets: Array = []
 var _rewards := {}
 var _page_runs := {}           ## page id -> turn it last ran
 var _speeds := {}              ## timed: battler -> rules.atb_speed (refreshed after each turn)
@@ -398,12 +401,14 @@ func _execute(b: RPGBattler) -> Dictionary:
 			res.kind = kind
 			if USABLE_KINDS.has(kind):
 				_execute_usable(b, action, res, true, h.targets if h.targets_set else null)
+				current_targets = res.targets
 				res.text = "\n".join(PackedStringArray(res.lines))
 				return res
 	if USABLE_KINDS.has(kind):
 		_execute_usable(b, action, res)
 	else:
 		_execute_simple(b, kind, res)
+	current_targets = res.targets
 	res.text = "\n".join(PackedStringArray(res.lines))
 	return res
 

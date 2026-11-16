@@ -80,6 +80,8 @@ The party commands reach the other side too: **Change HP / SP**, **Change State*
 
 **Change Party Member** works during a battle: an added actor joins the field at once (status row, side-view sprite and a turn gauge under ATB / CTB), a removed one leaves the fight, and victory EXP goes to the members present at the end. *Only for this battle* adds the actor for the fight and takes them out of the party again when it ends.
 
+**Conditional Branch** has three battle-only kinds: *Actor can act* (in the fight and not held back by a state), *Enemy can act* (same, picked by number in the group) and *Enemy is the target* (a target of the action that most recently ran — true at an *every check* page after the hero's attack, for the enemy it hit). Outside a battle they are simply false, so a common event with them still runs on a map; the export checks warn about them there.
+
 For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.
 
 Enemy Appear only works in a battle: in battle events, or in a common event they call. On a map event it stops the event with an error, and the export checks warn about it.

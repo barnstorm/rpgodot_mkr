@@ -31,7 +31,10 @@ const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
 const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
-const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]
+const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end", "actor_can_act", "enemy_can_act", "enemy_is_target"]
+## Battle-only kinds (Conditional Branch in a battle, #50): allowed anywhere (a common event
+## may be called from one), warned outside battle events where they are always false.
+const BATTLE_ONLY_CONDITION_KINDS := ["actor_can_act", "enemy_can_act", "enemy_is_target"]
 ## Enemy action pattern condition kinds (RPGBattleCore._enemy_condition).
 const ENEMY_CONDITION_KINDS := ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"]
 ## Battle commands a command_used condition can name (action kinds of RPGBattleCore).
@@ -400,7 +403,7 @@ static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file:
 			out.append(problem("error", file, rec, "span", pp + "/span", "Unknown span '%s'." % pg.get("span"), "Use once_per_battle, once_per_turn or every_check."))
 		for k in pg.get("conditions", []).size():
 			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, true)
-		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out, true)
 		_enemy_appear_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 		_enemy_target_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 
@@ -415,7 +418,11 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 	var ext_kind: Variant = RPGCommandRegistry.declared_condition_kinds.get(kind)
 	if ext_kind is Dictionary and (not battle or bool(ext_kind.get("battle", false))):
 		return
-	if not kinds.has(kind):
+	if not battle and BATTLE_ONLY_CONDITION_KINDS.has(kind):
+		out.append(problem("warning", file, rec, "condition", path + "/kind",
+			"%s is only checked during a battle; outside one it is always false." % kind,
+			"Move it to an enemy group's battle events, or to a common event called from one."))
+	elif not kinds.has(kind):
 		out.append(problem("error", file, rec, "condition", path + "/kind", "Unknown condition kind '%s'." % kind, "Use one of: %s." % ", ".join(PackedStringArray(kinds))))
 		return
 	match kind:
@@ -456,7 +463,7 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 				_condition_structure(c.conditions[i], file, rec, "%s/conditions/%d" % [path, i], out, battle)
 		"not":
 			_condition_structure(c.get("condition"), file, rec, path + "/condition", out, battle)
-	if kind in ["switch", "variable", "item", "actor", "actor_hp", "actor_mp", "actor_turns", "command_used"] and not RPGIds.is_valid(c.get("id")):
+	if kind in ["switch", "variable", "item", "actor", "actor_hp", "actor_mp", "actor_turns", "command_used", "actor_can_act"] and not RPGIds.is_valid(c.get("id")):
 		out.append(problem("error", file, rec, "condition", path + "/id", "This %s condition has no valid ID." % kind, "Pick a %s from the list." % kind))
 
 
@@ -509,7 +516,7 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
 
 
-static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array) -> void:
+static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array, battle := false) -> void:
 	if not (list is Array):
 		out.append(problem("error", file, rec, "commands", path, "Commands must be a list.", ""))
 		return
@@ -525,28 +532,28 @@ static func _commands_structure(list: Variant, registry: RPGCommandRegistry, fil
 		var cmd: RPGCommand = registry.get_command(c.type)
 		if cmd == null:
 			continue
-		_nested_structure(cmd.desc.get("fields", []), c, registry, file, rec, cp, out)
+		_nested_structure(cmd.desc.get("fields", []), c, registry, file, rec, cp, out, battle)
 
 
-static func _nested_structure(fields: Array, holder: Dictionary, registry: RPGCommandRegistry, file: String, rec: String, cp: String, out: Array) -> void:
+static func _nested_structure(fields: Array, holder: Dictionary, registry: RPGCommandRegistry, file: String, rec: String, cp: String, out: Array, battle := false) -> void:
 	for f in fields:
 		var k: String = f.get("key", "")
 		var v: Variant = holder.get(k)
 		match str(f.get("kind", "")):
 			"commands":
 				if v != null:
-					_commands_structure(v, registry, file, rec, cp + "/" + k, out)
+					_commands_structure(v, registry, file, rec, cp + "/" + k, out, battle)
 			"list":
 				if v is Array:
 					for j in v.size():
 						if v[j] is Dictionary:
-							_nested_structure(f.get("item_fields", []), v[j], registry, file, rec, "%s/%s/%d" % [cp, k, j], out)
+							_nested_structure(f.get("item_fields", []), v[j], registry, file, rec, "%s/%s/%d" % [cp, k, j], out, battle)
 			"object":
 				if v is Dictionary:
-					_nested_structure(f.get("fields", []), v, registry, file, rec, cp + "/" + k, out)
+					_nested_structure(f.get("fields", []), v, registry, file, rec, cp + "/" + k, out, battle)
 			"condition":
 				if v != null:
-					_condition_structure(v, file, rec, cp + "/" + k, out, false)
+					_condition_structure(v, file, rec, cp + "/" + k, out, battle)
 
 
 ## Checks one command's own fields against its descriptor (not its nested lists).
