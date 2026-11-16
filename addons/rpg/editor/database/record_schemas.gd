@@ -160,12 +160,16 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_i("turns_min", "At least (turns)", 1, 0, 999).merged({"show_if": {"key": "duration", "equals": "turns"}, "drop_hidden": true, "not_above": "turns_max",
 					"help": "0 also counts as 1: the state then ends at the end of the turn it was added in."}),
 				_i("turns_max", "At most (turns)", 1, 1, 999).merged({"show_if": {"key": "duration", "equals": "turns"}, "drop_hidden": true, "not_below": "turns_min"}),
+				_c("auto_removal", "Wears off", ["turn_end", "action_end", "none"], "turn_end").merged({
+					"show_if": {"key": "duration", "equals": "turns"}, "drop_hidden": true,
+					"option_labels": ["End of the turn", "End of the battler's action (MV style)", "Never (only an effect removes it)"],
+					"help": "When the turns count down. End of the turn: once per battle turn, together with slip damage and regeneration (timed battles: after the battler's own turn). End of the action: right after the battler acts (RPG Maker MV's Action End). Never: the turns are kept but never counted. Re-adding a state resets its turns with a fresh roll; durations never stack."}),
 				_i("remove_on_damage", "Chance removed by damage %", 0, 0, 100),
 				_obj("messages", "Messages (%1 = name)", [_t("added", "When added"), _t("removed", "When removed")]),
 				{"key": "slip", "kind": "object", "default": null, "off_value": {}, "toggle_label": "Takes damage at the end of each turn", "label": "Damage each turn", "fields": [
 					_c("resource", "Resource", _ids(resources) if not resources.is_empty() else ["hp"], "hp").merged({"option_labels": _labels(resources)}),
 					_i("percent", "% of maximum", 10, 0, 100), _i("amount", "Plus a fixed amount", 0, 0, 999999),
-					_b("can_kill", "Can knock out", false)]},
+					_b("can_kill", "Can knock out", false).merged({"help": "Overrides the rules' Slip damage can knock out option (per rules preset): a state that cannot knock out leaves at least 1 HP."})]},
 				# Map walking (RPGRuleSystem.walk_state_steps / map_step_changes).
 				_b("remove_by_walking", "Removed by walking", false).merged({
 					"help": "The state wears off after the actor walks a number of steps on the map (counted from when it was added; steps in a vehicle or an event's move route don't count)."}),
@@ -594,14 +598,26 @@ static func _vehicle_fields() -> Array:
 	return out
 
 
-## Enemy action pattern conditions (RPGBattleCore._enemy_condition).
+## Enemy action pattern conditions (RPGBattleCore._enemy_condition). Keys are distinct per
+## field: one flat form serves every kind, so two fields can never share a key (the switch's
+## ref is "id" and the variable's is "variable"; the variable's operand is "against").
 static func _enemy_condition_fields() -> Array:
 	return [
-		{"key": "kind", "kind": "choice", "options": ["always", "turn", "hp", "switch"], "option_labels": ["Always", "Turn", "Own HP %", "Switch"], "default": "always", "label": "When"},
+		{"key": "kind", "kind": "choice", "options": ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"],
+			"option_labels": ["Always", "Turn", "Own HP %", "Own MP %", "Has a state", "Party level", "Monsters present", "Variable", "Switch"],
+			"default": "always", "label": "When"},
 		{"key": "n", "kind": "int", "default": 1, "min": 0, "max": 9999, "label": "Turn", "show_if": {"key": "kind", "equals": "turn"}},
 		{"key": "every", "kind": "int", "default": 0, "min": 0, "max": 9999, "label": "Then every (0 = once)", "show_if": {"key": "kind", "equals": "turn"}},
-		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": "<=", "label": "HP %", "show_if": {"key": "kind", "equals": "hp"}},
-		{"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent", "show_if": {"key": "kind", "equals": "hp"}},
+		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": "<=", "label": "Compare",
+			"show_if": {"key": "kind", "equals": ["hp", "mp", "party_level", "enemies_alive", "variable"]}},
+		{"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent", "show_if": {"key": "kind", "equals": ["hp", "mp"]}},
+		{"key": "state", "kind": "ref", "ref": "state", "default": "", "label": "State", "show_if": {"key": "kind", "equals": "state"}},
+		{"key": "pick", "kind": "choice", "options": ["average", "highest"], "option_labels": ["Average", "Highest"], "default": "average", "label": "Which",
+			"show_if": {"key": "kind", "equals": "party_level"}},
+		{"key": "level", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Level", "show_if": {"key": "kind", "equals": "party_level"}},
+		{"key": "count", "kind": "int", "default": 1, "min": 0, "max": 8, "label": "Monsters", "show_if": {"key": "kind", "equals": "enemies_alive"}},
+		{"key": "variable", "kind": "ref", "ref": "variable", "default": "", "label": "Variable", "show_if": {"key": "kind", "equals": "variable"}},
+		{"key": "against", "kind": "operand", "default": 0, "label": "Value", "show_if": {"key": "kind", "equals": "variable"}},
 		{"key": "id", "kind": "ref", "ref": "switch", "default": "", "label": "Switch", "show_if": {"key": "kind", "equals": "switch"}},
 		{"key": "value", "kind": "bool", "default": true, "label": "is ON", "show_if": {"key": "kind", "equals": "switch"}},
 	]

@@ -29,13 +29,19 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	if ch == null:
 		return RPGResult.error("Move Route: character '%s' not found on this map." % args.get("target", ""))
 	var route := {"steps": args.get("steps", []), "repeat": args.get("repeat", false), "skip_if_blocked": args.get("skip_if_blocked", false)}
+	# A forced route always runs on its own token (so a page change can cancel just the route,
+	# see RPGEvent._page_changed_routes) and pauses the character's own movement while it plays.
 	if args.get("wait", true) and not args.get("repeat", false):
-		var ok: bool = await ch.run_route(route, ctx.token)
+		var tok := RPGCancelToken.new()
+		# Cancelling the event still ends the route it is waiting on.
+		var link := func(why: String) -> void: tok.cancel(why)
+		ctx.token.cancelled.connect(link)
+		var ok: bool = await ch.run_forced_route(route, tok)
+		ctx.token.cancelled.disconnect(link)
 		if ch is RPGEvent:
 			ch.set_meta("persist", true)
 		return RPGResult.ok() if ok else RPGResult.cancelled()
 	# Not waiting: run with its own token so the event can continue.
 	var tok := RPGCancelToken.new()
-	ch.set_meta("route_token", tok)
-	ch.run_route(route, tok)
+	ch.run_forced_route(route, tok)
 	return RPGResult.ok()

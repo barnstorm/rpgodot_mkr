@@ -13,6 +13,7 @@ const QUICK_EVENTS := "res://addons/rpg/core/rpg_quick_events.gd"
 const PLAYTEST_FILE := "user://rpg_playtest.json"
 const RPGMakerView := preload("res://addons/rpg/editor/rpg_maker_view.gd")
 const PopupPlace := preload("res://addons/rpg/editor/rpg_popup_place.gd")
+const NewProjectDialog := preload("res://addons/rpg/editor/project/rpg_new_project_dialog.gd")
 const GAME_SCENE := "res://addons/rpg/runtime/game.tscn"
 const TOOL_TABS := ["Event search", "Sound test", "Resources", "Extensions", "Deploy"]
 
@@ -160,13 +161,17 @@ func _build_ui() -> void:
 	right_panel.custom_minimum_size = Vector2(180, 0)
 	right_panel.visible = false
 	var el := Label.new()
-	el.text = "Events on this map"
+	el.text = "Events on this map (run order)"
 	right_panel.add_child(el)
 	event_list = ItemList.new()
 	event_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	event_list.item_selected.connect(func(i): view.select_event(str(event_list.get_item_metadata(i))))
 	event_list.item_activated.connect(func(i): edit_event(str(event_list.get_item_metadata(i))))
 	right_panel.add_child(event_list)
+	var moves := HBoxContainer.new()
+	right_panel.add_child(moves)
+	_event_move_button(moves, "Move up", "Run this event earlier (events run top to bottom)", ["MoveUp"], -1)
+	_event_move_button(moves, "Move down", "Run this event later (events run top to bottom)", ["MoveDown"], 1)
 	center.add_child(right_panel)
 	status = Label.new()
 	status.text = "No map open"
@@ -392,7 +397,7 @@ func _menu_command(id: int) -> void:
 	match id:
 		M_NEW_PROJECT:
 			if data != null and FileAccess.file_exists(data.root.path_join("project.json")):
-				status.text = "This Godot project already has an RPG project in %s. Make a new Godot project and enable RPG Kit there to start another." % data.root
+				_new_project_dialog()
 			else:
 				_show_welcome(true)
 		M_SAVE: save_current()
@@ -421,6 +426,20 @@ func _menu_command(id: int) -> void:
 		M_TUTORIALS_WEB:
 			OS.shell_open("https://www.rpgmakerweb.com/tutorials")
 			status.text = "Opened rpgmakerweb.com's tutorials in your web browser."
+
+
+func _new_project_dialog() -> void:
+	var dlg := NewProjectDialog.new()
+	add_child(dlg)
+	dlg.project_created.connect(func(folder: String, open_editor: bool):
+		status.text = "Created %s. Open its project.godot to edit your new game." % folder
+		if open_editor:
+			var pid := OS.create_process(OS.get_executable_path(), PackedStringArray(["--editor", "--path", folder]))
+			if pid == -1:
+				status.text = "Created %s, but couldn't start Godot. Open its project.godot to edit your new game." % folder)
+	dlg.popup_centered()
+	dlg.name_edit.grab_focus()
+	dlg.name_edit.select_all()
 
 
 func set_layer_mode(i: int) -> void:
@@ -1172,9 +1191,12 @@ func _refresh_event_list() -> void:
 	if event_list == null:
 		return
 	event_list.clear()
-	for ev in view.events():
+	var evs := view.events()
+	for i in evs.size():
+		var ev: Dictionary = evs[i]
 		var p: Array = ev.get("position", [0, 0])
-		event_list.add_item("%s  [%s]  (%d, %d)" % [ev.get("name", ""), ev.get("id", ""), int(p[0]), int(p[1])])
+		# The row number is the run order (#73): events run top to bottom, as in RPG Maker.
+		event_list.add_item("#%d  %s  [%s]  (%d, %d)" % [i + 1, ev.get("name", ""), ev.get("id", ""), int(p[0]), int(p[1])])
 		event_list.set_item_metadata(event_list.item_count - 1, ev.get("id", ""))
 		if ev.get("id", "") == view.selected_event:
 			event_list.select(event_list.item_count - 1)
@@ -1186,6 +1208,42 @@ func _on_view_selection(id: String) -> void:
 			event_list.select(i)
 			return
 	event_list.deselect_all()
+
+
+## A small button in the events panel (the `_button` helper adds to the toolbar instead).
+func _event_move_button(parent: Control, text: String, tip: String, icons: Array, delta: int) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.tooltip_text = tip
+	b.flat = true
+	var ic := _icon(icons)
+	if ic != null:
+		b.icon = ic
+	b.pressed.connect(func(): _move_event(delta))
+	parent.add_child(b)
+	return b
+
+
+## Moves the selected event one slot in the events file (#73). The file's order is the order
+## events run in, so this decides which of several same-frame events goes first.
+func _move_event(delta: int) -> void:
+	if view.map_node == null or view.selected_event == "":
+		return
+	var list: Array = view.events_file.events
+	var i := -1
+	for k in list.size():
+		if list[k] is Dictionary and str(list[k].get("id", "")) == view.selected_event:
+			i = k
+			break
+	var j := i + delta
+	if i < 0 or j < 0 or j >= list.size():
+		return
+	var before := view.events_file.duplicate(true)
+	var moved = list[i]
+	list[i] = list[j]
+	list[j] = moved
+	# commit_events emits events_modified, which refreshes (and reselects) the list.
+	view.commit_events(before, "Move event")
 
 
 ## Opens the event editor on event `id`, or (with `new_at` on the map) on a new event at that
