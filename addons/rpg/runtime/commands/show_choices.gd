@@ -79,6 +79,9 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var default_pos := maxi(shown.find(int(args.get("default", 0))), 0)
 	var box: Control = ctx.ui.message_box
 	var params := {"default": default_pos, "cancel_index": cancel_index}
+	# The running event rides along so \E[name] in a label can read this event's self variable.
+	params["_event_map"] = ctx.map_id()
+	params["_event_id"] = ctx.event_id()
 	if not disabled.is_empty():
 		params["disabled"] = disabled
 	box.open_choices(labels, params)

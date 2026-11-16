@@ -471,3 +471,156 @@ func test_switch_range_sets_pages_at_the_safe_point() -> void:
 	assert_true(env.rpg.get_switch("door_unlocked") and env.rpg.get_switch("touched"), "whole range set")
 	await frames(2)
 	assert_eq(door.page_index, 1, "pages re-checked after the range")
+
+
+# --- Self switches anywhere and self variables (#57) --------------------------------------------------
+
+
+func test_self_switch_on_another_map() -> void:
+	# From town: flip a self switch of an event on house_inside, and read it back through a
+	# condition that names the map and event.
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "switch": "B", "value": "on", "event": "blocker", "map": "house_inside"},
+	], {"kind": "api", "id": "xsw"}, chest)
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.rpg.state.get_self_switch("house_inside", "blocker", "B"))
+	assert_false(env.rpg.state.get_self_switch("town", "chest", "B"), "this event's own B untouched")
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "if", "condition": {"kind": "self_switch", "id": "B", "map": "house_inside", "event": "blocker"}, "then": [
+			{"type": "set_variable", "id": "counter", "operation": "set", "value": 7},
+		], "else": []},
+	], {"kind": "api", "id": "xsw2"}, chest)
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(env.rpg.get_variable("counter"), 7, "a condition can test another map's self switch")
+	# A page on that other map follows the switch once the player gets there (blocker gains a
+	# page-2 gated on its own A).
+	var r3: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "switch": "A", "value": "on", "event": "blocker", "map": "house_inside"},
+	], {"kind": "api", "id": "xsw3"}, chest)
+	assert_true(r3.is_ok(), str(r3))
+	var tr: RPGResult = await env.game.transfer("house_inside", Vector2i(1, 1), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var blocker: RPGEvent = env.game.map.get_event("blocker")
+	blocker.data.pages.append({
+		"conditions": [{"kind": "self_switch", "id": "A"}],
+		"graphic": null, "movement": {"type": "fixed"}, "options": {"walk_anim": false, "step_anim": false, "direction_fix": false, "through": false},
+		"priority": "same", "trigger": "action_button", "commands": [],
+	})
+	blocker.refresh()
+	assert_eq(blocker.page_index, 1, "the remote-set switch picked the page up on arrival")
+
+
+func test_self_switch_reset_modes() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "switch": "A", "value": "on"},
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "set", "value": 2},
+	], {"kind": "api", "id": "rmode"}, chest)
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.rpg.state.get_self_switch("town", "chest", "A"))
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "times_opened"), 2)
+	# Reset one event (blank event = this event): its switches and variables both go.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "mode": "reset_event"},
+	], {"kind": "api", "id": "rmode2"}, chest)
+	assert_true(r2.is_ok(), str(r2))
+	assert_false(env.rpg.state.get_self_switch("town", "chest", "A"))
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "times_opened"), 0, "reset clears variables too")
+	# Reset whole map: another town event's switch goes as well.
+	env.rpg.state.set_self_switch("town", "town_house_door", "C", true)
+	var r3: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "mode": "reset_map"},
+	], {"kind": "api", "id": "rmode3"}, chest)
+	assert_true(r3.is_ok(), str(r3))
+	assert_false(env.rpg.state.get_self_switch("town", "town_house_door", "C"), "every event on the map")
+	# A remote reset names the map and event explicitly.
+	env.rpg.state.set_self_switch("house_inside", "blocker", "A", true)
+	var r4: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "mode": "reset_event", "event": "blocker", "map": "house_inside"},
+	], {"kind": "api", "id": "rmode4"}, chest)
+	assert_true(r4.is_ok(), str(r4))
+	assert_false(env.rpg.state.get_self_switch("house_inside", "blocker", "A"), "remote event reset")
+
+
+func test_self_variable_target_modes() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": 21},
+		# Blank event and map: this event (chest on town).
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "set", "value": 1},
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "add", "value": 1},
+		# Another event on this map, and an event on another map (value read from a variable).
+		{"type": "set_variable", "target": "self", "name": "score", "event": "town_house_door", "operation": "set", "value": 10},
+		{"type": "set_variable", "target": "self", "name": "score", "event": "blocker", "map": "house_inside", "operation": "set", "value": {"variable": "counter"}},
+	], {"kind": "api", "id": "sv"}, chest)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "times_opened"), 2, "set then add")
+	assert_eq(env.rpg.state.get_self_variable("town", "town_house_door", "score"), 10, "a named event on this map")
+	assert_eq(env.rpg.state.get_self_variable("house_inside", "blocker", "score"), 21, "an event on another map, value read from a variable")
+	# Type rules, same as declared variables: numbers stringify into text ("5"); text that is
+	# not a number is refused by a number self variable.
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "self", "name": "label", "operation": "set", "value": "hello"},
+		{"type": "set_variable", "target": "self", "name": "label", "operation": "set", "value": 5},
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "set", "value": "nope"},
+	], {"kind": "api", "id": "sv2"}, chest)
+	assert_true(r2.is_error(), str(r2))
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "label"), "5", "a number stringifies into text")
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "times_opened"), 2, "text into the int self variable refused")
+	# A self variable needs an event to belong to.
+	var r3: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "self", "name": "lost", "operation": "set", "value": 1},
+	], {"kind": "api", "id": "sv3"})
+	assert_true(r3.is_error(), "no running event")
+	# Never-set reads as 0.
+	assert_eq(env.rpg.state.get_self_variable("town", "chest", "never_set"), 0)
+
+
+func test_self_variable_operand_and_conditions() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "set", "value": 5},
+		# An operand can read a self variable (blank event/map = the running one).
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"self_variable": {"name": "times_opened"}}},
+		# ...and one that names the map and event explicitly.
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": {"self_variable": {"map": "house_inside", "event": "blocker", "name": "score"}}},
+		# Conditions: numbers compare, text only = and !=.
+		{"type": "if", "condition": {"kind": "self_variable", "name": "times_opened", "op": "==", "value": 5}, "then": [
+			{"type": "set_switch", "id": "touched", "value": "on"},
+		], "else": []},
+	], {"kind": "api", "id": "svop"}, chest)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 5, "operand read this event's value")
+	assert_eq(int(env.rpg.get_variable("ticks")), 0, "a never-set remote self variable reads 0")
+	assert_true(env.rpg.get_switch("touched"), "self_variable condition compared the number")
+	var st: RPGGameState = env.rpg.state
+	assert_true(st.set_self_variable("town", "chest", "label", "hello"))
+	assert_true(st.check_condition({"kind": "self_variable", "name": "label", "op": "==", "value": "hello", "map": "town", "event": "chest"}))
+	assert_false(st.check_condition({"kind": "self_variable", "name": "label", "op": "<", "value": "z"}), "text allows only = and !=")
+	assert_false(st.check_condition({"kind": "self_variable", "name": "times_opened", "op": ">", "value": 5, "map": "town", "event": "chest"}), "5 is not > 5")
+	assert_true(st.check_condition({"kind": "self_variable", "name": "times_opened", "op": ">=", "value": 5, "map": "town", "event": "chest"}))
+
+
+func test_self_variable_in_message_text() -> void:
+	var chest: RPGEvent = env.game.map.get_event("chest")
+	env.rpg.state.set_self_variable("town", "chest", "times_opened", 3)
+	env.rpg.state.set_self_variable("town", "town_house_door", "times_opened", 4)
+	env.rpg.state.set_self_variable("house_inside", "blocker", "score", 12)
+	env.rpg.ui.message_box.auto_advance = true
+	var box: Control = env.rpg.ui.message_box
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "show_text", "text": "this \\E[times_opened] door \\E[town_house_door/times_opened] far \\E[house_inside/blocker/score]"},
+	], {"kind": "api", "id": "etxt"}, chest)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(box.text_label.get_parsed_text(), "this 3 door 4 far 12", "\\E reads this event, this map and other maps")
+	# Choice labels expand the same way with the event threaded in.
+	box.open_choices(["open again (\\E[times_opened])"], {"_event_map": "town", "_event_id": "chest"})
+	var labels := 0
+	for c in box.choice_box.get_children():
+		if c is Label:
+			labels += 1
+			assert_true(c.text.contains("open again (3)"), "label expanded the code: '%s'" % c.text)
+			assert_false(c.text.contains("\\E"), "no raw code left")
+	assert_eq(labels, 1)
+	box.force_close()

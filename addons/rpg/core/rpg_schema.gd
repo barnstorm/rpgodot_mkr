@@ -220,7 +220,8 @@ static func _condition_schema() -> Dictionary:
 	var branches := [
 		{"properties": {"kind": {"const": "switch"}, "id": {"$ref": "#/$defs/id"}, "value": {"type": "boolean"}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"const": "variable"}, "id": {"$ref": "#/$defs/id"}, "op": op, "value": {"oneOf": [{"$ref": "#/$defs/operand"}, {"type": "string"}, {"type": "boolean"}]}}, "required": ["kind", "id"]},
-		{"properties": {"kind": {"const": "self_switch"}, "id": {"enum": ["A", "B", "C", "D"]}, "value": {"type": "boolean"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"const": "self_switch"}, "id": {"enum": ["A", "B", "C", "D"]}, "value": {"type": "boolean"}, "event": {"type": "string"}, "map": {"$ref": "#/$defs/id"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"const": "self_variable"}, "name": {"$ref": "#/$defs/id"}, "op": op, "value": {"oneOf": [{"$ref": "#/$defs/operand"}, {"type": "string"}, {"type": "boolean"}]}, "event": {"type": "string"}, "map": {"$ref": "#/$defs/id"}}, "required": ["kind", "name"]},
 		{"properties": {"kind": {"const": "item"}, "id": {"$ref": "#/$defs/id"}, "item_kind": {"enum": ["items", "weapons", "armors"]}, "count": {"type": "integer", "minimum": 1}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"const": "actor"}, "id": {"$ref": "#/$defs/id"}, "check": {"enum": ["in_party", "name", "class", "skill", "weapon", "armor", "state"]}, "value": {"type": "boolean"}, "name": {"type": "string"}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"const": "facing"}, "target": {"type": "string"}, "facing": {"enum": ["down", "left", "right", "up"]}}, "required": ["kind", "facing"]},

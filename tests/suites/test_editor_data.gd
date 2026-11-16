@@ -455,6 +455,28 @@ func test_set_switch_range_refs_are_sets_and_rename() -> void:
 	assert_eq(cmd.from, "door_unlocked", "range start untouched")
 
 
+## #57: the map named by Control Self Switch, Control Variable's Self variable target and
+## self-switch / self-variable conditions counts as a read, and a map rename rewrites them.
+func test_self_state_map_refs_and_rename() -> void:
+	var extra := {"id": "selfer", "name": "", "position": [6, 6], "pages": [
+		{"conditions": [{"kind": "self_switch", "id": "A", "map": "house_inside", "event": "blocker"}], "commands": [
+			{"type": "set_self_switch", "switch": "B", "value": "on", "event": "blocker", "map": "house_inside"},
+			{"type": "set_variable", "target": "self", "name": "score", "event": "blocker", "map": "house_inside", "operation": "set", "value": 1},
+			{"type": "if", "condition": {"kind": "self_variable", "name": "score", "op": "==", "value": 1, "map": "house_inside", "event": "blocker"}, "then": [], "else": []}]}]}
+	var path := RPGValidator.events_path(data, "town")
+	var files := _events_files([extra])
+	var u := RPGValidator.used_by(data, registry, "map", "house_inside", files)
+	var mine := u.filter(func(x): return x.record == "selfer")
+	assert_eq(mine.size(), 4, "page condition + three commands name the map: %s" % str(mine))
+	var r := RPGValidator.rename_id(data, registry, "map", "house_inside", "house", files)
+	assert_true(r.ok, r.error)
+	var selfer: Dictionary = r.data_by_file[path].events[r.data_by_file[path].events.size() - 1]
+	assert_eq(selfer.pages[0].conditions[0].map, "house", "condition map renamed")
+	assert_eq(selfer.pages[0].commands[0].map, "house", "set_self_switch map renamed")
+	assert_eq(selfer.pages[0].commands[1].map, "house", "set_variable self map renamed")
+	assert_eq(selfer.pages[0].commands[2].condition.map, "house", "self_variable condition map renamed")
+
+
 # --------------------------------------------------------------------------------------------
 # Schema
 # --------------------------------------------------------------------------------------------

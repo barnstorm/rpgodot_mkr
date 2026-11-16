@@ -10,7 +10,7 @@ signal value_changed(value: Variant)
 signal pick_location_requested(callback: Callable, current: Variant)
 
 const KIND_LABELS := {
-	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "item": "Item / weapon / armour held",
+	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "self_variable": "Self variable", "item": "Item / weapon / armour held",
 	"actor": "Actor", "gold": "Gold", "turn": "Turn", "enemy_hp": "Enemy HP", "actor_hp": "Actor HP",
 	"enemy_mp": "Enemy MP", "actor_mp": "Actor MP", "enemy_turns": "Enemy turns taken", "actor_turns": "Actor turns taken",
 	"command_used": "Command used", "turn_end": "Turn end", "actor_can_act": "Actor can act",

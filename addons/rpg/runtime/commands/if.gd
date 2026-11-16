@@ -19,7 +19,16 @@ static func describe_condition(c: Variant) -> String:
 	match c.get("kind", ""):
 		"switch": return "Switch [%s] is %s" % [c.get("id", ""), "ON" if c.get("value", true) else "OFF"]
 		"variable": return "Variable [%s] %s %s" % [c.get("id", ""), c.get("op", "=="), RPGCommand.describe_operand(c.get("value", 0))]
-		"self_switch": return "Self Switch %s is %s" % [c.get("id", "A"), "ON" if c.get("value", true) else "OFF"]
+		"self_switch":
+			var who := "[%s]" % c.get("event", "this event")
+			if str(c.get("map", "")) != "":
+				who = "%s on [%s]" % [who, c.map]
+			return "Self Switch %s of %s is %s" % [c.get("id", "A"), who, "ON" if c.get("value", true) else "OFF"]
+		"self_variable":
+			var sv_who := "[%s]" % c.get("event", "this event")
+			if str(c.get("map", "")) != "":
+				sv_who = "%s on [%s]" % [sv_who, c.map]
+			return "Self variable %s.%s %s %s" % [sv_who, c.get("name", ""), c.get("op", "=="), RPGCommand.describe_operand(c.get("value", 0))]
 		"item": return "Party has [%s]%s" % [c.get("id", ""), (" x%d" % int(c.count)) if typeof(c.get("count")) in [TYPE_INT, TYPE_FLOAT] and int(c.count) > 1 else ""]
 		"actor":
 			var who := "[%s]" % c.get("id", "")

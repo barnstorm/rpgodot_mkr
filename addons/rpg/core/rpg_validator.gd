@@ -22,7 +22,7 @@ const VAR_TYPES := ["int", "float", "bool", "string"]
 const OPS := ["==", "=", "!=", "≠", "<", "<=", "≤", ">", ">=", "≥"]
 const EQ_OPS := ["==", "=", "!=", "≠"]
 const FACINGS := ["down", "left", "right", "up", "keep"]
-const CONDITION_KINDS := ["switch", "variable", "self_switch", "item", "actor", "gold", "vehicle", "facing", "button", "all", "any", "not"]
+const CONDITION_KINDS := ["switch", "variable", "self_switch", "self_variable", "item", "actor", "gold", "vehicle", "facing", "button", "all", "any", "not"]
 ## Actor condition checks ({kind: "actor", check}); the target sits under the check's own key.
 const ACTOR_CHECKS := ["in_party", "name", "class", "skill", "weapon", "armor", "state"]
 ## Button condition names (input actions rpg_<name>).
@@ -451,6 +451,17 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 				out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % op, "Use ==, !=, <, <=, > or >=."))
 			if kind == "variable" or kind == "gold":
 				_operand_structure(c.get("value", 0), file, rec, path + "/value", out)
+		"self_variable":
+			var sv_name := str(c.get("name", c.get("id", "")))
+			if not RPGIds.is_valid(sv_name):
+				out.append(problem("error", file, rec, "condition", path + "/name", "Self variable '%s' is not a valid name (lowercase letters, digits and _)." % sv_name, "Set it with Control Variable's Self variable target first."))
+			var sv_op := str(c.get("op", "=="))
+			if not OPS.has(sv_op):
+				out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % sv_op, "Use ==, !=, <, <=, > or >=."))
+			_operand_structure(c.get("value", 0), file, rec, path + "/value", out)
+			for kk in ["event", "map"]:
+				if str(c.get(kk, "")) != "" and not RPGIds.is_valid(c.get(kk)):
+					out.append(problem("error", file, rec, "condition", path + "/" + kk, "The %s id '%s' is not valid." % [kk, c[kk]], ""))
 		"command_used":
 			var cmd := str(c.get("command", "attack"))
 			if not BATTLE_COMMAND_KINDS.has(cmd):
@@ -532,7 +543,16 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 	if v is Dictionary and v.get("game_data") is Dictionary:
 		_game_data_structure(v.game_data, file, rec, path + "/game_data", out)
 		return
-	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
+	if v is Dictionary and v.get("self_variable") is Dictionary:
+		var sv: Dictionary = v.self_variable
+		if not RPGIds.is_valid(sv.get("name")):
+			out.append(problem("error", file, rec, "value", path + "/self_variable/name", "A self variable needs a valid name (lowercase letters, digits and _).", ""))
+		if str(sv.get("event", "")) != "" and not RPGIds.is_valid(sv.event):
+			out.append(problem("error", file, rec, "value", path + "/self_variable/event", "The event id '%s' is not valid." % sv.event, ""))
+		if str(sv.get("map", "")) != "" and not RPGIds.is_valid(sv.map):
+			out.append(problem("error", file, rec, "value", path + "/self_variable/map", "The map id '%s' is not valid." % sv.map, ""))
+		return
+	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]}, {\"game_data\": {...}} or {\"self_variable\": {...}}.", ""))
 
 
 ## Structure of a {game_data: {...}} operand: the kind must exist and its fields must be plausible.
@@ -783,6 +803,8 @@ static func _field(f: Dictionary, siblings: Array, holder: Variant, key: Variant
 				_add_ref(acc, ctx, "variable", v, "variable", path + "/variable", "read", false, str(f.get("key", key)))
 			elif v is Dictionary and v.has("pointer"):
 				_add_ref(acc, ctx, "variable", v, "pointer", path + "/pointer", "read", false, str(f.get("key", key)))
+			elif v is Dictionary and v.get("self_variable") is Dictionary and str(v.self_variable.get("map", "")) != "":
+				_add_ref(acc, ctx, "map", v.self_variable, "map", path + "/self_variable/map", "read", false, str(f.get("key", key)))
 		"operand_pair":
 			if v is Array:
 				for i in v.size():
@@ -871,6 +893,15 @@ static func _cond_refs(c: Variant, path: String, ctx: Dictionary, acc: Dictionar
 			var g: Variant = c.get("value")
 			if g is Dictionary and g.has("variable"):
 				_add_ref(acc, ctx, "variable", g, "variable", path + "/value/variable", "read", false, "condition")
+		"self_switch":
+			if c.has("map"):
+				_add_ref(acc, ctx, "map", c, "map", path + "/map", "read", false, "condition")
+		"self_variable":
+			if c.has("map"):
+				_add_ref(acc, ctx, "map", c, "map", path + "/map", "read", false, "condition")
+			var sv: Variant = c.get("value")
+			if sv is Dictionary and sv.has("variable"):
+				_add_ref(acc, ctx, "variable", sv, "variable", path + "/value/variable", "read", false, "condition")
 		"all", "any":
 			var list: Variant = c.get("conditions", [])
 			if list is Array:

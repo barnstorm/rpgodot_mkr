@@ -720,6 +720,46 @@ func test_operand_editor_pointer_and_new_game_data() -> void:
 	await frames(1)
 
 
+## #57: the operand editor's Self variable mode (name, event, map) round trips.
+func test_operand_editor_self_variable() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup([{"key": "value", "kind": "operand", "default": 0, "label": "Value"}], data)
+	var ed := form.editor_for("value")
+	var mode: OptionButton = ed.get_child(0)
+	var sv_name: LineEdit = ed.get_child(18)
+	var sv_event: LineEdit = ed.get_child(19)
+	var sv_map: RPGRefPicker = ed.get_child(20)
+	form.set_value({"value": {"self_variable": {"name": "times_opened"}}})
+	assert_eq(mode.selected, 5)
+	assert_true(sv_name.visible and sv_event.visible and sv_map.visible)
+	assert_eq(form.get_value().value, {"self_variable": {"name": "times_opened"}}, "round trip")
+	sv_event.text = "blocker"
+	sv_event.text_changed.emit("blocker")
+	sv_map.set_value("house_inside")
+	sv_map.value_changed.emit("house_inside")
+	assert_eq(form.get_value().value, {"self_variable": {"name": "times_opened", "event": "blocker", "map": "house_inside"}})
+	# A fully-qualified one fills the boxes; a number hides them again.
+	form.set_value({"value": {"self_variable": {"name": "score", "event": "chest", "map": "town"}}})
+	assert_eq(sv_name.text, "score")
+	assert_eq(sv_event.text, "chest")
+	assert_eq(form.get_value().value, {"self_variable": {"name": "score", "event": "chest", "map": "town"}})
+	form.set_value({"value": 3})
+	assert_eq(mode.selected, 0)
+	assert_false(sv_name.visible or sv_event.visible or sv_map.visible)
+	# The structure check accepts the shape and rejects a bad name or event id.
+	var out := []
+	RPGValidator._operand_structure({"self_variable": {"name": "score", "event": "chest", "map": "town"}}, "f", "r", "p", out)
+	RPGValidator._operand_structure({"self_variable": {"name": "score"}}, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	for v in [{"self_variable": {"name": "not an id"}}, {"self_variable": {"name": "score", "event": "Not An Id"}}]:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), 2, "each rejected: %s" % str(out))
+	form.queue_free()
+	await frames(1)
+
+
 func test_actor_description_and_troop_autoname() -> void:
 	var actor_fields := RPGRecordSchemas.fields_for("actors")
 	var desc: Array = actor_fields.filter(func(f): return f.key == "description")

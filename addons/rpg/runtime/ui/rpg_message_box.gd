@@ -38,6 +38,8 @@ var _waits: Array = []
 var _wait_left := 0.0
 var _await_key := false
 var _choices: Array = []
+## The params open_choices got, so labels re-expand with the same \E context.
+var _choice_info: Dictionary = {}
 var _choice_index := 0
 var _cancel_index := -1
 var _digits := 1
@@ -221,6 +223,7 @@ func _update_gold() -> void:
 ## greyed out that buzz instead of being picked.
 func open_choices(labels: Array, params: Dictionary = {}) -> void:
 	_choices = labels
+	_choice_info = {"params": params}
 	_choice_index = clampi(int(params.get("default", 0)), 0, maxi(labels.size() - 1, 0))
 	_cancel_index = int(params.get("cancel_index", -1))
 	_disabled.clear()
@@ -232,7 +235,7 @@ func open_choices(labels: Array, params: Dictionary = {}) -> void:
 	var w := 60.0
 	for l in labels:
 		var lab := Label.new()
-		lab.text = "  " + RPGText.expand_plain(str(l), rpg)
+		lab.text = "  " + RPGText.expand_plain(str(l), rpg, _choice_info)
 		lab.add_theme_font_size_override("font_size", 11)
 		choice_box.add_child(lab)
 		w = maxf(w, 12 + lab.text.length() * 6.5)
@@ -255,7 +258,7 @@ func _refresh_choice_cursor() -> void:
 	var i := 0
 	for c in choice_box.get_children():
 		if c is Label:
-			c.text = ("▶ " if i == _choice_index else "  ") + RPGText.expand_plain(str(_choices[i]), rpg)
+			c.text = ("▶ " if i == _choice_index else "  ") + RPGText.expand_plain(str(_choices[i]), rpg, _choice_info)
 			c.modulate = Color(1, 1, 0.6) if i == _choice_index else Color.WHITE
 			if _disabled.has(i):
 				c.modulate = Color(0.6, 0.6, 0.65, 0.9) if i == _choice_index else Color(0.55, 0.55, 0.6, 0.7)

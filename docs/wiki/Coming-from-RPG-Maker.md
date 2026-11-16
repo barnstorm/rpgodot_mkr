@@ -34,7 +34,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Switch/Variable 0001 | Named switches and variables, e.g. `talked_to_king` |
 | `\V[1]`, `\N[1]` | `\V[talked_count]`, `\N[hero]` (an ID instead of a number) |
 | `\I[n]` (VX/MV message icon), the Icon field of items, skills and states | The same: `\I[64]` and the **Icon** field (a grid of the icon sheet, searchable by name). The starter icons are the kit's own (CC0), so their numbers differ from RPG Maker's IconSet |
-| Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch |
+| Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch — and they reach further: a self switch can be set on any event on any map (and reset per event or per map), and events have **self variables** (Control Variable's *Self variable* target, `\E[name]` in text) |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |

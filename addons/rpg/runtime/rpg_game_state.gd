@@ -8,6 +8,7 @@ extends RefCounted
 signal switch_changed(id: String, value: bool)
 signal variable_changed(id: String, value: Variant)
 signal self_switch_changed(key: String, value: bool)
+signal self_variable_changed(key: String, value: Variant)
 signal gold_changed(value: int)
 signal items_changed(kind: String, id: String, count: int)
 signal party_changed()
@@ -30,6 +31,9 @@ var rules: RefCounted = null
 var switches: Dictionary = {}
 var variables: Dictionary = {}
 var self_switches: Dictionary = {}
+## Per-event variables: "map/event/name" -> value. Untyped (they are not declared anywhere): the
+## first write fixes the type, later writes must fit it. Reads of a never-set one give 0.
+var self_variables: Dictionary = {}
 var gold := 0
 ## kind ("items", "weapons", "armors") -> {id: count}
 var inventory: Dictionary = {"items": {}, "weapons": {}, "armors": {}}
@@ -116,6 +120,7 @@ func new_game() -> void:
 	switches.clear()
 	variables.clear()
 	self_switches.clear()
+	self_variables.clear()
 	event_changes.clear()
 	extension_sections.clear()
 	inventory = {"items": {}, "weapons": {}, "armors": {}}
@@ -267,6 +272,70 @@ func set_self_switch(map_id: String, event_id: String, letter: String, value: bo
 	self_switch_changed.emit(key, value)
 	changed.emit()
 	return true
+
+
+# --- self variables -----------------------------------------------------------------
+
+## An event's variable. Never-set ones read as 0.
+func get_self_variable(map_id: String, event_id: String, name: String) -> Variant:
+	return self_variables.get(RPGIds.self_variable_key(map_id, event_id, name), 0)
+
+
+## The type a self variable currently holds ("int" while it has never been set).
+func self_variable_type(map_id: String, event_id: String, name: String) -> String:
+	var v: Variant = self_variables.get(RPGIds.self_variable_key(map_id, event_id, name), null)
+	match typeof(v):
+		TYPE_FLOAT: return "float"
+		TYPE_BOOL: return "bool"
+		TYPE_STRING: return "string"
+	return "int"
+
+
+## Sets an event's variable. The first write fixes its type; later writes are coerced to it and
+## refused when they do not fit (same rule as declared variables).
+func set_self_variable(map_id: String, event_id: String, name: String, value: Variant) -> bool:
+	if not RPGIds.is_valid(name):
+		_err("Self variable names use lowercase letters, digits and _ (got '%s')." % name)
+		return false
+	var key := RPGIds.self_variable_key(map_id, event_id, name)
+	if self_variables.has(key):
+		var t := self_variable_type(map_id, event_id, name)
+		var coerced: Variant = coerce(t, value)
+		if coerced == null:
+			_err("Self variable '%s' is %s; cannot store %s." % [name, t, var_to_str(value)])
+			return false
+		if typeof(coerced) == typeof(self_variables[key]) and coerced == self_variables[key]:
+			return true
+		self_variables[key] = coerced
+	else:
+		match typeof(value):
+			TYPE_INT, TYPE_FLOAT, TYPE_BOOL, TYPE_STRING:
+				pass
+			_:
+				_err("Self variable '%s' can hold a number, true/false or text." % name)
+				return false
+		self_variables[key] = value
+	self_variable_changed.emit(key, self_variables[key])
+	changed.emit()
+	return true
+
+
+## Clears every self switch and self variable of one event, or of a whole map when `event_id` is
+## empty. Returns how many values were cleared.
+func reset_self_state(map_id: String, event_id := "") -> int:
+	var prefix := map_id + "/" + (event_id + "/" if event_id != "" else "")
+	var n := 0
+	for key in self_switches.keys():
+		if str(key).begins_with(prefix):
+			self_switches.erase(key)
+			n += 1
+	for key in self_variables.keys():
+		if str(key).begins_with(prefix):
+			self_variables.erase(key)
+			n += 1
+	if n > 0:
+		changed.emit()
+	return n
 
 
 # --- gold and items -----------------------------------------------------------------
@@ -461,6 +530,21 @@ func resolve_operand(v: Variant, ctx: Object = null) -> Variant:
 	if v is Dictionary:
 		if v.has("variable"):
 			return get_variable(v.variable)
+		if v.has("self_variable"):
+			# An event's own variable: {self_variable: {map, event, name}}. Blank map/event is
+			# the running command's map and event.
+			var sv: Dictionary = v.self_variable
+			var m := str(sv.get("map", ""))
+			var e := str(sv.get("event", ""))
+			if (m == "" or e == "") and ctx != null and ctx.has_method("map_id"):
+				if m == "":
+					m = ctx.map_id()
+				if e == "":
+					e = ctx.event_id()
+			if m == "" or e == "":
+				_err("Game data: an event's self variable needs a running event (or a map and event).")
+				return 0
+			return get_self_variable(m, e, str(sv.get("name", "")))
 		if v.has("pointer"):
 			# Indirect source: the value of the variable whose id another variable holds.
 			return get_variable(str(get_variable(str(v.pointer))))
@@ -624,7 +708,23 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return compare(float(cur), cond.get("op", "=="), float(rhs))
 		"self_switch":
 			var letter: String = cond.get("id", cond.get("switch", "A"))
-			return get_self_switch(map_id, event_id, letter) == bool(cond.get("value", true))
+			# Blank map/event is the event the condition belongs to (a page, the running branch).
+			var m := str(cond.get("map", map_id))
+			var e := str(cond.get("event", event_id))
+			return get_self_switch(m, e, letter) == bool(cond.get("value", true))
+		"self_variable":
+			var sname := str(cond.get("name", cond.get("id", "")))
+			var sm := str(cond.get("map", map_id))
+			var se := str(cond.get("event", event_id))
+			var scur: Variant = get_self_variable(sm, se, sname)
+			var srhs: Variant = resolve_operand(cond.get("value", 0), ctx)
+			var st := self_variable_type(sm, se, sname)
+			if st == "bool" or st == "string":
+				var sop: String = cond.get("op", "==")
+				if not ["==", "=", "!=", "≠"].has(sop):
+					return false
+				return compare(scur, sop, srhs)
+			return compare(float(scur), cond.get("op", "=="), float(srhs))
 		"item":
 			var k: String = cond.get("item_kind", "items")
 			return item_count(cond.get("id", ""), k) >= int(cond.get("count", 1)) or (int(cond.get("count", 1)) <= 1 and has_item(cond.get("id", ""), k, true))
@@ -728,6 +828,7 @@ func to_dict() -> Dictionary:
 		"switches": switches.duplicate(),
 		"variables": variables.duplicate(),
 		"self_switches": self_switches.duplicate(),
+		"self_variables": self_variables.duplicate(),
 		"gold": gold,
 		"inventory": inventory.duplicate(true),
 		"party": Array(party),
@@ -758,6 +859,7 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 		var c: Variant = coerce(variable_type(id), vars[id])
 		variables[id] = c if c != null else vars[id]
 	self_switches = d.get("self_switches", {}).duplicate()
+	self_variables = d.get("self_variables", {}).duplicate() if d.get("self_variables") is Dictionary else {}
 	gold = int(d.get("gold", 0))
 	inventory = {"items": {}, "weapons": {}, "armors": {}}
 	var inv: Dictionary = d.get("inventory", {})

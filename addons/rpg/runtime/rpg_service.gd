@@ -1,12 +1,13 @@
 extends Node
 ## The `RPG` autoload: one global entry point for the runtime.
-## Typed access to switches, variables, self switches, the party and inventory; common events;
+## Typed access to switches, variables, self switches, self variables, the party and inventory; common events;
 ## saving through the save service. All state changes go through methods that check values and
 ## emit change signals. Tests can create extra instances and call boot() with a fixture folder.
 
 signal switch_changed(id: String, value: bool)
 signal variable_changed(id: String, value: Variant)
 signal self_switch_changed(key: String, value: bool)
+signal self_variable_changed(key: String, value: Variant)
 signal error_reported(message: String, where: Dictionary)
 ## Emitted by the emit_signal command: (name, args).
 signal event_signal(name: String, args: Dictionary)
@@ -153,6 +154,7 @@ func boot(root := "res://rpg") -> void:
 	state.switch_changed.connect(func(id, v): switch_changed.emit(id, v))
 	state.variable_changed.connect(func(id, v): variable_changed.emit(id, v))
 	state.self_switch_changed.connect(func(k, v): self_switch_changed.emit(k, v))
+	state.self_variable_changed.connect(func(k, v): self_variable_changed.emit(k, v))
 	state.changed.connect(request_refresh)
 	state.actor_changed.connect(check_levels)
 	state.party_changed.connect(check_levels)
@@ -350,6 +352,14 @@ func get_self_switch(map_id: String, event_id: String, letter: String) -> bool:
 
 func set_self_switch(map_id: String, event_id: String, letter: String, value: bool) -> bool:
 	return state.set_self_switch(map_id, event_id, letter, value)
+
+
+func get_self_variable(map_id: String, event_id: String, name: String) -> Variant:
+	return state.get_self_variable(map_id, event_id, name)
+
+
+func set_self_variable(map_id: String, event_id: String, name: String, value: Variant) -> bool:
+	return state.set_self_variable(map_id, event_id, name, value)
 
 
 ## Runs a common event. mode "main" joins the main queue (one main event at a time);

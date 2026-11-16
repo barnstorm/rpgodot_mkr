@@ -46,8 +46,8 @@ const TROOP_EDITOR_SCRIPT := "res://addons/rpg/editor/database/rpg_troop_editor.
 const TILE_PICKER_SCRIPT := "res://addons/rpg/editor/forms/rpg_tile_picker.gd"
 ## Operand modes (RPGGameState.resolve_operand): a number, {variable}, {random: [a, b]},
 ## {game_data: {kind, ...}} (RPGGameState.game_data), {pointer: id} (the value of the variable
-## whose id that variable holds).
-const OPERAND_MODES := ["Number", "Variable", "Random", "Game data", "Pointer"]
+## whose id that variable holds), {self_variable: {map, event, name}} (an event's own value).
+const OPERAND_MODES := ["Number", "Variable", "Random", "Game data", "Pointer", "Self variable"]
 const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
 const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor", "Character", "Map id", "Party member", "Last used", "Counter", "Enemy"]
 ## Character game data: targets (an event's ID is typed in directly) and fields.
@@ -70,7 +70,8 @@ const OP_LABELS := ["=", "≠", "<", "≤", ">", "≥"]
 const CONDITION_FIELDS := {
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
 	"variable": [{"key": "id", "kind": "ref", "ref": "variable", "label": "Variable", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}],
-	"self_switch": [{"key": "id", "kind": "choice", "options": ["A", "B", "C", "D"], "default": "A", "label": "Self switch"}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
+	"self_switch": [{"key": "id", "kind": "choice", "options": ["A", "B", "C", "D"], "default": "A", "label": "Self switch"}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}, {"key": "event", "kind": "text", "default": "", "label": "Event (blank = this event)"}, {"key": "map", "kind": "ref", "ref": "map", "label": "Map (blank = this map)"}],
+	"self_variable": [{"key": "name", "kind": "text", "label": "Name", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}, {"key": "event", "kind": "text", "default": "", "label": "Event (blank = this event)"}, {"key": "map", "kind": "ref", "ref": "map", "label": "Map (blank = this map)"}],
 	"item": [{"key": "item_kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"}, {"key": "id", "kind": "ref", "ref": "item", "ref_from": "item_kind", "label": "Which one", "required": true}, {"key": "count", "kind": "int", "default": 1, "min": 1, "label": "At least"}],
 	"actor": [
 		{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true},
@@ -838,7 +839,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var mode := OptionButton.new()
 	for m in OPERAND_MODES:
 		mode.add_item(m)
-	mode.tooltip_text = "A fixed number, a variable's value, a random number, game data (items held, gold, an actor's level...), or a variable chosen by another variable"
+	mode.tooltip_text = "A fixed number, a variable's value, a random number, game data (items held, gold, an actor's level...), a variable chosen by another variable, or an event's self variable"
 	var sb := SpinBox.new()
 	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sb.min_value = float(f.get("min", -9999999))
@@ -934,7 +935,17 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var ef := OptionButton.new()
 	for i in enemy_ids.size():
 		ef.add_item(enemy_labels[i])
-	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef]:
+	# Self variable: an event's own named value (blank event and map = this event's).
+	var sv_name := LineEdit.new()
+	sv_name.placeholder_text = "name (times_opened)"
+	sv_name.tooltip_text = "The self variable's name (set by Control Variable with the Self variable target)"
+	sv_name.custom_minimum_size.x = 110.0
+	var sv_event := LineEdit.new()
+	sv_event.placeholder_text = "event"
+	sv_event.tooltip_text = "An event ID; blank means this event"
+	sv_event.custom_minimum_size.x = 90.0
+	var sv_map := RPGRefPicker.new("map", data)
+	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef, sv_name, sv_event, sv_map]:
 		hb.add_child(c)
 	var state := {"v": null, "fields": field_ids, "enemy_fields": enemy_ids}
 	var gkind := func() -> String:
@@ -961,6 +972,9 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 		cn.visible = m == 3 and k == "counter"
 		ei.visible = m == 3 and k == "enemy"
 		ef.visible = ei.visible
+		sv_name.visible = m == 5
+		sv_event.visible = m == 5
+		sv_map.visible = m == 5
 		if gref.visible:
 			gref.set_ref_kind(k)
 	var read := func() -> Variant:
@@ -1006,6 +1020,14 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				var out4: Dictionary = state.v.duplicate(true) if state.v is Dictionary and state.v.has("pointer") else {}
 				out4["pointer"] = str(pp.get_value())
 				return out4
+			5:
+				var out5: Dictionary = state.v.duplicate(true) if state.v is Dictionary and state.v.get("self_variable") is Dictionary else {}
+				var sv: Dictionary = out5.get("self_variable", {})
+				sv["name"] = sv_name.text.strip_edges()
+				sv["event"] = sv_event.text.strip_edges()
+				sv["map"] = str(sv_map.get_value()) if sv_map.get_value() != null else ""
+				out5["self_variable"] = sv
+				return out5
 		return sb.value if is_float else int(sb.value)
 	var emit := func(_a = null) -> void:
 		show.call()
@@ -1032,6 +1054,9 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	cn.item_selected.connect(emit)
 	ei.value_changed.connect(emit)
 	ef.item_selected.connect(emit)
+	sv_name.text_changed.connect(emit)
+	sv_event.text_changed.connect(emit)
+	sv_map.value_changed.connect(emit)
 	var setter := func(v: Variant) -> void:
 		state.v = v
 		if v is Dictionary and v.get("random") is Array:
@@ -1079,6 +1104,12 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 		elif v is Dictionary and v.has("pointer"):
 			mode.select(4)
 			pp.set_value(str(v.pointer))
+		elif v is Dictionary and v.get("self_variable") is Dictionary:
+			mode.select(5)
+			var sv: Dictionary = v.self_variable
+			sv_name.text = str(sv.get("name", ""))
+			sv_event.text = str(sv.get("event", ""))
+			sv_map.set_value(str(sv.get("map", "")))
 		elif v is Dictionary:
 			mode.select(1)
 			vp.set_value(str(v.get("variable", "")))
