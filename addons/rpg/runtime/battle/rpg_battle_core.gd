@@ -144,6 +144,7 @@ func start() -> void:
 	for m in members:
 		counts[m.get("enemy", "")] = int(counts.get(m.get("enemy", ""), 0)) + 1
 	var seen := {}
+	var rolled_out: Array = []
 	for i in members.size():
 		var m: Dictionary = members[i]
 		var b := rules.new_enemy_battler(str(m.get("enemy", "")))
@@ -154,12 +155,23 @@ func start() -> void:
 		if pos is Array and pos.size() >= 2:
 			b.screen_position = Vector2(pos[0], pos[1])
 		b.hidden = bool(m.get("hidden", false))
+		# Random appearance (RM2003): a member below its Appear % misses this fight. It behaves
+		# exactly like "Appears later", so Enemy Appear can still bring it in (#41).
+		if not b.hidden:
+			var chance := clampf(float(m.get("appear_chance", 100)), 0.0, 100.0)
+			if chance < 100.0 and not rng.chance_percent(chance):
+				b.hidden = true
+				rolled_out.append(b)
 		# "Slime A", "Slime B" when an enemy appears more than once.
 		if int(counts[b.id]) > 1:
 			var n := int(seen.get(b.id, 0))
 			seen[b.id] = n + 1
 			b.name = "%s %s" % [b.name, char(65 + n % 26)]
 		enemies.append(b)
+	# At least one member always fights: if every rollable member missed its chance, the first
+	# one that missed is brought back (troops that hide every member on purpose keep them).
+	if not rolled_out.is_empty() and not enemies.any(func(e): return not e.hidden):
+		rolled_out[0].hidden = false
 	for i in party.size():
 		var a: RPGBattler = party[i]
 		a.index = i
