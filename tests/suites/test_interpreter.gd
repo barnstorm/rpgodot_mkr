@@ -595,6 +595,167 @@ func test_select_item_cancel_and_type_rules() -> void:
 	assert_eq(env.rpg.state.get_variable("counter"), 0, "nothing stored")
 
 
+# --- Movement types (#58) ----------------------------------------------------------------------
+
+## Waits for the event's next autonomous step and returns its cell (the start cell on timeout).
+func _await_step(ev: RPGEvent, timeout := 240) -> Vector2i:
+	var before := ev.cell
+	for i in timeout:
+		await frames(1)
+		if ev.cell != before:
+			return ev.cell
+	return ev.cell
+
+
+## Teleports the chest event to a cell so movement tests can stage it anywhere.
+func _place_chest(at: Vector2i) -> RPGEvent:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "chest", "position": [at.x, at.y]},
+	])
+	assert_true(r.is_ok(), str(r))
+	return env.game.map.get_event("chest")
+
+
+func test_vertical_movement_patrols_and_reverses() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	# A cell with open ground up and down and its way two below blocked (the map edge): down,
+	# bounce off the block, up. The fixture map is fully open, so the edge is the wall.
+	var spot := Vector2i(-1, -1)
+	for y in range(2, 14):
+		for x in range(2, 25):
+			var c := Vector2i(x, y)
+			if c == env.game.player.cell:
+				continue
+			if mm.can_move(ev, c, Vector2i.DOWN) and mm.can_move(ev, c, Vector2i.UP) \
+					and not mm.can_move(ev, c + Vector2i.DOWN, Vector2i.DOWN):
+				spot = c
+				break
+		if spot.x >= 0:
+			break
+	assert_true(spot.x >= 0, "the map has an open cell backed by the map edge")
+	ev = await _place_chest(spot)
+	ev.frequency = 5
+	ev.move_type = "vertical"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, spot + Vector2i.DOWN, "vertical starts downward")
+	var c2 := await _await_step(ev)
+	assert_eq(c2, spot, "the wall below turns it around")
+	var c3 := await _await_step(ev)
+	assert_eq(c3, spot + Vector2i.UP, "it keeps going up")
+	assert_eq(c3.x, spot.x, "vertical never leaves its column")
+
+
+func test_horizontal_movement_patrols_and_reverses() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	# Mirror of the vertical probe: open left and right, the way two right blocked (map edge).
+	var spot := Vector2i(-1, -1)
+	for y in range(2, 14):
+		for x in range(2, 25):
+			var c := Vector2i(x, y)
+			if c == env.game.player.cell:
+				continue
+			if mm.can_move(ev, c, Vector2i.LEFT) and mm.can_move(ev, c, Vector2i.RIGHT) \
+					and not mm.can_move(ev, c + Vector2i.RIGHT, Vector2i.RIGHT):
+				spot = c
+				break
+		if spot.x >= 0:
+			break
+	assert_true(spot.x >= 0, "the map has an open cell backed by the map edge")
+	ev = await _place_chest(spot)
+	ev.frequency = 5
+	ev.move_type = "horizontal"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, spot + Vector2i.RIGHT, "horizontal starts rightward")
+	var c2 := await _await_step(ev)
+	assert_eq(c2, spot, "the wall to the right turns it around")
+	var c3 := await _await_step(ev)
+	assert_eq(c3, spot + Vector2i.LEFT, "it keeps going left")
+	assert_eq(c3.y, spot.y, "horizontal never leaves its row")
+
+
+func test_away_movement_flees_the_player() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var pc: Vector2i = env.game.player.cell
+	# Open ground clearly west of the player: the fleeing direction is unambiguous (left).
+	var spot := Vector2i(-1, -1)
+	for dy in range(-6, 7):
+		for dx in range(-9, -1):
+			var c := pc + Vector2i(dx, dy)
+			if absi(dx) > absi(dy) and mm.can_move(ev, c, Vector2i.LEFT):
+				spot = c
+				break
+		if spot.x >= 0:
+			break
+	assert_true(spot.x >= 0, "open ground lies west of the player")
+	ev = await _place_chest(spot)
+	ev.frequency = 5
+	ev.move_type = "away"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, spot + Vector2i.LEFT, "away steps directly away from the player")
+
+
+func test_away_movement_sidesteps_at_walls() -> void:
+	# The chest flees west from the player at (12, 8), but the house door is parked at (9, 8)
+	# (a "same as characters" event, so it blocks). With the direct escape cut off, the flee
+	# tries the perpendicular sidestep — RM's coin flip, the same one Approach uses.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [9, 8]},
+		{"type": "set_event_location", "event": "chest", "position": [10, 8]},
+	])
+	assert_true(r.is_ok(), str(r))
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.frequency = 5
+	ev.move_type = "away"
+	ev._move_wait = 0.0
+	# The sidestep fires on half the beats; force them back to back until the event moves.
+	var spot := ev.cell
+	var moved := spot
+	for i in 240:
+		await frames(1)
+		ev._move_wait = 0.0
+		if ev.cell != spot:
+			moved = ev.cell
+			break
+	assert_eq(moved, spot + Vector2i.UP, "the flee sidesteps along the wall")
+
+
+func test_movement_frequency_paces_the_beats() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var spot := Vector2i(-1, -1)
+	for y in range(2, 14):
+		for x in range(2, 25):
+			var c := Vector2i(x, y)
+			if c == env.game.player.cell:
+				continue
+			if mm.can_move(ev, c, Vector2i.DOWN):
+				spot = c
+				break
+		if spot.x >= 0:
+			break
+	assert_true(spot.x >= 0, "the map has open ground below some cell")
+	ev = await _place_chest(spot)
+	ev.frequency = 1
+	ev.move_type = "vertical"
+	ev._move_wait = 0.0
+	var first := await _await_step(ev)
+	assert_eq(first, spot + Vector2i.DOWN, "the first beat fires at once")
+	# Frequency 1 waits seconds between beats: nothing moves for at least a second.
+	var held := 0
+	for i in 60:
+		await frames(1)
+		if ev.cell != first:
+			break
+		held += 1
+	assert_eq(held, 60, "frequency 1 paces the beats slowly")
+
+
 func test_select_item_empty_list_only_cancels() -> void:
 	# No items at all: the window opens, picking is impossible, cancel stores 0.
 	var box = env.rpg.ui.message_box

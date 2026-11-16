@@ -92,7 +92,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
 			"graphic": {"$ref": "#/$defs/graphic"},
 			"movement": {"type": "object", "properties": {
-				"type": {"enum": ["fixed", "random", "approach", "custom"]},
+				"type": {"enum": ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]},
 				"speed": {"type": "integer", "minimum": 1, "maximum": 6},
 				"frequency": {"type": "integer", "minimum": 1, "maximum": 5},
 				"route": {"$ref": "#/$defs/route"},

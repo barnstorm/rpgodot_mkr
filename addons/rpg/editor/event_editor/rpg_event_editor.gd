@@ -35,7 +35,7 @@ const PAGE_FIELDS := [
 		"help": "All conditions must be true for this page to be active. There is no limit."},
 	{"key": "graphic", "kind": "graphic", "default": null, "label": "Graphic"},
 	{"key": "movement", "kind": "object", "default": {"type": "fixed"}, "label": "Movement", "fields": [
-		{"key": "type", "kind": "choice", "options": ["fixed", "random", "approach", "custom"], "option_labels": ["Fixed", "Random", "Approach the player", "Custom route"], "default": "fixed", "label": "Type"},
+		{"key": "type", "kind": "choice", "options": ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"], "option_labels": ["Fixed", "Random", "Vertical", "Horizontal", "Approach the player", "Away from the player", "Custom route"], "default": "fixed", "label": "Type"},
 		{"key": "speed", "kind": "int", "default": 3, "min": 1, "max": 6, "label": "Speed (1-6)"},
 		{"key": "frequency", "kind": "int", "default": 3, "min": 1, "max": 5, "label": "Frequency (1-5)"},
 		{"key": "route", "kind": "route", "route_options": true, "default": null, "label": "Route", "show_if": {"key": "type", "equals": "custom"}},

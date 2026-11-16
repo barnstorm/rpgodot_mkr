@@ -16,7 +16,7 @@ extends RefCounted
 
 const PAGE_PRIORITIES := ["below", "same", "above"]
 const PAGE_TRIGGERS := ["action_button", "player_touch", "event_touch", "autorun", "parallel"]
-const MOVE_TYPES := ["fixed", "random", "approach", "custom"]
+const MOVE_TYPES := ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]
 const CE_TRIGGERS := ["none", "autorun", "parallel"]
 const VAR_TYPES := ["int", "float", "bool", "string"]
 const OPS := ["==", "=", "!=", "≠", "<", "<=", "≤", ">", ">=", "≥"]
@@ -301,7 +301,7 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 		out.append(problem("error", file, rec, "movement", pp + "/movement", "Movement must be an object.", ""))
 	else:
 		if not MOVE_TYPES.has(str(mv.get("type", "fixed"))):
-			out.append(problem("error", file, rec, "movement", pp + "/movement/type", "Unknown movement type '%s'." % mv.get("type"), "Use fixed, random, approach or custom."))
+			out.append(problem("error", file, rec, "movement", pp + "/movement/type", "Unknown movement type '%s'." % mv.get("type"), "Use fixed, random, vertical, horizontal, approach, away or custom."))
 		if mv.has("speed") and (typeof(mv.speed) != TYPE_INT or mv.speed < 1 or mv.speed > 6):
 			out.append(problem("error", file, rec, "movement", pp + "/movement/speed", "Movement speed must be 1 to 6.", ""))
 		if mv.has("frequency") and (typeof(mv.frequency) != TYPE_INT or mv.frequency < 1 or mv.frequency > 5):
