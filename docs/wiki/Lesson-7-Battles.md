@@ -12,7 +12,7 @@ On the Database's **Enemies** tab, press **New**: `wolf`, *Wolf*.
 - **Level** and **Stats**: HP, SP and the rule system's stats.
 - **Experience** and **Gold** won.
 - **Item drops**: items with a chance %.
-- **Action patterns**: what it does. Each row is a skill (or *attack*, *guard*, *wait*, *escape*), a **Rating** (1–10: higher is chosen more often) and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %**, or a **Switch**.
+- **Action patterns**: what it does. Each row is a skill (or *attack*, *guard*, *wait*, *escape*), a **Rating** (1–10: higher is chosen more often) and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %** or **Own MP %**, *Has a state* (say, cure itself when poisoned), the **Party level** (average or highest), **Monsters present** (how many of its own side are still up — "flee when alone"), a **Variable**, or a **Switch**. MP compares the spell resource as a percent, like the MP battle-event condition.
 - **Traits**: element rates (weak to fire), state resistances and so on.
 
 ## 2. An enemy group
@@ -69,7 +69,11 @@ When a random battle starts there is a small chance of a **preemptive** attack (
 
 An enemy group's **Battle events** run *during* its battles: a boss that taunts at turn 3, calls for help below half HP, or a story fight that ends after five turns.
 
-Each battle event page has **Conditions** (turn number, an enemy's HP, an actor's HP, a switch), a **Span** (*once per battle*, *once per turn*, or *every check*), a priority, and **Commands**. All the usual commands work: messages, switches, Change HP / SP, Change State, music, and so on.
+Each battle event page has **Conditions** (turn number, *turn end*, an enemy's HP or MP, an actor's HP or MP, an enemy's or actor's own turns taken, a command an actor used this turn, a switch, a variable), a **Span** (*once per battle*, *once per turn*, or *every check*), a priority, and **Commands**. All the usual commands work: messages, switches, Change HP / SP, Change State, music, and so on. Conditions combine with AND: a page runs only when all of them hold. *Turn end* is true only at the moment a turn ends (under ATB / CTB, when every battler has had one turn), so a page with that condition runs its commands after each turn — poison damage, regrowth, a boss gathering power.
+
+The *turns taken* conditions count each battler's own turns, not the battle's: a battler that lost its turn to a state still counts it (the battle scene's *Span* still follows the battle turn). *Command used* holds when the actor took that action — *Attack*, *Skill* (optionally one skill), *Item*, *Guard* or *Escape* — during the current battle turn, which pairs well with a page that answers a specific skill. MP conditions compare the spell resource as a percent (SP in the classic ruleset, MP in VX Ace); in a ruleset with no second resource they never hold.
+
+In battle events (and common events they call), **Conditional Branch** gains RM2000/2003's battle checks alongside its usual ones: the turn, an enemy's HP and an actor's HP, plus *Actor can act* (present and not held back by a state), *Enemy can act*, and *Enemy is the target* — true when the action that just ran targeted that enemy alone. They are false with a warning anywhere else.
 
 **Enemy Appear** (in the *Scenes* category) brings in a member marked *Appears later*. Its picture fades in and "*Slime B appears!*" shows. Pick the enemy by its number in the group (the number on the battle picture), or *Every hidden enemy*. From then on it fights and can be targeted like the others.
 

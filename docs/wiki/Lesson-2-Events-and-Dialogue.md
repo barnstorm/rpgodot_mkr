@@ -4,7 +4,9 @@ An **event** is anything on the map that does something: a villager who talks, a
 
 ## 1. Event mode
 
-Press **Event** on the toolbar (or F6). The grid appears, and every event on the map shows as a small box. The list on the right, *Events on this map*, shows each event's name, ID and position; click one to jump to it.
+Press **Event** on the toolbar (or F6). The grid appears, and every event on the map shows as a small box. The list on the right, *Events on this map*, shows each event's name, ID and position, numbered `#1`, `#2`, … in **run order**; click one to jump to it.
+
+Run order is the order the game runs the map's events in, top to bottom — the order they were created, like RPG Maker's event numbers. It decides which of two parallel events writes a shared variable first in a frame, which autorun starts first, and which of several triggered events goes first. New events join at the bottom of the list; select one and press **Move up** or **Move down** to change when it runs.
 
 ![Event mode](images/editor_event_mode.png)
 
@@ -25,7 +27,7 @@ Double-click an empty grass tile. The event editor opens:
 - **Left column**, the page's settings:
   - **Conditions**: when this page is active (Lesson 4).
   - **Graphic**: the character sheet, which character on it, the direction it faces and the frame. Choose *Tile* to show a tile of the tileset instead (a pot, a sign), or nothing for an invisible event.
-  - **Movement**: *Fixed* (stands still), *Random*, *Approach the player* or *Custom route*, with a speed (1–6) and how often it moves (1–5).
+  - **Movement**: *Fixed* (stands still), *Random*, *Vertical* / *Horizontal* (paces one axis, turning back at obstacles), *Approach the player*, *Away from the player* or *Custom route*, with a speed (1–6) and how often it moves (1–5).
   - **Options**: walking animation, stepping animation (moves its feet while standing), direction fix (never turns), walk through.
   - **Priority**: *Below characters* (the player walks over it, like a switch on the floor), *Same as characters* (it blocks like a person) or *Above characters*.
   - **Trigger**: how it starts:

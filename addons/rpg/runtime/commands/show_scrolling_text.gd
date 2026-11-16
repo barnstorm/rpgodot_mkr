@@ -28,7 +28,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	lab.size = Vector2(300, 10)
 	lab.position = Vector2(10, 240)
 	lab.add_theme_font_size_override("normal_font_size", 11)
-	var parsed := RPGText.expand(str(args.text), ctx.rpg)
+	var parsed := RPGText.expand(str(args.text), ctx.rpg, {"params": {"_event_map": ctx.map_id(), "_event_id": ctx.event_id()}})
 	lab.text = "[center]" + parsed.bbcode + "[/center]"
 	ctx.ui.root.add_child(bg)
 	ctx.ui.root.add_child(lab)

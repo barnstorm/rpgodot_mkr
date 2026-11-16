@@ -92,6 +92,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		ctx.audio.stop_bgs()
 	# Extension hooks (RPG.battle_started / battle_ended): emitted here, outside the battle scene,
 	# so they work with any battle scene.
+	ctx.state.bump_counter("battles")
 	if ctx.rpg.has_signal("battle_started"):
 		ctx.rpg.battle_started.emit(bargs.duplicate())
 	var r: Dictionary = await ctx.ui.run_contract_scene(scene, bargs, context, ctx.token)
@@ -118,15 +119,15 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		return RPGResult.cancelled() if ctx.is_cancelled() else RPGResult.ok()
 	var res: Variant = r.value
 	var outcome := str(res.get("outcome", "win")) if res is Dictionary else str(res)
-	# Play counters (#54): every finished battle counts once, plus its outcome's counter.
-	ctx.state.bump("battles")
+	# Game Data play counters: one battle resolved, and how it ended (RM2000's Other: wins, defeats,
+	# escapes). A battle that was cancelled mid-run counts as fought but not as any outcome.
 	match outcome:
 		"win":
-			ctx.state.bump("victories")
-		"escape":
-			ctx.state.bump("escapes")
+			ctx.state.bump_counter("victories")
 		"lose":
-			ctx.state.bump("defeats")
+			ctx.state.bump_counter("defeats")
+		"escape":
+			ctx.state.bump_counter("escapes")
 	if str(args.get("result", "")) != "":
 		ctx.state.set_variable(str(args.result), outcome)
 	match outcome:

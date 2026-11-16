@@ -48,6 +48,18 @@ var _frame_size := Vector2i(24, 32)
 
 var _sheet_tex: Texture2D
 var _route_token: RPGCancelToken = null
+## The forced route (Set Move Route) playing now, or null: this character's own movement
+## pauses while it runs (MV's isMoveRouteForcing).
+var _forced_token: RPGCancelToken = null
+## Whether the playing forced route repeats: a repeating route never blocks Wait for All
+## Movement (RPG Maker's Proceed with Movement ignores looping routes).
+var _forced_repeat := false
+## The cell a move-route step is parked on, waiting for the way to clear ((-1, -1) = not
+## waiting) — shown by the debug inspector.
+var _blocked_step_at := Vector2i(-1, -1)
+## How long a blocked step is retried before a debug warning is logged. The step is never
+## dropped: RPG Maker retries it until it succeeds or the route is cancelled.
+var _blocked_warn_after := 8.0
 
 
 func _init() -> void:
@@ -333,8 +345,11 @@ func front_cell() -> Vector2i:
 ## Steps: {step: dir|forward|backward|random|toward_player|away_from_player|down_left...},
 ## {turn: dir|left_90|right_90|around|random|toward_player|away_from_player}, {jump: [dx, dy]},
 ## {wait: seconds}, {speed: n}, {frequency: n}, {graphic: {...}}, {opacity: 0-255},
-## {switch: id, value}, {sound: {...}}, {walk_anim|step_anim|direction_fix|through|hide: bool}.
-func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool:
+## {switch: id, value}, {sound: {...}}, {walk_anim|step_anim|direction_fix|through|hide: bool},
+## {slide: dir|forward} (ice: keep moving until blocked), {move_to: [x, y]|player|event_id}
+## (shortest way around walls), {call: {method, args}} (extension hook on this character),
+## {speed_up|speed_down|frequency_up|frequency_down|opacity_up|opacity_down: true}.
+func run_route(route: Dictionary, token: RPGCancelToken) -> bool:
 	var steps: Array = route.get("steps", [])
 	var repeat: bool = route.get("repeat", false)
 	var skip: bool = route.get("skip_if_blocked", false)
@@ -345,7 +360,9 @@ func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool
 		for s in steps:
 			if token.is_cancelled or not is_inside_tree():
 				return false
-			if not await _route_step(s, skip, token, timeout):
+			if _forced_token != null and token != _forced_token and not await _pause_for_forced(token):
+				return false
+			if not await _route_step(s, skip, token):
 				return false
 		if not repeat:
 			break
@@ -353,35 +370,75 @@ func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool
 	return not token.is_cancelled
 
 
+## A forced route (Set Move Route) takes over the character: this route — the event's custom
+## autonomous one — pauses while it plays, then resumes from the same step (MV's
+## restoreMoveRoute). False when this route was cancelled while waiting.
+func _pause_for_forced(token: RPGCancelToken) -> bool:
+	while _forced_token != null and _forced_token != token:
+		if token.is_cancelled or not is_inside_tree():
+			return false
+		await get_tree().process_frame
+	return true
+
+
+## Set Move Route: like run_route, but marks the route as forced, so the character's own
+## movement pauses while it plays. The route runs on the token given (its own, never the
+## calling event's), so cancel_forced_route() ends just the route, not the event.
+func run_forced_route(route: Dictionary, token: RPGCancelToken) -> bool:
+	if _forced_token != null and not _forced_token.is_cancelled:
+		_forced_token.cancel("replaced by a new move route")
+	_forced_token = token
+	_forced_repeat = bool(route.get("repeat", false))
+	var ok: bool = await run_route(route, token)
+	if _forced_token == token:
+		_forced_token = null
+		_forced_repeat = false
+	return ok
+
+
+## True while a forced route (Set Move Route) is playing.
+func is_route_forced() -> bool:
+	return _forced_token != null and not _forced_token.is_cancelled
+
+
+## True while a forced route plays that Wait for All Movement must wait for: a one-pass route.
+## Repeating routes are ignored, as RPG Maker's Proceed with Movement ignores looping routes.
+func has_waitable_forced_route() -> bool:
+	return is_route_forced() and not _forced_repeat
+
+
+## Ends the forced route early (a page change under the VX Ace style rules does).
+func cancel_forced_route(why := "page changed") -> void:
+	if _forced_token != null:
+		_forced_token.cancel(why)
+
+
 ## Stops the move route running on its own token (an autonomous custom route, or a Move Route
 ## that does not wait). Used when the map is unloaded: a route parked on a {wait} step otherwise
 ## keeps its timer, waiter and suspended function alive after the map is gone (a leak at exit).
 func cancel_route(why := "map unloaded") -> void:
+	if _forced_token != null:
+		_forced_token.cancel(why)
 	if _route_token != null:
 		_route_token.cancel(why)
 
 
-func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken, timeout: float) -> bool:
+func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken) -> bool:
 	var rpg: Node = map.rpg
 	if s.has("step"):
 		var dir := _route_dir(str(s.step))
 		if dir == Vector2i.ZERO:
 			return true
-		var waited := 0.0
-		while not step(dir):
-			if skip:
-				return true
-			await get_tree().process_frame
-			waited += get_process_delta_time()
-			if token.is_cancelled:
-				return false
-			if waited > timeout:
-				if OS.is_debug_build():
-					push_warning("RPG: move route of '%s' blocked for %.1f s at %s." % [name, waited, cell])
-				return true
-		while moving:
-			await get_tree().process_frame
+		return await _step_cell(dir, skip, token)
+	if s.has("slide"):
+		# Ice slide: keep stepping one cell in the direction until something stops the character.
+		var sdir := _route_dir(str(s.slide))
+		while sdir != Vector2i.ZERO and not token.is_cancelled and step(sdir):
+			while moving:
+				await get_tree().process_frame
 		return true
+	if s.has("move_to"):
+		return await _move_to_step(s.move_to, skip, token)
 	if s.has("turn"):
 		var t := str(s.turn)
 		match t:
@@ -409,6 +466,29 @@ func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken, timeout: floa
 		speed = clampi(int(s.speed), 1, 6)
 	if s.has("frequency"):
 		frequency = clampi(int(s.frequency), 1, 5)
+	# RM2000/2003's Speed/Frequency/Transparency Up and Down steps, one notch each, clamped.
+	if s.has("speed_up"):
+		speed = clampi(speed + 1, 1, 6)
+	if s.has("speed_down"):
+		speed = clampi(speed - 1, 1, 6)
+	if s.has("frequency_up"):
+		frequency = clampi(frequency + 1, 1, 5)
+	if s.has("frequency_down"):
+		frequency = clampi(frequency - 1, 1, 5)
+	if s.has("opacity_up") or s.has("opacity_down"):
+		# Transparency UP means more visible: 8 notches over the 0-255 range, as RM's 8 steps.
+		opacity = clampi(opacity + (32 if s.has("opacity_up") else -32), 0, 255)
+		_update_frame()
+	if s.has("call"):
+		# The kit's Script step: a hook on this character for extensions (a custom event node's
+		# own methods). A missing method is an error, not a cancelled route: the step is skipped.
+		var c: Variant = s.call
+		var m := str(c.method) if c is Dictionary else str(c)
+		if not has_method(m):
+			push_error("RPG: move route of '%s': no method '%s' to call." % [name, m])
+		else:
+			var call_args: Array = c.get("args", []) if c is Dictionary else []
+			await callv(m, call_args)
 	if s.has("graphic"):
 		set_graphic(s.graphic)
 	if s.has("opacity"):
@@ -425,6 +505,80 @@ func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken, timeout: floa
 		is_hidden = bool(s.hide)
 		_update_frame()
 	return true
+
+
+## One step of a route in direction `dir`, with RPG Maker's retry rules: a blocked step is
+## retried every frame until the way clears — or skipped at once with 'Skip if cannot move'.
+## False only when the route was cancelled while waiting.
+func _step_cell(dir: Vector2i, skip: bool, token: RPGCancelToken) -> bool:
+	var waited := 0.0
+	var warned := false
+	while not step(dir):
+		if skip:
+			return true
+		_blocked_step_at = cell
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+		if token.is_cancelled:
+			_blocked_step_at = Vector2i(-1, -1)
+			return false
+		# No timeout drops the step: with 'Skip if cannot move' off it is retried until it
+		# succeeds (RPG Maker), however long that takes. A long block only logs a warning.
+		if not warned and waited > _blocked_warn_after:
+			warned = true
+			if OS.is_debug_build():
+				push_warning("RPG: move route of '%s' blocked at %s for %.1f s (waiting for the way to clear)." % [name, cell, waited])
+	_blocked_step_at = Vector2i(-1, -1)
+	while moving:
+		await get_tree().process_frame
+	return true
+
+
+## A {move_to} step: walks to [x, y], "player" or an event id by the shortest way (walls are
+## gone around, characters are not — a blocked step follows the route's skip rules). A moving
+## goal is re-aimed at every cell; a goal held by a blocking character is arrived at from
+## beside it, as close as the way allows.
+func _move_to_step(goal_v: Variant, skip: bool, token: RPGCancelToken) -> bool:
+	var waited := 0
+	while true:
+		if token.is_cancelled or not is_inside_tree():
+			return false
+		var goal := _move_to_goal(goal_v)
+		if goal == Vector2i(-1, -1) or goal == cell:
+			return true
+		var way: Array = map.movement.path(cell, goal)
+		if way.is_empty():
+			# No way there at all (walls, a locked door). 'Skip if cannot move' gives up on the
+			# step; otherwise it waits like a blocked step, in case the way opens.
+			if skip:
+				return true
+			_blocked_step_at = cell
+			await get_tree().process_frame
+			waited += 1
+			if waited == 480 and OS.is_debug_build():
+				push_warning("RPG: move route of '%s' cannot reach %s from %s (waiting for a way)." % [name, goal, cell])
+			continue
+		if way.size() == 1 and map.movement.is_occupied(goal, self):
+			return true
+		if not await _step_cell(way[0] - cell, skip, token):
+			return false
+		if cell != way[0]:
+			return true  # the step was skipped (blocked): give up on the goal, like RPG Maker
+	return true  # unreachable: the loop only leaves through the returns above
+
+
+## The cell a {move_to} step aims at: [x, y] directly, or the live cell of "player" / an event.
+func _move_to_goal(v: Variant) -> Vector2i:
+	if v is Array and v.size() >= 2:
+		return map.movement.normalize(Vector2i(int(v[0]), int(v[1])))
+	var who := str(v)
+	if who == "player" and map.player != null:
+		return map.player.cell
+	var ev: Node = map.get_event(who) if map != null else null
+	if ev != null:
+		return ev.cell
+	push_error("RPG: move route of '%s': move_to target '%s' not found." % [name, who])
+	return Vector2i(-1, -1)
 
 
 func _route_dir(name_: String) -> Vector2i:

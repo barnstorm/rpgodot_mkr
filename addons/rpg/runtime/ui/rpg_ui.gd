@@ -297,7 +297,9 @@ func close_all() -> void:
 
 ## Runs a scene that follows the Run Scene contract: start(args, context), then exactly one of
 ## finished(result) / cancelled(reason). Returns {status: "finished"|"cancelled"|"timeout"|"error", value}.
-func run_contract_scene(path: String, args: Dictionary, context: Variant, token: RPGCancelToken, timeout := 0.0) -> Dictionary:
+## While it runs the map is suspended (parallels and wandering NPCs sleep, as behind a battle);
+## pass pause_map = false for an overlay scene (a HUD) that runs on top of the live map.
+func run_contract_scene(path: String, args: Dictionary, context: Variant, token: RPGCancelToken, timeout := 0.0, pause_map := true) -> Dictionary:
 	var node := open_scene(path)
 	if node == null:
 		return {"status": "error", "value": "Scene '%s' could not be opened." % path}
@@ -306,6 +308,8 @@ func run_contract_scene(path: String, args: Dictionary, context: Variant, token:
 		return {"status": "error", "value": "Scene '%s' must declare signals finished(result) and cancelled(reason)." % path}
 	var r := rpg()
 	r.scheduler.lock_input("scene")
+	if pause_map:
+		r.scheduler.suspend_map("scene")
 	var sigs: Array = [node.finished, node.cancelled, token.cancelled]
 	var timer: SceneTreeTimer = null
 	if timeout > 0.0:
@@ -316,6 +320,8 @@ func run_contract_scene(path: String, args: Dictionary, context: Variant, token:
 		node.start(args, context)
 	var res: Array = await w.done
 	r.scheduler.unlock_input("scene")
+	if pause_map:
+		r.scheduler.resume_map("scene")
 	close_scene(node)
 	match res[0]:
 		0: return {"status": "finished", "value": res[1]}

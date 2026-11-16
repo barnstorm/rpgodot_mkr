@@ -332,6 +332,34 @@ func test_missing_asset_blocks_export_but_only_warns_on_save() -> void:
 			assert_eq(p.severity, "warning", "while editing it is only a warning")
 
 
+func test_set_vehicle_location_while_riding_warns_under_mv_rules_only() -> void:
+	var files := RPGValidator.collect_files(data)
+	# A Set Vehicle Location on a town event (in-memory only; nothing is written).
+	for path in files:
+		if files[path].get("kind", "") == "events" and files[path].map == "town":
+			var evs: Array = files[path].data.events
+			evs.append({"id": "svl_warn", "name": "Whirlpool", "position": [6, 6], "pages": [
+				{"trigger": "action_button", "commands": [{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": "town", "position": [3, 3]}}]},
+			]})
+			break
+	data.project["rules"] = "vx_ace"
+	var mv := RPGValidator.full(data, registry, files)
+	var hits := []
+	for p in mv:
+		if str(p.message).contains("while the party rides it"):
+			hits.append(p)
+	assert_true(hits.size() >= 1, "the riding warning is reported under the VX Ace style rules")
+	if not hits.is_empty():
+		assert_eq(hits[0].severity, "warning")
+		assert_eq(hits[0].record, "svl_warn")
+		assert_eq(hits[0].field, "vehicle")
+	# The classic rules move the party with the vehicle (RM2000/2003), so they stay quiet.
+	data.project["rules"] = "classic"
+	var classic := RPGValidator.full(data, registry, files)
+	for p in classic:
+		assert_false(str(p.message).contains("while the party rides it"), "no riding warning under the classic rules")
+
+
 # --- deploy and resource manager helpers (no real export is run) ---------------------------------
 
 const DeployHelpers := preload("res://addons/rpg/editor/tools/rpg_deploy.gd")

@@ -6,7 +6,10 @@ extends VBoxContainer
 ##   {step: dir|forward|backward|random|toward_player|away_from_player|down_left...}
 ##   {turn: dir|left_90|right_90|around|random|toward_player|away_from_player}, {jump: [dx, dy]},
 ##   {wait: seconds}, {speed: n}, {frequency: n}, {graphic: {...}}, {opacity: 0-255},
-##   {switch: id, value}, {sound: {...}}, {walk_anim|step_anim|direction_fix|through|hide: bool}
+##   {switch: id, value}, {sound: {...}}, {walk_anim|step_anim|direction_fix|through|hide: bool},
+##   {slide: dir|forward} (ice), {move_to: [x, y]|player|event_id} (shortest way),
+##   {call: {method, args}} (extension hook), {speed_up|speed_down|frequency_up|frequency_down|
+##   opacity_up|opacity_down: true} (RM2000/2003's Up/Down steps)
 ## Value: an Array of steps, or (when `with_options`) {steps, repeat, skip_if_blocked}; unknown
 ## keys of the route object and unknown steps are kept.
 
@@ -18,11 +21,18 @@ const BUTTONS := [
 	["Move", [["↓ Down", {"step": "down"}], ["← Left", {"step": "left"}], ["→ Right", {"step": "right"}], ["↑ Up", {"step": "up"}],
 		["↙ Down-left", {"step": "down_left"}], ["↘ Down-right", {"step": "down_right"}], ["↖ Up-left", {"step": "up_left"}], ["↗ Up-right", {"step": "up_right"}],
 		["Forward", {"step": "forward"}], ["Backward", {"step": "backward"}], ["Random", {"step": "random"}],
-		["Toward player", {"step": "toward_player"}], ["Away from player", {"step": "away_from_player"}]]],
+		["Toward player", {"step": "toward_player"}], ["Away from player", {"step": "away_from_player"}],
+		["Slide ↓", {"slide": "down"}], ["Slide ←", {"slide": "left"}], ["Slide →", {"slide": "right"}], ["Slide ↑", {"slide": "up"}],
+		["Slide forward", {"slide": "forward"}]]],
 	["Turn", [["Down", {"turn": "down"}], ["Left", {"turn": "left"}], ["Right", {"turn": "right"}], ["Up", {"turn": "up"}],
 		["90° left", {"turn": "left_90"}], ["90° right", {"turn": "right_90"}], ["Around", {"turn": "around"}], ["Random", {"turn": "random"}],
 		["Toward player", {"turn": "toward_player"}], ["Away from player", {"turn": "away_from_player"}]]],
 	["Other", [["Jump…", {"jump": [0, 0]}], ["Wait…", {"wait": 0.5}], ["Speed…", {"speed": 4}], ["Frequency…", {"frequency": 3}],
+		["Speed ↑", {"speed_up": true}], ["Speed ↓", {"speed_down": true}],
+		["Frequency ↑", {"frequency_up": true}], ["Frequency ↓", {"frequency_down": true}],
+		["Opacity ↑", {"opacity_up": true}], ["Opacity ↓", {"opacity_down": true}],
+		["Move to…", {"move_to": [0, 0]}], ["Move to event…", {"move_to": "player"}],
+		["Call…", {"call": {"method": "", "args": []}}],
 		["Graphic…", {"graphic": {"sheet": "", "index": 0}}], ["Opacity…", {"opacity": 255}],
 		["Switch ON…", {"switch": "", "value": true}], ["Switch OFF…", {"switch": "", "value": false}], ["Sound…", {"sound": {"file": "", "volume": 100, "pitch": 100, "pan": 0}}],
 		["Walk anim ON", {"walk_anim": true}], ["Walk anim OFF", {"walk_anim": false}],
@@ -41,6 +51,13 @@ const STEP_FIELDS := {
 	"opacity": [{"key": "opacity", "kind": "int", "min": 0, "max": 255, "label": "Opacity"}],
 	"switch": [{"key": "switch", "kind": "ref", "ref": "switch", "label": "Switch"}, {"key": "value", "kind": "bool", "label": "ON"}],
 	"sound": [{"key": "sound", "kind": "sound", "res": "sound", "label": "Sound"}],
+	"slide": [{"key": "slide", "kind": "choice", "options": ["down", "left", "right", "up", "forward", "backward"],
+		"option_labels": ["↓ Down", "← Left", "→ Right", "↑ Up", "Forward", "Backward"], "default": "down", "label": "Direction"}],
+	"move_to": [{"key": "move_to", "kind": "text", "default": "player", "label": "Target",
+		"help": "player, or an event ID on the same map (for [x, y] use the Move to… button)"}],
+	"call": [{"key": "call", "kind": "object", "fields": [
+		{"key": "method", "kind": "text", "default": "", "label": "Method", "required": true},
+		{"key": "args", "kind": "list", "default": [], "label": "Arguments", "item_fields": []}]}],
 }
 
 var data: RPGProjectData
@@ -155,6 +172,26 @@ static func describe(s: Variant) -> String:
 	if s.has("sound"):
 		var snd: Variant = s.sound
 		return "Sound %s" % (snd.get("file", snd.get("role", "")) if snd is Dictionary else str(snd))
+	if s.has("slide"):
+		return "Slide %s" % str(s.slide).replace("_", " ")
+	if s.has("move_to"):
+		var target: Variant = s.move_to
+		return "Move to %s" % ("(%d, %d)" % [target[0], target[1]] if target is Array and target.size() >= 2 else str(target))
+	if s.has("call"):
+		var c: Variant = s.call
+		return "Call %s" % (str(c.get("method", "")) if c is Dictionary else str(c))
+	if s.has("speed_up"):
+		return "Speed up"
+	if s.has("speed_down"):
+		return "Speed down"
+	if s.has("frequency_up"):
+		return "Frequency up"
+	if s.has("frequency_down"):
+		return "Frequency down"
+	if s.has("opacity_up"):
+		return "Opacity up"
+	if s.has("opacity_down"):
+		return "Opacity down"
 	for k in ["walk_anim", "step_anim", "direction_fix", "through"]:
 		if s.has(k):
 			return "%s %s" % [k.replace("_", " ").capitalize(), "ON" if s[k] else "OFF"]
@@ -212,20 +249,30 @@ func _edit_step(i: int) -> void:
 	var dlg := ConfirmationDialog.new()
 	dlg.title = "Route step"
 	var fields: Array = STEP_FIELDS[key].duplicate(true)
-	if key == "jump":
+	# Jump and a coordinate move_to edit as two ints; a move_to target (event/player) is text.
+	var xy_jump := key == "jump"
+	var xy_to := key == "move_to" and s.move_to is Array
+	if xy_jump:
 		fields = [{"key": "dx", "kind": "int", "min": -20, "max": 20, "label": "dx"}, {"key": "dy", "kind": "int", "min": -20, "max": 20, "label": "dy"}]
+	elif xy_to:
+		fields = [{"key": "x", "kind": "int", "min": -20, "max": 999, "label": "x"}, {"key": "y", "kind": "int", "min": -20, "max": 999, "label": "y"}]
 	var form := RPGFormBuilder.new()
 	form.setup(fields, data, null)
 	var v := s.duplicate(true)
-	if key == "jump":
+	if xy_jump:
 		var j: Array = s.jump if s.jump is Array and s.jump.size() == 2 else [0, 0]
 		v = {"dx": j[0], "dy": j[1]}
+	elif xy_to:
+		var m: Array = s.move_to if s.move_to is Array and s.move_to.size() == 2 else [0, 0]
+		v = {"x": int(m[0]), "y": int(m[1])}
 	form.set_value(v)
 	dlg.add_child(form)
 	dlg.confirmed.connect(func():
 		var out: Dictionary = form.get_value()
-		if key == "jump":
+		if xy_jump:
 			_steps[i] = {"jump": [int(out.get("dx", 0)), int(out.get("dy", 0))]}
+		elif xy_to:
+			_steps[i] = {"move_to": [int(out.get("x", 0)), int(out.get("y", 0))]}
 		else:
 			_steps[i] = out
 		_rebuild()

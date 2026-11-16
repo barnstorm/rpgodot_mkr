@@ -40,7 +40,7 @@ const PAGE_DEFAULTS := {
 	"conditions": [],
 	"graphic": null,
 	"movement": {"type": "fixed"},
-	"options": {"walk_anim": true, "step_anim": false, "direction_fix": false, "through": false},
+	"options": {"walk_anim": true, "step_anim": false, "direction_fix": false, "through": false, "forbid_overlap": false},
 	"priority": "same",
 	"trigger": "action_button",
 	"commands": [],
