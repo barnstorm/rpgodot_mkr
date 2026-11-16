@@ -189,10 +189,23 @@ func execute(cmd_data: Dictionary) -> RPGResult:
 		var why := registry.unavailable_reason(type)
 		return _fail("Unknown or unavailable command '%s'%s." % [type, (": " + why) if why != "" else ""])
 	var args := cmd.with_defaults(cmd_data)
+	# A pending page refresh runs before the commands that read the map's live state, so "turn on
+	# the switch, then move that event" acts on the new page within one list: under the classic
+	# rules before every command (RM2000/2003), MV-style only before Set Move Route. The per-frame
+	# refresh stays.
+	if rpg.refresh_pending() and (type == "move_route" or not _vx_ace_style_rules()):
+		rpg.process_refresh()
 	var r: Variant = await cmd.run(ctx, args)
 	if r is RPGResult:
 		return r
 	return RPGResult.ok(r)
+
+
+## True under the VX Ace style rules, whose event timing follows the newer RPG Makers (pages
+## refresh before Set Move Route only); the classic rules refresh before every command, as
+## RM2000/2003 do.
+func _vx_ace_style_rules() -> bool:
+	return str(rpg.data.project.get("rules", "classic")) == "vx_ace"
 
 
 ## The command after the current one in the innermost list (skipped lines ignored), or {}.
