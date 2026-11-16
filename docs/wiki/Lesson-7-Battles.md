@@ -72,6 +72,8 @@ Each battle event page has **Conditions** (turn number, *turn end*, an enemy's H
 
 The *turns taken* conditions count each battler's own turns, not the battle's: a battler that lost its turn to a state still counts it (the battle scene's *Span* still follows the battle turn). *Command used* holds when the actor took that action — *Attack*, *Skill* (optionally one skill), *Item*, *Guard* or *Escape* — during the current battle turn, which pairs well with a page that answers a specific skill. MP conditions compare the spell resource as a percent (SP in the classic ruleset, MP in VX Ace); in a ruleset with no second resource they never hold.
 
+In battle events (and common events they call), **Conditional Branch** gains RM2000/2003's battle checks alongside its usual ones: the turn, an enemy's HP and an actor's HP, plus *Actor can act* (present and not held back by a state), *Enemy can act*, and *Enemy is the target* — true when the action that just ran targeted that enemy alone. They are false with a warning anywhere else.
+
 **Enemy Appear** (in the *Scenes* category) brings in a member marked *Appears later*. Its picture fades in and "*Slime B appears!*" shows. Pick the enemy by its number in the group (the number on the battle picture), or *Every hidden enemy*. From then on it fights and can be targeted like the others.
 
 The party commands reach the other side too: **Change HP / SP**, **Change State** and **Recover All** take an enemy target (*Enemy #* by its number in the group, or *Entire troop*). A change that defeats an enemy collapses it, counts it as defeated and gives its rewards; Change State respects the state's resist rates unless *Ignore resist rates* is on, and the display refreshes by itself.

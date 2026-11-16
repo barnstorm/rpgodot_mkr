@@ -541,11 +541,28 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return false
 		"not":
 			return not check_condition(cond.get("condition", {}), map_id, event_id, ctx)
+		"turn", "enemy_hp", "actor_hp", "actor_can_act", "enemy_can_act", "enemy_is_target":
+			return _battle_condition(kind, cond, ctx)
 	if condition_kinds.has(kind):
 		var r: Variant = (condition_kinds[kind] as Callable).call(cond, {"map_id": map_id, "event_id": event_id, "ctx": ctx, "state": self})
 		return bool(r) if r != null else false
 	_err("Unknown condition kind '%s'." % kind)
 	return false
+
+
+## Battle kinds of a Conditional Branch (RM2000/2003): the troop page checks (turn, enemy HP,
+## actor HP) and the branch-only can-act / is-target checks, read from the running battle
+## through the running command's context. Outside a battle they are false with a warning.
+func _battle_condition(kind: String, cond: Dictionary, ctx: Object) -> bool:
+	var core: Variant = null
+	if ctx != null and "battle" in ctx and ctx.battle != null and ctx.battle.has_method("core"):
+		core = ctx.battle.core()
+	if core == null:
+		_err("Condition '%s' only works in a battle." % kind)
+		return false
+	if kind == "turn" or kind == "enemy_hp" or kind == "actor_hp":
+		return core.page_conditions_met({"conditions": [cond]})
+	return core.branch_check(kind, cond)
 
 
 ## Actor condition: in the party (default), or name / class / skill learned / weapon or armour
