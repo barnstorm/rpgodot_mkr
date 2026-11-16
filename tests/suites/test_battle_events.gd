@@ -96,6 +96,11 @@ func _open_actor_command(scene: Node) -> void:
 
 ## After commands changed the battle: let the scene run itself out (auto confirms open menus).
 func _finish(scene: Node, out: Dictionary) -> void:
+	# A timed battle can end on its own before the caller aborts it (the hero falls), which frees
+	# the scene; then there is nothing left to drive, only the result to check.
+	if not is_instance_valid(scene):
+		assert_eq(out.get("r", {}).get("status", ""), "finished", "the battle ends")
+		return
 	scene.auto = true
 	env.rpg.ui.auto_advance = true
 	var end := Time.get_ticks_msec() + 20000
