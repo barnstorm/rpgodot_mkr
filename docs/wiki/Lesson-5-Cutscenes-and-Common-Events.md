@@ -30,7 +30,7 @@ A cutscene is usually an event with the trigger **Autorun**. It starts as soon a
 - **Turn**: the four directions, 90° left or right, around, random, toward or away from the player.
 - **Other**: jump, wait, speed, frequency, graphic, opacity, switch ON/OFF, sound, walking and stepping animation, direction fix, walk through, hide and show.
 
-Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event waits before the next command). Press **Preview** to watch the route drawn on the map in the editor.
+Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event waits before the next command). With *Skip if blocked* off, a step whose way is blocked waits for the way to clear, however long that takes — the debug screen shows where a character is waiting. Press **Preview** to watch the route drawn on the map in the editor.
 
 An event's page can have a **Custom route** as its movement too, for guards who patrol — or a *Vertical* / *Horizontal* movement type, when a simple up-and-down patrol is all a guard needs.
 

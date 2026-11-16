@@ -51,6 +51,12 @@ var _route_token: RPGCancelToken = null
 ## The forced route (Set Move Route) playing now, or null: this character's own movement
 ## pauses while it runs (MV's isMoveRouteForcing).
 var _forced_token: RPGCancelToken = null
+## The cell a move-route step is parked on, waiting for the way to clear ((-1, -1) = not
+## waiting) — shown by the debug inspector.
+var _blocked_step_at := Vector2i(-1, -1)
+## How long a blocked step is retried before a debug warning is logged. The step is never
+## dropped: RPG Maker retries it until it succeeds or the route is cancelled.
+var _blocked_warn_after := 8.0
 
 
 func _init() -> void:
@@ -337,7 +343,7 @@ func front_cell() -> Vector2i:
 ## {turn: dir|left_90|right_90|around|random|toward_player|away_from_player}, {jump: [dx, dy]},
 ## {wait: seconds}, {speed: n}, {frequency: n}, {graphic: {...}}, {opacity: 0-255},
 ## {switch: id, value}, {sound: {...}}, {walk_anim|step_anim|direction_fix|through|hide: bool}.
-func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool:
+func run_route(route: Dictionary, token: RPGCancelToken) -> bool:
 	var steps: Array = route.get("steps", [])
 	var repeat: bool = route.get("repeat", false)
 	var skip: bool = route.get("skip_if_blocked", false)
@@ -350,7 +356,7 @@ func run_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool
 				return false
 			if _forced_token != null and token != _forced_token and not await _pause_for_forced(token):
 				return false
-			if not await _route_step(s, skip, token, timeout):
+			if not await _route_step(s, skip, token):
 				return false
 		if not repeat:
 			break
@@ -372,11 +378,11 @@ func _pause_for_forced(token: RPGCancelToken) -> bool:
 ## Set Move Route: like run_route, but marks the route as forced, so the character's own
 ## movement pauses while it plays. The route runs on the token given (its own, never the
 ## calling event's), so cancel_forced_route() ends just the route, not the event.
-func run_forced_route(route: Dictionary, token: RPGCancelToken, timeout := 8.0) -> bool:
+func run_forced_route(route: Dictionary, token: RPGCancelToken) -> bool:
 	if _forced_token != null and not _forced_token.is_cancelled:
 		_forced_token.cancel("replaced by a new move route")
 	_forced_token = token
-	var ok: bool = await run_route(route, token, timeout)
+	var ok: bool = await run_route(route, token)
 	if _forced_token == token:
 		_forced_token = null
 	return ok
@@ -403,24 +409,30 @@ func cancel_route(why := "map unloaded") -> void:
 		_route_token.cancel(why)
 
 
-func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken, timeout: float) -> bool:
+func _route_step(s: Dictionary, skip: bool, token: RPGCancelToken) -> bool:
 	var rpg: Node = map.rpg
 	if s.has("step"):
 		var dir := _route_dir(str(s.step))
 		if dir == Vector2i.ZERO:
 			return true
 		var waited := 0.0
+		var warned := false
 		while not step(dir):
 			if skip:
 				return true
+			_blocked_step_at = cell
 			await get_tree().process_frame
 			waited += get_process_delta_time()
 			if token.is_cancelled:
+				_blocked_step_at = Vector2i(-1, -1)
 				return false
-			if waited > timeout:
+			# No timeout drops the step: with 'Skip if cannot move' off it is retried until it
+			# succeeds (RPG Maker), however long that takes. A long block only logs a warning.
+			if not warned and waited > _blocked_warn_after:
+				warned = true
 				if OS.is_debug_build():
-					push_warning("RPG: move route of '%s' blocked for %.1f s at %s." % [name, waited, cell])
-				return true
+					push_warning("RPG: move route of '%s' blocked at %s for %.1f s (waiting for the way to clear)." % [name, cell, waited])
+		_blocked_step_at = Vector2i(-1, -1)
 		while moving:
 			await get_tree().process_frame
 		return true

@@ -301,7 +301,9 @@ func debug_info() -> Dictionary:
 		var w := it.where()
 		running = "%s at %s" % [w.get("command", ""), w.get("path", "")]
 	var blocked := ""
-	if move_type != "fixed" and not moving and map.movement != null:
+	if _blocked_step_at != Vector2i(-1, -1):
+		blocked = "waiting for blocked step at (%d, %d)" % [_blocked_step_at.x, _blocked_step_at.y]
+	if blocked == "" and move_type != "fixed" and not moving and map.movement != null:
 		var free := false
 		for d in [Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP]:
 			if map.movement.can_move(self, cell, d):

@@ -914,6 +914,44 @@ func test_page_change_keeps_a_custom_route_index_when_the_route_is_the_same() ->
 	assert_eq(c2, Vector2i(5, 4), "the custom route continued from its index")
 
 
+# --- Blocked route steps (#70) ------------------------------------------------------------------
+
+## Teleports the door event somewhere (it makes a handy wall for staging).
+func _place_door(at: Vector2i) -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [at.x, at.y]},
+	])
+	assert_true(r.is_ok(), str(r))
+
+
+func test_a_blocked_route_step_waits_until_the_way_clears() -> void:
+	# With 'Skip if cannot move' off, a blocked step is retried until it succeeds, however long
+	# that takes — never dropped by a timeout (the warning threshold is shortened for the test).
+	var ev := await _place_chest(Vector2i(11, 8))
+	ev._blocked_warn_after = 0.5
+	await _place_door(Vector2i(11, 9))
+	env.rpg.run_commands([{"type": "move_route", "target": "chest", "steps": [{"step": "down"}], "wait": false}])
+	await env.tree.create_timer(0.8).timeout
+	assert_true(ev.is_route_forced(), "past the old timeout, the route is still waiting on the step")
+	assert_eq(ev.cell, Vector2i(11, 8), "the blocked step has not moved the chest")
+	assert_true(str(ev.debug_info()["movement_blocked"]).begins_with("waiting for blocked step at"),
+		"the debug inspector shows where it waits")
+	await _place_door(Vector2i(12, 7))
+	await frames(90)
+	assert_false(ev.is_route_forced(), "the route finished once the way cleared")
+	assert_eq(ev.cell, Vector2i(11, 9), "the blocked step completed after the wait")
+
+
+func test_a_blocked_route_step_with_skip_still_skips() -> void:
+	await _place_door(Vector2i(11, 9))
+	var ev := await _place_chest(Vector2i(11, 8))
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "steps": [{"step": "down"}, {"step": "down"}], "skip_if_blocked": true, "wait": true},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(11, 8), "both blocked steps were skipped, not waited on")
+
+
 # --- Call Event (#60) ---------------------------------------------------------------------------
 
 func test_call_event_runs_a_page_with_the_called_event_as_this() -> void:
