@@ -530,6 +530,62 @@ func test_set_switch_target_modes() -> void:
 	await frames(1)
 
 
+## Control Variable target modes in the editor (#54), and the operand picker's new game data
+## kinds and pointer source.
+func test_set_variable_target_modes_and_operand_kinds() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var vc: RPGCommand = registry.get_command("set_variable")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(vc.desc.fields, data, registry)
+	form.command = vc
+	form.set_value({"type": "set_variable", "id": "counter", "operation": "set", "value": 0})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable [counter] = 0")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "counter")
+	form.set_field("to", "ticks")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variables [counter] .. [ticks] = 0")
+	form.set_field("target", "pointer")
+	form.set_field("variable", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable V[hero_name] = 0")
+	# The operand editor keeps the new shapes through a set, and reads the same values back
+	# out of its controls (the mode buttons' item_selected is what editing fires).
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._operand_editor({"key": "v"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Number":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the operand mode picker is there")
+	for shape in [
+		{"pointer": "hero_name"},
+		{"game_data": {"kind": "map_id"}},
+		{"game_data": {"kind": "party_member", "index": 1}},
+		{"game_data": {"kind": "last_used", "field": "item"}},
+		{"game_data": {"kind": "counter", "field": "saves"}},
+		{"game_data": {"kind": "enemy", "index": 0, "field": "level"}},
+		{"game_data": {"kind": "actor", "id": "hero", "field": "equip", "slot": "weapon"}},
+	]:
+		ed.set.call(shape)
+		assert_eq(ed.get.call(), shape, "operand keeps %s" % str(shape))
+	ed.set.call({"game_data": {"kind": "character", "target": "player", "field": "direction"}})
+	mode_btn.item_selected.emit(3)
+	assert_eq(ed.get.call(), {"game_data": {"kind": "character", "target": "player", "field": "direction"}}, "the controls read back")
+	ed.set.call({"pointer": "hero_name"})
+	mode_btn.item_selected.emit(4)
+	assert_eq(ed.get.call(), {"pointer": "hero_name"}, "the pointer mode reads back")
+	host.queue_free()
+	await frames(1)
+
+
 # --------------------------------------------------------------------------------------------
 # Quick event dialog and command list editor
 # --------------------------------------------------------------------------------------------

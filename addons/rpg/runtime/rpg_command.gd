@@ -106,12 +106,14 @@ static func _visible(f: Dictionary, args: Dictionary) -> bool:
 static func describe_operand(v: Variant) -> String:
 	if v is Dictionary and v.has("variable"):
 		return "[%s]" % v.variable
+	if v is Dictionary and v.has("pointer"):
+		return "V[%s]" % v.pointer
 	if v is Dictionary and v.get("random") is Array and v.random.size() == 2:
 		return "random %s..%s" % [v.random[0], v.random[1]]
 	if v is Dictionary and v.get("game_data") is Dictionary:
 		var g: Dictionary = v.game_data
 		var bits := PackedStringArray([str(g.get("kind", ""))])
-		for k in ["id", "field"]:
+		for k in ["id", "target", "field", "slot", "index"]:
 			if str(g.get(k, "")) != "":
 				bits.append(str(g[k]))
 		return "(%s)" % " ".join(bits)

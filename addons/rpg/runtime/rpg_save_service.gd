@@ -128,6 +128,8 @@ func save(slot: int) -> RPGResult:
 	var why := save_blocked_reason()
 	if why != "":
 		return RPGResult.error(why)
+	# Counted before the file is built, so the save itself carries the new number (#54).
+	rpg.state.bump("saves")
 	var data := build_save()
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var err := RPGJson.save_file(slot_path(slot), data)

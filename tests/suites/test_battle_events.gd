@@ -287,6 +287,39 @@ func test_change_party_battle_temp_member_leaves_afterwards() -> void:
 	assert_eq(env.rpg.state.party, ["hero"], "but leaves the party when the battle ends")
 
 
+# --- play counters, last used and enemy stats (#54) ---------------------------------------------------
+
+
+## A finished battle counts itself and its outcome, records what was used and at what, and a
+## battle event reads an enemy's stats through the enemy game data kind.
+func test_battle_counts_records_use_and_reads_enemy_stats() -> void:
+	_sample_env()
+	_add_troop(_later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1, "every": 1}], "span": "every_check", "commands": [
+		{"type": "set_variable", "id": "talks", "operation": "set", "value": {"game_data": {"kind": "enemy", "index": 0, "field": "level"}}}]}]))
+	var done := {"r": null}
+	var run_cmd := func(): done.r = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_escape": false, "can_lose": true}])
+	run_cmd.call()
+	assert_true(await _wait_until(func(): return env.rpg.ui.scene_stack.size() > 0), "the battle scene opens")
+	var scene: Node = env.rpg.ui.scene_stack[-1]
+	scene.auto = true
+	env.rpg.ui.auto_advance = true
+	var end := Time.get_ticks_msec() + 20000
+	while done.r == null and Time.get_ticks_msec() < end:
+		if is_instance_valid(scene) and scene.phase != "":
+			if scene.phase == "party":
+				scene.cmd_list.select(0)
+			scene.handle_action("ok")
+		await tree.process_frame
+	assert_true(done.r != null and done.r.is_ok(), "the battle command finishes: %s" % [done.r])
+	var st: RPGGameState = env.rpg.state
+	assert_eq(st.game_data({"kind": "counter", "field": "battles"}), 1, "the battle counts")
+	assert_eq(st.game_data({"kind": "counter", "field": "victories"}), 1, "the win counts")
+	assert_eq(st.game_data({"kind": "counter", "field": "escapes"}), 0, "nothing escaped")
+	assert_eq(str(st.game_data({"kind": "last_used", "field": "actor"})), "hero", "the hero acted")
+	assert_eq(st.game_data({"kind": "last_used", "field": "target_enemy"}), 0, "the first enemy was the target")
+	assert_true(int(env.rpg.get_variable("talks")) >= 1, "a battle event read the enemy's level")
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 

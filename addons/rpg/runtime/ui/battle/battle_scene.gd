@@ -212,6 +212,7 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 		rpg.state.change_items(id, "decrease", 1)
 		return true
 	core.item_refund = func(id: String) -> void: rpg.state.change_items(id, "increase", 1)
+	core.note_use = func(what: Dictionary): rpg.state.note_use(what)
 	core.switch_reader = func(id: String) -> bool: return rpg.state.get_switch(id)
 	core.condition_reader = extension_condition
 	if rpg.has_method("battle_hook"):

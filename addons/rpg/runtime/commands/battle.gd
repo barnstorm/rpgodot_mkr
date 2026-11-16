@@ -95,6 +95,15 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		return RPGResult.cancelled() if ctx.is_cancelled() else RPGResult.ok()
 	var res: Variant = r.value
 	var outcome := str(res.get("outcome", "win")) if res is Dictionary else str(res)
+	# Play counters (#54): every finished battle counts once, plus its outcome's counter.
+	ctx.state.bump("battles")
+	match outcome:
+		"win":
+			ctx.state.bump("victories")
+		"escape":
+			ctx.state.bump("escapes")
+		"lose":
+			ctx.state.bump("defeats")
 	if str(args.get("result", "")) != "":
 		ctx.state.set_variable(str(args.result), outcome)
 	match outcome:

@@ -102,6 +102,9 @@ var switch_reader: Callable
 var condition_reader: Callable
 ## Called with (item_id) to give back an item whose action a hook cancelled or replaced.
 var item_refund: Callable
+## Called with a {item/skill/actor/target_actor/target_enemy} dictionary after each action that
+## was used, so the game state can record the "last used" game data (#54). Unset: not recorded.
+var note_use: Callable
 ## The object battle hooks are reported to (has battle_hook(name, args, mode) -> {args, cancel}),
 ## normally the RPG service. Null: no hooks.
 var hooks: Object = null
@@ -552,6 +555,21 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 		"item":
 			res.lines.append(rules.term("use_item", [b.name, u.name]))
 	res.targets = targets
+	if note_use.is_valid():
+		# The "last used" game data (#54): what was used and who it was aimed at.
+		var used := {}
+		if kind == "item":
+			used["item"] = str(u.id)
+		elif kind == "skill":
+			used["skill"] = str(u.id)
+		if b.is_actor():
+			used["actor"] = str(b.id)
+		for t in targets:
+			if t.is_actor() and not used.has("target_actor"):
+				used["target_actor"] = str(t.id)
+			elif t.is_enemy() and not used.has("target_enemy"):
+				used["target_enemy"] = int(t.index)
+		note_use.call(used)
 	var repeats := 1
 	if kind == "attack":
 		repeats += int(rules.trait_sum(b, "extra_attack"))

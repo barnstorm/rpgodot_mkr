@@ -274,6 +274,110 @@ func test_set_switch_range_and_pointer_targets() -> void:
 	assert_true(env.rpg.get_switch("door_unlocked"))
 
 
+## Control Variable target modes (#54): a range follows the project's variable order, a pointer
+## reads the target id from a variable, and the pointer source reads a value through a variable.
+func test_variable_target_modes_and_pointer_source() -> void:
+	for v in ["puzzle_a", "puzzle_b", "puzzle_c"]:
+		env.rpg.data.variables[v] = {"id": v, "label": v.capitalize(), "type": "int"}
+		env.rpg.data.state_defs["variables"].append({"id": v, "label": v.capitalize(), "type": "int"})
+	env.rpg.state.set_variable("puzzle_a", 1)
+	env.rpg.state.set_variable("puzzle_b", 2)
+	env.rpg.state.set_variable("puzzle_c", 3)
+	# The operation applies to each target's own current value.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "puzzle_a", "to": "puzzle_c", "operation": "add", "value": 5}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("puzzle_a")), 6, "1 + 5")
+	assert_eq(int(env.rpg.get_variable("puzzle_b")), 7, "2 + 5")
+	assert_eq(int(env.rpg.get_variable("puzzle_c")), 8, "3 + 5")
+	assert_eq(int(env.rpg.get_variable("counter")), 0, "variables outside the range keep their value")
+	# A reversed range touches nothing.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "target": "range", "from": "puzzle_c", "to": "puzzle_a", "operation": "set", "value": 0}])
+	assert_false(r.is_ok(), "a reversed range is an error")
+	assert_eq(int(env.rpg.get_variable("puzzle_c")), 8)
+	# The pointer target writes whichever variable the pointer variable names.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "puzzle_b"},
+		{"type": "set_variable", "target": "pointer", "variable": "hero_name", "operation": "set", "value": 42}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("puzzle_b")), 42)
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": ""},
+		{"type": "set_variable", "target": "pointer", "variable": "hero_name", "operation": "set", "value": 1}])
+	assert_false(r.is_ok(), "a pointer with no variable id is an error")
+	assert_true(r.message.contains("holds no variable id"), r.message)
+	# The pointer source reads the value of the variable the pointer variable names.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "puzzle_c"},
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"pointer": "hero_name"}}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 8, "counter holds puzzle_c's value")
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": ""},
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"pointer": "hero_name"}}])
+	assert_false(r.is_ok(), "an empty pointer source is an error")
+	assert_true(r.message.contains("holds no variable id"), r.message)
+	# A single variable still works without a target field (existing projects).
+	r = await env.rpg.run_commands([{"type": "set_variable", "id": "counter", "operation": "set", "value": 7}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 7)
+
+
+## The #54 game data kinds: character position and facing, the map id, party slots, equips,
+## counters, last used, and the battle-only enemy read.
+func test_game_data_character_map_party_and_counters() -> void:
+	var st: RPGGameState = env.rpg.state
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "x"}}},
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "y"}}},
+		{"type": "set_variable", "id": "ratio", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "direction"}}},
+		{"type": "set_variable", "id": "scene_result", "operation": "set", "value": {"game_data": {"kind": "map_id"}}},
+	], {"kind": "api", "id": "gd2"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 12, "the player's map x")
+	assert_eq(int(env.rpg.get_variable("ticks")), 8, "the player's map y")
+	assert_eq(int(env.rpg.get_variable("ratio")), 8, "facing up reads RPG Maker's 8")
+	assert_eq(str(env.rpg.get_variable("scene_result")), "town", "the map id")
+	# Screen position is in pixels, and stable between reads.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "screen_x"}}}], {"kind": "api", "id": "gd2"})
+	assert_true(r.is_ok(), str(r))
+	assert_true(int(env.rpg.get_variable("counter")) >= 0, "screen x is a pixel number")
+	# An unknown character reads 0 and names the problem.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "counter", "operation": "set", "value": {"game_data": {"kind": "character", "target": "nobody", "field": "x"}}}], {"kind": "api", "id": "gd2"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 0)
+	assert_true(st.errors.back().contains("nobody"), st.errors.back())
+	# Party slots, counters and last used need no running context.
+	if not st.party.is_empty():
+		assert_eq(str(st.game_data({"kind": "party_member", "index": 0})), st.party[0], "slot 0's actor")
+	assert_eq(str(st.game_data({"kind": "party_member", "index": 99})), "", "a slot past the end reads empty")
+	st.bump("saves")
+	st.bump("saves")
+	assert_eq(st.game_data({"kind": "counter", "field": "saves"}), 2)
+	st.note_use({"item": "potion", "target_enemy": 1})
+	assert_eq(str(st.game_data({"kind": "last_used", "field": "item"})), "potion")
+	assert_eq(st.game_data({"kind": "last_used", "field": "target_enemy"}), 1)
+	assert_eq(str(st.game_data({"kind": "last_used", "field": "skill"})), "", "never used reads empty")
+	# The actor's equipped item per slot.
+	if not st.party.is_empty():
+		var hero: Variant = st.actor(str(st.party[0]))
+		if hero != null and "equips" in hero:
+			hero.equips["weapon"] = "stick"
+			assert_eq(str(st.game_data({"kind": "actor", "id": str(st.party[0]), "field": "equip", "slot": "weapon"})), "stick")
+	# Enemy stats are only readable during a battle.
+	assert_eq(st.game_data({"kind": "enemy", "index": 0, "field": "level"}), 0)
+	assert_true(st.errors.back().contains("battle"), st.errors.back())
+	# Counters and last used survive a save round trip.
+	var d := st.to_dict()
+	st.new_game()
+	st.from_dict(d)
+	assert_eq(st.game_data({"kind": "counter", "field": "saves"}), 2, "counters are saved")
+	assert_eq(str(st.game_data({"kind": "last_used", "field": "item"})), "potion", "last used is saved")
+
+
 func test_blocked_movement_is_deterministic() -> void:
 	var p: RPGPlayer = env.game.player
 	p.place(Vector2i(12, 8))
