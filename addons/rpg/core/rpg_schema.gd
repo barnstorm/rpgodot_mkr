@@ -51,6 +51,14 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"switch": {"$ref": "#/$defs/id"}, "value": {"type": "boolean"}, "sound": {"$ref": "#/$defs/sound"},
 			"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 			"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"}, "hide": {"type": "boolean"},
+			"slide": {"type": "string"},
+			"move_to": {"oneOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "string"}]},
+			"call": {"type": "object", "required": ["method"], "properties": {
+				"method": {"type": "string"}, "args": {"type": "array"},
+			}},
+			"speed_up": {"type": "boolean"}, "speed_down": {"type": "boolean"},
+			"frequency_up": {"type": "boolean"}, "frequency_down": {"type": "boolean"},
+			"opacity_up": {"type": "boolean"}, "opacity_down": {"type": "boolean"},
 		},
 	}
 	defs["route"] = {"oneOf": [

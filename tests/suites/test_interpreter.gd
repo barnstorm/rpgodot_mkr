@@ -1022,6 +1022,173 @@ func test_forbid_overlap_follows_the_active_page() -> void:
 	assert_true(ev.forbid_overlap, "the option applies again on the next page change")
 
 
+# --- Move route step kinds (#65) -----------------------------------------------------------------
+
+## Runs a move route on the chest and returns when it is done.
+func _route(steps: Array, extra := {}) -> RPGResult:
+	var cmd := {"type": "move_route", "target": "chest", "steps": steps}
+	cmd.merge(extra)
+	return await env.rpg.run_commands([cmd])
+
+
+## A tiny inline tileset: one source holding a floor tile (passage 15) and a wall tile (passage 0).
+## The fixture map has no tiles, so tests that need walls bring their own.
+func _floor_and_wall_tileset() -> Array:
+	var tex := PlaceholderTexture2D.new()
+	tex.size = Vector2(32, 16)
+	var src := TileSetAtlasSource.new()
+	src.texture = tex
+	src.texture_region_size = Vector2i(16, 16)
+	src.create_tile(Vector2i(0, 0))
+	src.create_tile(Vector2i(1, 0))
+	var ts := TileSet.new()
+	ts.tile_size = Vector2i(16, 16)
+	ts.add_custom_data_layer()
+	ts.set_custom_data_layer_name(0, "passage")
+	ts.set_custom_data_layer_type(0, TYPE_INT)
+	var sid := ts.add_source(src)
+	src.get_tile_data(Vector2i(0, 0), 0).set_custom_data("passage", 15)
+	src.get_tile_data(Vector2i(1, 0), 0).set_custom_data("passage", 0)
+	return [ts, sid]
+
+
+## Paints a wall tile on the cell so routes and pathfinding have something to go around. The whole
+## map gets a floor of passage-15 tiles first: with no layer used every empty cell reads 15, but
+## once any cell holds a tile, empty cells read 0 — one painted wall would wall off the map.
+func _wall_at(at: Vector2i) -> void:
+	var map: Node = env.game.map
+	if map.tile_layers.is_empty():
+		# The fixture map has no Layer1..Layer4 (an empty list reads as fully open) — add one.
+		var fresh := TileMapLayer.new()
+		fresh.name = "Layer1"
+		map.add_child(fresh)
+		map.tile_layers.append(fresh)
+		map.movement.invalidate()
+	var ts_sid: Array = _floor_and_wall_tileset()
+	var layer: TileMapLayer = map.tile_layers[0]
+	layer.tile_set = ts_sid[0]
+	var s: Vector2i = map.size
+	for y in s.y:
+		for x in s.x:
+			layer.set_cell(Vector2i(x, y), ts_sid[1], Vector2i(0, 0))
+	layer.set_cell(at, ts_sid[1], Vector2i(1, 0))
+	map.movement.invalidate()
+	assert_eq(map.movement.passage(at), 0, "the cell is a wall now")
+
+
+func test_slide_steps_keep_moving_until_blocked() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = await _place_chest(Vector2i(6, 3))
+	var r: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell.x, 6, "a slide stays in its column")
+	assert_true(ev.cell.y > 4, "it slid more than one cell")
+	assert_false(mm.can_move(ev, ev.cell, Vector2i.DOWN), "it stopped because the way is blocked")
+
+
+func test_slide_steps_stop_at_a_blocking_event() -> void:
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [6, 10]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	var ev: RPGEvent = await _place_chest(Vector2i(6, 3))
+	var r: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(6, 9), "the door stops the slide one cell short")
+	var r2: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(ev.cell, Vector2i(6, 9), "a slide that starts blocked moves nowhere")
+
+
+func test_speed_and_frequency_steps_move_one_notch_and_clamp() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.speed = 6
+	assert_true((await _route([{"speed_up": true}])).is_ok())
+	assert_eq(ev.speed, 6, "speed 6 cannot go higher")
+	ev.speed = 1
+	assert_true((await _route([{"speed_down": true}])).is_ok())
+	assert_eq(ev.speed, 1, "speed 1 cannot go lower")
+	ev.speed = 4
+	assert_true((await _route([{"speed_up": true}, {"speed_down": true}, {"speed_up": true}])).is_ok())
+	assert_eq(ev.speed, 5, "up, down and up from 4")
+	ev.frequency = 5
+	assert_true((await _route([{"frequency_up": true}])).is_ok())
+	assert_eq(ev.frequency, 5, "frequency 5 cannot go higher")
+	ev.frequency = 1
+	assert_true((await _route([{"frequency_down": true}])).is_ok())
+	assert_eq(ev.frequency, 1, "frequency 1 cannot go lower")
+	ev.frequency = 3
+	assert_true((await _route([{"frequency_down": true}])).is_ok())
+	assert_eq(ev.frequency, 2, "frequency steps are one notch")
+
+
+func test_opacity_steps_move_32_and_clamp() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.opacity = 200
+	assert_true((await _route([{"opacity_up": true}])).is_ok())
+	assert_eq(ev.opacity, 232, "up is 32 more")
+	assert_true((await _route([{"opacity_up": true}])).is_ok())
+	assert_eq(ev.opacity, 255, "clamped at fully visible")
+	ev.opacity = 10
+	assert_true((await _route([{"opacity_down": true}])).is_ok())
+	assert_eq(ev.opacity, 0, "clamped at fully transparent")
+
+
+func test_move_to_walks_the_shortest_way_and_goes_around_walls() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	_wall_at(Vector2i(4, 5))
+	var way: Array = mm.path(Vector2i(4, 3), Vector2i(4, 7))
+	assert_eq(way.size(), 6, "the wall makes the way two cells longer")
+	assert_false(way.has(Vector2i(4, 5)), "the way avoids the wall")
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": [4, 7]}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(4, 7), "the chest walked around the wall to the goal")
+	assert_eq(mm.path(Vector2i(4, 3), Vector2i(99, 99)), [], "a goal off the map has no way")
+
+
+func test_move_to_walks_to_an_events_cell_and_stops_beside_the_player() -> void:
+	# The door starts at (12, 7), inside the shortest-way region to the player — move it out so the
+	# player is the only character the way has to stop for.
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [2, 12]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	await _place_plate(Vector2i(6, 6))
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": "floor_plate"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(6, 6), "a below-priority event's cell can be entered")
+	var r2: RPGResult = await _route([{"move_to": [4, 3]}, {"move_to": "player"}])
+	assert_true(r2.is_ok(), str(r2))
+	assert_ne(ev.cell, env.game.player.cell, "it does not step onto the player")
+	assert_eq(absi(ev.cell.x - env.game.player.cell.x) + absi(ev.cell.y - env.game.player.cell.y), 1,
+		"it arrives beside the player, as close as the way allows")
+
+
+func test_move_to_gives_up_with_skip_when_the_way_is_held() -> void:
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [4, 5]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": [4, 7]}], {"skip_if_blocked": true})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(4, 4), "the door blocks the way and the skip rule gives up")
+
+
+func test_call_step_runs_a_method_and_skips_a_missing_one() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.facing = "down"
+	var r: RPGResult = await _route([
+		{"call": {"method": "turn", "args": ["left"]}},
+		{"call": {"method": "no_such_method"}},
+		{"turn": "right"},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.facing, "right", "the call step turned left, the missing method was skipped, the route went on")
+
+
 # --- Forced move routes (#71) -------------------------------------------------------------------
 
 func test_a_forced_route_takes_over_a_random_walk() -> void:
