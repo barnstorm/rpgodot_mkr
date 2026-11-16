@@ -20,6 +20,7 @@
 		{"id": "sp", "label": "SP", "max_stat": "msp"}
 	],
 	"life_resource": "hp",
+	"magic_resource": "sp",
 	"death_state": "knockout",
 	"levels": {"min": 1, "max": 99},
 	"growth": "class",

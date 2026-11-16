@@ -24,6 +24,7 @@
 			"regen": "a.max_tp * a.trg / 100"}
 	],
 	"life_resource": "hp",
+	"magic_resource": "mp",
 	"death_state": "knockout",
 	"levels": {"min": 1, "max": 99},
 	"growth": "class",

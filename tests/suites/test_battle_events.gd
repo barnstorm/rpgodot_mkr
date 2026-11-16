@@ -287,6 +287,25 @@ func test_change_party_battle_temp_member_leaves_afterwards() -> void:
 	assert_eq(env.rpg.state.party, ["hero"], "but leaves the party when the battle ends")
 
 
+# --- troop page conditions, the RM2003 set (#11) --------------------------------------------------------
+
+
+## A variable condition on a troop page: the scene hands it to rpg.state.check_condition, and the
+## page runs mid-battle once the variable is set.
+func test_troop_page_variable_condition_runs_mid_battle() -> void:
+	_sample_env()
+	var page := {"id": "hook", "conditions": [{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}],
+		"span": "once_per_battle", "commands": [{"type": "set_switch", "id": "rain", "value": "on"}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_false(env.rpg.get_switch("rain"), "the page has not run yet")
+	await env.rpg.run_commands([{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 3}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
+
+
 # --- Conditional Branch battle checks (#50) ------------------------------------------------------------
 
 
@@ -348,6 +367,36 @@ func test_validator_checks_enemy_targets() -> void:
 	assert_eq(w.size(), 1, str(p2))
 	assert_eq(w[0].severity, "warning")
 	assert_eq(w[0].path, "events/0/pages/0/commands/0/then/0/target")
+
+
+func test_validator_checks_troop_condition_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var good := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_mp", "index": 0, "op": "<=", "percent": 25},
+		{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2},
+		{"kind": "actor_mp", "id": "hero", "op": "<=", "percent": 50},
+		{"kind": "actor_turns", "id": "hero", "op": "==", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "skill", "skill": "fire"},
+		{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3},
+	], "commands": []}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [good]}, reg, "troops.json")
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_turns", "index": 0, "op": "~=", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "dance"},
+		{"kind": "command_used", "id": "mira", "command": "skill"},
+		{"kind": "actor_mp", "id": "", "op": "<=", "percent": 50},
+	], "commands": []}])
+	var msgs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json").map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown battle command 'dance'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("needs the skill")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+	# Battle-only kinds do not work on map pages.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"conditions": [{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2}], "commands": []}]}
+	var p3 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_true(p3.any(func(p): return str(p.message).contains("Unknown condition kind 'enemy_turns'")), str(p3))
 
 
 func test_validator_battle_branch_kinds() -> void:

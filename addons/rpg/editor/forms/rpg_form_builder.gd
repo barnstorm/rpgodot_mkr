@@ -89,8 +89,18 @@ const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"
 const BATTLE_CONDITION_FIELDS := {
 	"turn": [{"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Turn"}, {"key": "every", "kind": "int", "default": 0, "min": 0, "label": "Then every (0 = once)"}],
 	"enemy_hp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"enemy_mp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "MP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"enemy_turns": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Turns"}, {"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Count"}],
 	"actor_hp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"actor_mp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "MP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"actor_turns": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Turns"}, {"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Count"}],
+	"command_used": [
+		{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true},
+		{"key": "command", "kind": "choice", "options": ["attack", "skill", "item", "guard", "escape"], "option_labels": ["Attack", "Skill", "Item", "Guard", "Escape"], "default": "attack", "label": "Used"},
+		{"key": "skill", "kind": "ref", "ref": "skill", "label": "Skill", "show_if": {"key": "command", "equals": "skill"}},
+	],
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
+	"variable": [{"key": "id", "kind": "ref", "ref": "variable", "label": "Variable", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}],
 	"turn_end": [],
 	"actor_can_act": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}],
 	"enemy_can_act": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
