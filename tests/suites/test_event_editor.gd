@@ -406,9 +406,12 @@ func test_e23_condition_kinds_and_choices_summary() -> void:
 	var branch := RPGConditionEditor.new(data, registry, false, {}, true)
 	var page := RPGConditionEditor.new(data, registry, false, {})
 	var battle := RPGConditionEditor.new(data, registry, true, {})
-	for k in ["actor", "facing", "button", "item"]:
+	for k in ["actor", "facing", "button", "started_by", "formula", "can_pass", "item"]:
 		assert_has(branch.kinds(), k)
 	assert_false(page.kinds().has("facing"), "facing is a Conditional Branch condition")
+	assert_false(page.kinds().has("started_by"), "started by is a Conditional Branch condition")
+	assert_false(page.kinds().has("can_pass"), "can pass is a Conditional Branch condition")
+	assert_has(page.kinds(), "formula", "a formula works on pages too")
 	for k in ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]:
 		assert_has(battle.kinds(), k, "battle page condition kind")
 	assert_false(page.kinds().has("enemy_hp"), "enemy HP is a battle page condition")
@@ -425,8 +428,21 @@ func test_e23_condition_kinds_and_choices_summary() -> void:
 		"pages": [RPGQuickEvents.complete_page({"commands": [
 			{"type": "if", "condition": {"kind": "facing", "target": "player", "facing": "up"}, "then": [], "else": []},
 			{"type": "if", "condition": {"kind": "actor", "id": "hero", "check": "state", "state": "poison"}, "then": [], "else": []},
-			{"type": "if", "condition": {"kind": "button", "button": "ok"}, "then": [], "else": []}]})]}]}, registry, "test")
+			{"type": "if", "condition": {"kind": "actor", "id": "hero", "check": "level", "op": ">=", "value": 5}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "actor", "id": "hero", "check": "hp", "op": "<=", "value": 50, "percent": true}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "button", "button": "ok"}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "button", "button": "ok", "mode": "pressed"}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "started_by", "by": "call"}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "formula", "text": "v.chests >= 3"}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "can_pass", "target": "player", "facing": "left", "distance": 3}, "then": [], "else": []}]})]}]}, registry, "test")
 	assert_eq(probs, [], "the new kinds validate")
+	var bad := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [{"id": "c", "name": "", "position": [0, 0], "notes": "",
+		"pages": [RPGQuickEvents.complete_page({"commands": [
+			{"type": "if", "condition": {"kind": "formula", "text": "v.chests >="}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "can_pass", "facing": "down", "distance": 99}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "started_by", "by": "telepathy"}, "then": [], "else": []},
+			{"type": "if", "condition": {"kind": "actor", "id": "hero", "check": "hp", "op": "≈", "value": 50}, "then": [], "else": []}]})]}]}, registry, "test")
+	assert_eq(bad.size(), 4, "broken new-kind conditions are reported: %s" % str(bad))
 
 
 func test_e23_escape_closes_with_a_text_field_focused() -> void:
@@ -479,4 +495,85 @@ func test_runtime_actor_facing_and_button_conditions() -> void:
 	assert_true(st.check_condition({"kind": "button", "button": "ok"}))
 	Input.action_release("rpg_ok")
 	assert_false(st.check_condition({"kind": "button", "button": "ok"}))
+	await env.destroy()
+
+
+func test_runtime_actor_level_hp_sp_and_formula_conditions() -> void:
+	var env = Env.create(tree, TMP + "/rpg")   # the door fixture plus the sample database (actors)
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8), "up")
+	assert_true(r.is_ok(), str(r))
+	var st: RPGGameState = env.rpg.state
+	var b: Variant = st.actor("hero")
+	b.level = 5   # first: level fixes the resource max the percent checks divide by
+	var mx := 9999
+	if env.rpg.rules != null and env.rpg.rules.has_method("max_resource"):
+		mx = int(env.rpg.rules.max_resource(b, "hp"))
+	b.set_resource("hp", int(mx * 0.5))
+	b.set_resource("sp", 7)
+	assert_true(st.check_condition({"kind": "actor", "id": "hero", "check": "level", "op": ">=", "value": 1}), "level >= 1")
+	assert_true(st.check_condition({"kind": "actor", "id": "hero", "check": "level", "op": "==", "value": 5}), "level == 5")
+	assert_false(st.check_condition({"kind": "actor", "id": "hero", "check": "level", "op": ">=", "value": 6}), "level >= 6")
+	assert_true(st.check_condition({"kind": "actor", "id": "hero", "check": "hp", "op": "==", "value": int(mx * 0.5)}), "hp == %d" % int(mx * 0.5))
+	assert_true(st.check_condition({"kind": "actor", "id": "hero", "check": "hp", "op": "==", "value": 50, "percent": true}), "hp == 50%% of %d" % mx)
+	assert_false(st.check_condition({"kind": "actor", "id": "hero", "check": "hp", "op": ">", "value": 50, "percent": true}), "hp > 50%%")
+	assert_true(st.check_condition({"kind": "actor", "id": "hero", "check": "sp", "op": "==", "value": 7}), "sp == 7")
+	# Formula: variables, arithmetic and truthiness (0 and false fail, anything else passes).
+	r = await env.rpg.run_commands([{"type": "set_variable", "id": "counter", "value": 3}])
+	assert_true(r.is_ok(), str(r))
+	assert_true(st.check_condition({"kind": "formula", "text": "v.counter >= 3"}))
+	assert_true(st.check_condition({"kind": "formula", "text": "v.counter * 2 == 6"}))
+	assert_false(st.check_condition({"kind": "formula", "text": "v.counter < 3"}))
+	assert_false(st.check_condition({"kind": "formula", "text": "0"}))
+	assert_true(st.check_condition({"kind": "formula", "text": "1"}))
+	var errs := st.errors.size()
+	assert_false(st.check_condition({"kind": "formula", "text": "v.counter >="}))
+	assert_true(st.errors.size() > errs, "a broken formula condition reports an error")
+	await env.destroy()
+
+
+func test_runtime_started_by_can_pass_and_button_modes() -> void:
+	var env = Env.create(tree, TMP + "/rpg")
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8), "up")
+	assert_true(r.is_ok(), str(r))
+	var st: RPGGameState = env.rpg.state
+	# Started by: the door's own context reads its action-button trigger.
+	var door: Node = env.rpg.current_map().get_event("town_house_door")
+	var interp := RPGInterpreter.new(env.rpg, {"kind": "test"}, door)
+	assert_true(st.check_condition({"kind": "started_by", "by": "action_button"}, "town", "town_house_door", interp.ctx))
+	assert_false(st.check_condition({"kind": "started_by", "by": "autorun"}, "town", "town_house_door", interp.ctx))
+	# Inside a called page only "call" holds; the caller's own run (an API run, no event) is "call" false.
+	var chest: Node = env.rpg.current_map().get_event("chest")
+	var page_no: int = chest.data["pages"].size() + 1
+	chest.data["pages"].append({"conditions": [], "commands": [
+		{"type": "if", "condition": {"kind": "started_by", "by": "call"},
+			"then": [{"type": "set_variable", "id": "counter", "value": 1}], "else": [{"type": "set_variable", "id": "counter", "value": 2}]},
+		{"type": "if", "condition": {"kind": "started_by", "by": "action_button"},
+			"then": [{"type": "set_variable", "id": "ratio", "value": 1}], "else": [{"type": "set_variable", "id": "ratio", "value": 2}]},
+	]})
+	r = await env.rpg.run_commands([
+		{"type": "if", "condition": {"kind": "started_by", "by": "call"},
+			"then": [{"type": "set_variable", "id": "ticks", "value": 1}], "else": [{"type": "set_variable", "id": "ticks", "value": 2}]},
+		{"type": "call_event", "target": "id", "id": "chest", "page": page_no},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("ticks")), 2, "the API run was not started by Call Event")
+	assert_eq(int(env.rpg.get_variable("counter")), 1, "the called page was started by Call Event")
+	assert_eq(int(env.rpg.get_variable("ratio")), 2, "and not by the action button")
+	# Can pass: the open town map (20 cells wide), with the door staged as a blocker two cells west.
+	r = await env.rpg.run_commands([{"type": "set_event_location", "event": "town_house_door", "mode": "position", "position": [10, 8]}])
+	assert_true(r.is_ok(), str(r))
+	assert_true(st.check_condition({"kind": "can_pass", "target": "player", "facing": "left", "distance": 1}, "", "", interp.ctx))
+	assert_false(st.check_condition({"kind": "can_pass", "target": "player", "facing": "left", "distance": 3}, "", "", interp.ctx))
+	assert_true(st.check_condition({"kind": "can_pass", "target": "player", "facing": "right", "distance": 7}, "", "", interp.ctx), "east is open to the map edge")
+	assert_false(st.check_condition({"kind": "can_pass", "target": "player", "facing": "right", "distance": 8}, "", "", interp.ctx), "but not past it")
+	# Button modes: held stays true, pressed only on the press frame.
+	Input.action_press("rpg_ok")
+	assert_true(st.check_condition({"kind": "button", "button": "ok", "mode": "held"}))
+	assert_true(st.check_condition({"kind": "button", "button": "ok", "mode": "pressed"}), "the press frame counts as just pressed")
+	assert_true(st.check_condition({"kind": "button", "button": "ok", "mode": "repeated"}))
+	await frames(2)
+	assert_true(st.check_condition({"kind": "button", "button": "ok", "mode": "held"}), "still held")
+	assert_false(st.check_condition({"kind": "button", "button": "ok", "mode": "pressed"}), "but no longer just pressed")
+	Input.action_release("rpg_ok")
+	assert_false(st.check_condition({"kind": "button", "button": "ok", "mode": "held"}))
 	await env.destroy()

@@ -22,11 +22,15 @@ const VAR_TYPES := ["int", "float", "bool", "string"]
 const OPS := ["==", "=", "!=", "≠", "<", "<=", "≤", ">", ">=", "≥"]
 const EQ_OPS := ["==", "=", "!=", "≠"]
 const FACINGS := ["down", "left", "right", "up", "keep"]
-const CONDITION_KINDS := ["switch", "variable", "self_switch", "self_variable", "item", "actor", "gold", "vehicle", "facing", "button", "all", "any", "not"]
-## Actor condition checks ({kind: "actor", check}); the target sits under the check's own key.
-const ACTOR_CHECKS := ["in_party", "name", "class", "skill", "weapon", "armor", "state"]
-## Button condition names (input actions rpg_<name>).
+const CONDITION_KINDS := ["switch", "variable", "self_switch", "self_variable", "item", "actor", "gold", "vehicle", "facing", "button", "started_by", "formula", "can_pass", "all", "any", "not"]
+## Actor condition checks ({kind: "actor", check}); the target sits under the check's own key
+## (for level/hp/sp it is the compared `value`).
+const ACTOR_CHECKS := ["in_party", "name", "class", "skill", "weapon", "armor", "state", "level", "hp", "sp"]
+## Button condition names (input actions rpg_<name>), and how the button is tested.
 const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right"]
+const BUTTON_MODES := ["held", "pressed", "repeated"]
+## Started by condition values (what launched the page that is running).
+const STARTED_BY := ["action_button", "player_touch", "event_touch", "autorun", "parallel", "call"]
 ## Vehicle condition ids ("none" / "" = on foot).
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
@@ -472,14 +476,37 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 			var check := str(c.get("check", "in_party"))
 			if not ACTOR_CHECKS.has(check):
 				out.append(problem("error", file, rec, "condition", path + "/check", "Unknown actor check '%s'." % check, "Use one of: %s." % ", ".join(PackedStringArray(ACTOR_CHECKS))))
+			elif check in ["level", "hp", "sp"]:
+				var aop := str(c.get("op", ">="))
+				if not OPS.has(aop):
+					out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % aop, "Use ==, !=, <, <=, > or >=."))
+				_operand_structure(c.get("value", 0), file, rec, path + "/value", out)
 			elif check != "in_party" and str(c.get(check, "")) == "":
 				out.append(problem("error", file, rec, "condition", path + "/" + check, "This actor condition has no %s to check." % check, "Pick one in the condition."))
-		"facing":
+		"facing", "can_pass":
 			if not FACINGS.slice(0, 4).has(str(c.get("facing", ""))):
 				out.append(problem("error", file, rec, "condition", path + "/facing", "Unknown facing '%s'." % c.get("facing", ""), "Use down, left, right or up."))
+			if kind == "can_pass":
+				var dist := int(c.get("distance", 1))
+				if dist < 1 or dist > 20:
+					out.append(problem("error", file, rec, "condition", path + "/distance", "Cells must be between 1 and 20 (got %d)." % dist, ""))
 		"button":
 			if not CONDITION_BUTTONS.has(str(c.get("button", ""))):
 				out.append(problem("error", file, rec, "condition", path + "/button", "Unknown button '%s'." % c.get("button", ""), "Use one of: %s." % ", ".join(PackedStringArray(CONDITION_BUTTONS))))
+			var bmode := str(c.get("mode", "held"))
+			if not BUTTON_MODES.has(bmode):
+				out.append(problem("error", file, rec, "condition", path + "/mode", "Unknown button mode '%s'." % bmode, "Use held, pressed or repeated."))
+		"started_by":
+			if not STARTED_BY.has(str(c.get("by", ""))):
+				out.append(problem("error", file, rec, "condition", path + "/by", "Unknown starter '%s'." % c.get("by", ""), "Use one of: %s." % ", ".join(PackedStringArray(STARTED_BY))))
+		"formula":
+			var text := str(c.get("text", ""))
+			if text.strip_edges() == "":
+				out.append(problem("error", file, rec, "condition", path + "/text", "This formula condition is empty.", "Write a formula, e.g. v.chests >= 3."))
+			else:
+				var why := RPGFormula.check(text)
+				if why != "":
+					out.append(problem("error", file, rec, "condition", path + "/text", "The formula does not compile: %s." % why, ""))
 		"vehicle":
 			var vid := str(c.get("id", c.get("vehicle", "")))
 			if not VEHICLE_IDS.has(vid):

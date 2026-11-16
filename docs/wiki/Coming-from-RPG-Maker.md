@@ -48,6 +48,9 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Control Variables: Game Data / Random | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats) or **Random** |
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
+| Conditional Branch: the actor's HP / MP / level | Condition kind **Actor**: level, HP or SP (SP is MP), as a value or a percentage of the max, with any comparison |
+| Conditional Branch: Script (VX Ace/MV/MZ) | Condition kind **Formula**: the kit's formula language, e.g. `v.treasures >= 3` (no Ruby/JavaScript) |
+| Conditional Branch: what started the event / collision checks | **Started by** (action button, a touch, autorun, parallel, Call Event) and **Can pass** (a character can step N cells a direction), branch-only kinds |
 | Troops: Autoname | **Autoname** on the Enemy groups tab |
 | Actor Description, Status screen | Actor **Description**; on the Status screen, OK shows it |
 | Class parameter curves | Classes: each stat is **Per level** or **Curve** (level 1 / level 99 values and a shape), with a graph |

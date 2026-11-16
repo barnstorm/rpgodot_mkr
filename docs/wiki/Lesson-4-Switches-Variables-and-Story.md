@@ -47,7 +47,8 @@ Page conditions can be:
 | Self switch | one of this event's self switches is ON (or OFF) — or another event's, on any map |
 | Self variable | one of this event's self variables compares with a value — or another event's, on any map |
 | Item / weapon / armour held | the party has at least N of it |
-| Actor | an actor is in the party |
+| Actor | an actor is in the party — or a check on them: name, class, a skill learned, equipment, a state, their level, HP or SP (a value or a percentage of their max) |
+| Formula | a formula (the [formula language](Rule-Systems.md), with the project's variables as `v.name`) is true or non-zero |
 
 Plugins can add more: the quest journal adds *Quest*, lighting adds *Time of day*. **There is no limit** to the number of conditions on a page; all must be true.
 
@@ -97,7 +98,7 @@ Page 2   (condition: farmer_quest_started is ON)
     ◆ Text: Farmer: Any luck with those apples?
 ```
 
-**Conditional Branch** (category *flow*) checks one condition and runs *Then* or *Else*. It has every page condition above, plus some only branches have: *Gold*, *Vehicle*, *Character facing* and *Button held down*.
+**Conditional Branch** (category *flow*) checks one condition and runs *Then* or *Else*. It has every page condition above, plus *Gold* and *Vehicle*, plus some only a branch can check (they need the running event): *Character facing*, *Button* (held, just pressed, or repeating), *Started by* (the action button, a touch, autorun, parallel, or Call Event) and *Can pass* (a character can step N cells in a direction).
 
 Add page 3 with the condition `farmer_quest_done is ON` and the line "Thanks again!". Because page 3 is the last page that is true, it wins once the quest is done.
 

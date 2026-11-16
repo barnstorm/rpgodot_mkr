@@ -3,8 +3,8 @@ class_name RPGConditionEditor
 extends VBoxContainer
 ## One condition: a kind dropdown plus that kind's fields (built with RPGFormBuilder).
 ## Same shape on pages and in `if` commands: {kind, ...}. Compound kinds (all/any/not) and
-## unknown kinds are edited as JSON so nothing is lost. Character facing and Button held are
-## offered only in Conditional Branch (`branch`), as in RPG Maker.
+## unknown kinds are edited as JSON so nothing is lost. Character facing, Button, Started by
+## and Can pass are offered only in Conditional Branch (`branch`), as in RPG Maker.
 
 signal value_changed(value: Variant)
 signal pick_location_requested(callback: Callable, current: Variant)
@@ -16,6 +16,7 @@ const KIND_LABELS := {
 	"command_used": "Command used", "turn_end": "Turn end", "actor_can_act": "Actor can act",
 	"enemy_can_act": "Enemy can act", "enemy_is_target": "Enemy is the target",
 	"vehicle": "Vehicle", "facing": "Character facing", "button": "Button held down",
+	"started_by": "Started by", "formula": "Formula", "can_pass": "Can pass",
 }
 
 var data: RPGProjectData
