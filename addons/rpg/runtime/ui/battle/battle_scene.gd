@@ -214,10 +214,14 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 	core.item_refund = func(id: String) -> void: rpg.state.change_items(id, "increase", 1)
 	core.note_use = func(what: Dictionary): rpg.state.note_use(what)
 	core.switch_reader = func(id: String) -> bool: return rpg.state.get_switch(id)
+	core.switch_setter = func(id: String, value: bool) -> void: rpg.state.set_switch(id, value)
 	core.condition_reader = extension_condition
 	if rpg.has_method("battle_hook"):
 		core.hooks = rpg
 	core.checkpoint.connect(func(kind: String): _pending_checkpoints.append(kind))
+	# Transform: the member's sprite is rebuilt where the old one stood (deferred — the core
+	# emits mid-action, while this scene is still showing the old one).
+	core.enemy_transformed.connect(func(old_b, new_b): _rebuild_enemy_sprite.call_deferred(old_b, new_b))
 	_resolve_style()
 	core.battle_system = battle_system
 	core.atb_mode = atb_mode
@@ -401,46 +405,73 @@ func _make_backdrop(bg_name: String) -> void:
 
 func _make_enemies() -> void:
 	for e in core.enemies:
-		var rec := record("enemies", e.id)
-		var tex: Texture2D = rpg.ui.load_texture("battler", str(rec.get("battler", ""))) if rpg.ui and str(rec.get("battler", "")) != "" else null
-		if tex != null and RPGAssets.sheet_profile("battler", str(rec.get("battler", "")), str(rpg.data.profile.get("profile", "rm2k"))) == "rm2k":
-			# 2000/2003 Monster graphics copied in by hand (not through the importer) have no alpha:
-			# their background is palette colour 0, which is the top-left pixel. Key it.
-			tex = RPGCharset.prepared_texture(tex)
-		if tex == null:
-			tex = _silhouette(e.id)
-		var spr := TextureRect.new()
-		spr.texture = tex
-		# Battlers are painted for their maker's screen (2k 320, VX 544, MV 816 px wide); the stage
-		# is laid out at W, so VX/MV battlers shrink to keep their on-screen proportions.
-		var k := battler_scale(str(rec.get("battler", "")))
-		spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		spr.stretch_mode = TextureRect.STRETCH_SCALE
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if k >= 1.0 else CanvasItem.TEXTURE_FILTER_LINEAR
-		# A battler taller than the stage is shrunk to fit it (keeping its aspect).
-		var max_h := float(FIELD_H - 6)
-		if tex.get_height() * k > max_h:
-			k = max_h / tex.get_height()
-			spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		spr.size = (tex.get_size() * k).round()
-		var c: Vector2 = e.screen_position
-		if c == Vector2.ZERO:
-			c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
-		c = condition_enemy_position(c, e.index, core.advantage)
-		if battle_view == "side":
-			c = side_enemy_position(c)
-		# Centred on its troop position, but never below the stage floor or above its top edge.
-		var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
-		spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
-		if condition_mirrored(e.index, core.advantage):
-			spr.flip_h = true
-		spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		spr.visible = not e.hidden
-		var hue := float(rec.get("battler_hue", 0))
-		if hue != 0.0:
-			spr.self_modulate = Color.from_hsv(fposmod(hue / 360.0, 1.0), 0.35, 1.0)
+		var spr := _build_enemy_sprite(e)
 		field.add_child(spr)
 		enemy_nodes[e] = spr
+
+
+## One enemy's sprite, laid out at its troop position (not yet added to the field).
+func _build_enemy_sprite(e: RPGBattler) -> TextureRect:
+	var rec := record("enemies", e.id)
+	var tex: Texture2D = rpg.ui.load_texture("battler", str(rec.get("battler", ""))) if rpg.ui and str(rec.get("battler", "")) != "" else null
+	if tex != null and RPGAssets.sheet_profile("battler", str(rec.get("battler", "")), str(rpg.data.profile.get("profile", "rm2k"))) == "rm2k":
+		# 2000/2003 Monster graphics copied in by hand (not through the importer) have no alpha:
+		# their background is palette colour 0, which is the top-left pixel. Key it.
+		tex = RPGCharset.prepared_texture(tex)
+	if tex == null:
+		tex = _silhouette(e.id)
+	var spr := TextureRect.new()
+	spr.texture = tex
+	# Battlers are painted for their maker's screen (2k 320, VX 544, MV 816 px wide); the stage
+	# is laid out at W, so VX/MV battlers shrink to keep their on-screen proportions.
+	var k := battler_scale(str(rec.get("battler", "")))
+	spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	spr.stretch_mode = TextureRect.STRETCH_SCALE
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if k >= 1.0 else CanvasItem.TEXTURE_FILTER_LINEAR
+	# A battler taller than the stage is shrunk to fit it (keeping its aspect).
+	var max_h := float(FIELD_H - 6)
+	if tex.get_height() * k > max_h:
+		k = max_h / tex.get_height()
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	spr.size = (tex.get_size() * k).round()
+	var c: Vector2 = e.screen_position
+	if c == Vector2.ZERO:
+		c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
+	c = condition_enemy_position(c, e.index, core.advantage)
+	if battle_view == "side":
+		c = side_enemy_position(c)
+	# Centred on its troop position, but never below the stage floor or above its top edge.
+	var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
+	spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
+	if condition_mirrored(e.index, core.advantage):
+		spr.flip_h = true
+	spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spr.visible = not e.hidden
+	var hue := float(rec.get("battler_hue", 0))
+	if hue != 0.0:
+		spr.self_modulate = Color.from_hsv(fposmod(hue / 360.0, 1.0), 0.35, 1.0)
+	return spr
+
+
+## Transform: the member's old sprite goes, the new record's takes its place in the field (same
+## draw order, same troop position, so it happens where the monster stood).
+func _rebuild_enemy_sprite(old_b: RPGBattler, new_b: RPGBattler) -> void:
+	if core == null or not is_inside_tree():
+		return
+	var old_spr: TextureRect = enemy_nodes.get(old_b)
+	var at := old_spr.get_index() if old_spr != null else -1
+	if old_spr != null:
+		enemy_nodes.erase(old_b)
+		old_spr.queue_free()
+	var spr := _build_enemy_sprite(new_b)
+	if at >= 0:
+		field.add_child(spr)
+		field.move_child(spr, at)
+	else:
+		field.add_child(spr)
+	enemy_nodes[new_b] = spr
+	_place_battler_nodes()
+	_refresh_status()
 
 
 ## Side view: a troop position (laid out for the front view across the whole 320 px stage) moved
@@ -1454,11 +1485,23 @@ func show_action(r: Dictionary) -> void:
 		if res.get("knocked_out", false) and t.is_enemy():
 			_collapse(t)
 		_refresh_status()
+	# Self-Destruct: the user goes with its blast.
+	if str(r.get("kind", "")) == "self_destruct" and user.is_enemy():
+		_collapse(user)
 	await _wait(0.2)
 	for i in range(1, lines.size()):
 		await say(lines[i], 0.5)
 	if side_actor and not r.get("escaped", false):
 		await _step(user, false)
+	# An enemy that ran (the 2003 basic action) fades out like Force Flee.
+	if user.is_enemy() and user.escaped and enemy_nodes.has(user):
+		var fs: TextureRect = enemy_nodes[user]
+		if auto or not is_inside_tree():
+			fs.visible = false
+		else:
+			var t := fs.create_tween()
+			t.tween_property(fs, "modulate:a", 0.0, 0.25)
+			t.tween_callback(func(): fs.visible = false)
 	_refresh_status()
 
 

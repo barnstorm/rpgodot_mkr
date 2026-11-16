@@ -42,6 +42,16 @@
 		"critical": true,
 		"scope": "one_enemy"
 	},
+	"self_destruct": {
+		"name": "Self-Destruct",
+		"formula": "a.hp",
+		"damage_type": "damage",
+		"hit": 100,
+		"hit_type": "certain",
+		"variance": 15,
+		"critical": false,
+		"scope": "all_enemies"
+	},
 	"hit_check": {
 		"physical": {"type": "percent", "steps": ["s.hit", "100 - 8 * b.agi / max(1, a.dex)"]},
 		"magical": {"type": "percent", "steps": ["s.hit"]}

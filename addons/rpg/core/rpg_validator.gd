@@ -889,9 +889,19 @@ static func _db_refs(t: String, d: Dictionary, ctx: Dictionary, registry: RPGCom
 				var acts: Variant = r.get("actions", [])
 				if acts is Array:
 					for j in acts.size():
-						if acts[j] is Dictionary and not ["attack", "guard", "wait", "escape"].has(str(acts[j].get("skill", ""))):
-							_add_ref(acc, ctx, "skill", acts[j], "skill", "%s/actions/%d/skill" % [base, j], "read", false, "actions")
-						var cond: Variant = acts[j].get("condition") if acts[j] is Dictionary else null
+						if not (acts[j] is Dictionary):
+							continue
+						var a: Dictionary = acts[j]
+						# The 2003 basic actions are not skills; transform names an enemy record.
+						var a_skill := str(a.get("skill", ""))
+						if a.has("skill") and not ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"].has(a_skill):
+							_add_ref(acc, ctx, "skill", a, "skill", "%s/actions/%d/skill" % [base, j], "read", false, "actions")
+						if a_skill == "transform" and a.has("enemy"):
+							_add_ref(acc, ctx, "enemy", a, "enemy", "%s/actions/%d/enemy" % [base, j], "read", false, "actions")
+						for skey in ["switch_on", "switch_off"]:
+							if a.has(skey):
+								_add_ref(acc, ctx, "switch", a, skey, "%s/actions/%d/%s" % [base, j, skey], "read", false, "actions")
+						var cond: Variant = a.get("condition")
 						if cond is Dictionary and str(cond.get("kind", "")) == "switch" and cond.has("id"):
 							_add_ref(acc, ctx, "switch", cond, "id", "%s/actions/%d/condition/id" % [base, j], "read", false, "actions")
 				var drops: Variant = r.get("drops", [])
