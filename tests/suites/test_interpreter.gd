@@ -130,6 +130,30 @@ func test_underfoot_touch_events_do_not_start_from_the_action_button() -> void:
 	assert_eq(env.rpg.get_variable("counter"), 1, "the plate's commands ran")
 
 
+# --- Failed steps re-fire touch events (#74) -------------------------------------------------------
+
+func test_bumping_into_a_touch_event_fires_it_again() -> void:
+	# A touch-triggered door answers every failed step into it while the player keeps pushing,
+	# as in RPG Maker. The once-per-cell rule is gone; the guard is the main-interpreter-busy
+	# rule: a bump while the run is going starts nothing.
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(6, 8))
+	p.force_turn("up")
+	var plate: RPGEvent = await _stage_plate(Vector2i(6, 7), "player_touch")
+	plate.data["pages"][0]["commands"].append({"type": "wait", "seconds": 0.4})
+	p._bump(Vector2i.UP)
+	await frames(2)
+	assert_eq(env.rpg.get_variable("counter"), 1, "the first failed step fires it")
+	p._bump(Vector2i.UP)
+	assert_eq(env.rpg.get_variable("counter"), 1, "a run in progress absorbs the next bump")
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 1, "the wait finished without a second run")
+	p._bump(Vector2i.UP)
+	assert_true(await env.settle())
+	await frames(2)
+	assert_eq(env.rpg.get_variable("counter"), 2, "bumping again once the run ended fires it again")
+
+
 func test_autorun_runs_until_it_stops_itself() -> void:
 	env.rpg.set_switch("autorun_on", true)
 	assert_true(await env.settle())
