@@ -884,6 +884,31 @@ func enemy_appear(member_index: int) -> Array:
 	return shown
 
 
+## Force Flee (event command): the party, every enemy, or enemy #`member_index` (-1: every
+## enemy) runs away. Enemies fade out, the order strip and status redraw, and the core ends the
+## battle when nothing is left to fight. Returns the battlers that fled.
+func enemy_flee(target: String, member_index := -1) -> Array:
+	if core == null:
+		return []
+	var fled: Array = core.force_flee(target, member_index)
+	for e in fled:
+		if not e.is_enemy():
+			continue
+		var s: TextureRect = enemy_nodes.get(e)
+		if s == null:
+			continue
+		if auto or not is_inside_tree():
+			s.visible = false
+		else:
+			var t := s.create_tween()
+			t.tween_property(s, "modulate:a", 0.0, 0.25)
+			t.tween_callback(func(): s.visible = false)
+	_place_battler_nodes()
+	_refresh_order_strip()
+	_refresh_status()
+	return fled
+
+
 func _collapse(b: RPGBattler) -> void:
 	if not enemy_nodes.has(b):
 		return
@@ -1323,6 +1348,8 @@ func refresh_after_event() -> void:
 	for e in core.enemies:
 		if e.is_dead() and enemy_nodes.has(e) and enemy_nodes[e].visible:
 			_collapse(e)
+		elif e.escaped and enemy_nodes.has(e) and enemy_nodes[e].visible:
+			enemy_nodes[e].visible = false
 	_refresh_status()
 
 
@@ -1656,6 +1683,15 @@ func _show_party_command() -> void:
 ## `keep_cursor`: coming back from a sub-list or a target (cancel), the cursor stays on the
 ## command the player had picked, as in RPG Maker; a new actor's turn starts on Attack.
 func _show_actor_command(keep_cursor := false) -> void:
+	# A battle event (Force Flee on the party, a mid-input knockout) can take the remaining
+	# inputters out of the fight while the menus are open: skip them, and finish input at once
+	# when nobody is left to ask.
+	while input_pos < inputs.size() and (not core.party[inputs[input_pos]].is_active() or not rules().can_act(core.party[inputs[input_pos]])):
+		core.party[inputs[input_pos]].action = {}
+		input_pos += 1
+	if input_pos >= inputs.size():
+		_input_done.emit("fight")
+		return
 	phase = "actor"
 	cmd_win.visible = true
 	select_win.visible = false

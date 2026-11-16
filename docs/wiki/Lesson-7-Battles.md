@@ -81,11 +81,13 @@ The party commands reach the other side too: **Change HP / SP**, **Change State*
 
 **End Battle** (also in *Scenes*) stops the fight at once: *Abort* ends it like an escape with no rewards (RPG Maker's Abort Battle), *Win* takes the victory (with or without rewards) and *Lose* takes the defeat. The Battle Processing command that started the fight continues down the matching branch.
 
+**Force Flee** (2003) makes someone run instead: *Enemy #* or *Every enemy* — a fled enemy leaves the battle, takes nothing from the fight and gives no rewards, and when the last one goes the battle is won — or *The party*, which ends the battle as an escape with no chance roll, even when the group says *Can escape* is off. Useful for a monster that bolts at low HP, or a story fight the party is meant to lose without a game over.
+
 **Change Party Member** works during a battle: an added actor joins the field at once (status row, side-view sprite and a turn gauge under ATB / CTB), a removed one leaves the fight, and victory EXP goes to the members present at the end. *Only for this battle* adds the actor for the fight and takes them out of the party again when it ends.
 
 For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.
 
-Enemy Appear only works in a battle: in battle events, or in a common event they call. On a map event it stops the event with an error, and the export checks warn about it.
+Enemy Appear and Force Flee only work in a battle: in battle events, or in a common event they call. On a map event they stop the event with an error, and the export checks warn about it.
 
 ## 6. Battle style
 

@@ -1333,6 +1333,34 @@ func appear(member_index: int) -> Array:
 	return out
 
 
+## Force Flee (RM2003): the whole party runs — the battle ends as an escape, no chance roll —
+## or enemies run: every enemy, or the member with index `member_index` (0-based; -1: every
+## enemy). A fled enemy leaves the turn order and targeting and gives no rewards; when no enemy
+## is left the battle ends as a win. Returns the battlers that fled, in order.
+func force_flee(target: String, member_index := -1) -> Array:
+	var out := []
+	if target == "party":
+		for b in active_party():
+			b.escaped = true
+			b.action = {}
+			out.append(b)
+		if not out.is_empty():
+			_result = "escape"
+			phase = "over"
+		return out
+	for e in enemies:
+		if member_index >= 0 and e.index != member_index:
+			continue
+		if e.is_active():
+			e.escaped = true
+			e.action = {}
+			out.append(e)
+	if not out.is_empty():
+		_prune_ready()
+		battle_over()
+	return out
+
+
 ## A reinforcement beyond the troop's members: a new enemy built from `enemy_id` at `position`
 ## (pixels on the 320x240 battle screen). The battle facade calls this (rpg.battle.add_enemy).
 ## Returns the battler, or null when the enemy record does not exist.
@@ -1425,7 +1453,8 @@ func rewards() -> Dictionary:
 	var gold := 0
 	var items := []
 	for e in enemies:
-		if not e.is_dead() or e.hidden:
+		# Fled enemies (Force Flee) leave without rewards, like ones never revealed.
+		if not e.is_dead() or e.hidden or e.escaped:
 			continue
 		var rec := rules.battler_record(e)
 		exp_total += int(rec.get("exp", 0))

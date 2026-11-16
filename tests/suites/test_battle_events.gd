@@ -1,7 +1,7 @@
 extends "res://tests/rpg_test_case.gd"
 ## Battle events through the public battle API: the rpg.battle facade (#29), End Battle (#4),
-## enemy targets of Change HP/SP, Change State and Recover All (#2), and Change Party Member
-## during a battle (#5).
+## enemy targets of Change HP/SP, Change State and Recover All (#2), Change Party Member
+## during a battle (#5), and Force Flee (#40).
 
 const Env := preload("res://tests/rpg_test_env.gd")
 
@@ -398,6 +398,89 @@ func test_battle_troop_from_variable_and_encounter_roll() -> void:
 	assert_true(r4.r != null and r4.r.is_error() and str(r4.r.message).contains("no encounter group"), "a map without groups here is a named error: %s" % [r4.r])
 
 
+# --- Force Flee (#40) ---------------------------------------------------------------------------------
+
+
+## One enemy runs: it leaves the field and the rewards, and the fight goes on until the rest
+## falls — the fled one gives nothing.
+func test_force_flee_one_enemy_leaves_without_rewards() -> void:
+	_sample_env()
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var e1: RPGBattler = scene.core.enemies[0]
+	var e2: RPGBattler = scene.core.enemies[1]
+	var r: RPGResult = await env.rpg.run_commands([{"type": "force_flee", "target": "enemy", "enemy_index": 1}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "the command ran: %s" % [r])
+	assert_true(e1.escaped, "the first slime ran")
+	assert_false(e1.is_active(), "it is out of the fight and the targeting")
+	assert_false(e2.escaped, "the second one stays")
+	assert_true(await _wait_until(func(): return not scene.enemy_nodes[e1].visible, 5.0), "its sprite fades out")
+	assert_eq(scene.core.battle_over(), "", "one enemy left: the battle goes on")
+	# The one left standing falls: victory, but only its EXP and gold.
+	await env.rpg.run_commands([
+		{"type": "change_hp_mp", "target": "troop", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "win")
+	assert_eq(int(out.r.value.rewards.get("exp", 0)), 6, "the fled slime gives no EXP")
+	assert_eq(int(out.r.value.rewards.get("gold", 0)), 8, "and no gold")
+
+
+## Every enemy runs: the battle is won at once, with no rewards at all — RM2003's way of ending
+## a story fight where nobody has to die.
+func test_force_flee_every_enemy_wins_without_rewards() -> void:
+	_sample_env()
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	await env.rpg.run_commands([{"type": "force_flee", "target": "enemies"}], {"kind": "api", "id": "t"})
+	assert_true(scene.core.enemies.all(func(e): return e.escaped), "the whole group ran")
+	assert_eq(scene.core.active_enemies().size(), 0)
+	assert_eq(scene.core.battle_over(), "win", "with no enemies left, the battle is won")
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "win")
+	assert_eq(int(out.r.value.rewards.get("exp", 0)), 0, "no EXP for a fight everyone fled")
+	assert_eq(int(out.r.value.rewards.get("gold", 0)), 0, "no gold either")
+
+
+## The party runs: the battle ends as an escape with no chance roll — even when the group says
+## the party cannot escape on its own.
+func test_force_flee_the_party_ends_the_battle_as_escape() -> void:
+	_sample_env()
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	await env.rpg.run_commands([{"type": "force_flee", "target": "party"}], {"kind": "api", "id": "t"})
+	assert_true(scene.core.party.all(func(a): return a.escaped), "the party ran")
+	assert_eq(scene.core.battle_over(), "escape")
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+
+
+## Outside a battle it stops the event with a named error, and inside one the enemy number has
+## to exist in the group.
+func test_force_flee_errors() -> void:
+	_sample_env()
+	var r: RPGResult = await env.rpg.run_commands([{"type": "force_flee", "target": "enemies"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and str(r.message).contains("only works in a battle event"), "no battle: %s" % [r])
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var r2: RPGResult = await env.rpg.run_commands([{"type": "force_flee", "target": "enemy", "enemy_index": 5}], {"kind": "api", "id": "t"})
+	assert_true(r2.is_error() and str(r2.message).contains("no enemy #5"), "out of range: %s" % [r2])
+	assert_false(scene.core.enemies[0].escaped, "nobody ran")
+	var cmd: RPGCommand = env.rpg.registry.get_command("force_flee")
+	assert_eq(cmd.summary({"target": "enemy", "enemy_index": 2}), "Force Flee: enemy #2")
+	assert_eq(cmd.summary({"target": "enemies"}), "Force Flee: every enemy")
+	assert_eq(cmd.summary({"target": "party"}), "Force Flee: the party")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 
@@ -406,10 +489,13 @@ func test_validator_checks_enemy_targets() -> void:
 	var reg: RPGCommandRegistry = env.rpg.registry
 	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
 		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 2, "resource": "hp", "operation": "decrease", "amount": 5},
-		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 5, "resource": "hp", "operation": "decrease", "amount": 5}]}])
+		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 5, "resource": "hp", "operation": "decrease", "amount": 5},
+		{"type": "force_flee", "target": "enemy", "enemy_index": 5},
+		{"type": "force_flee", "target": "enemy", "enemy_index": 2}]}])
 	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
 	var msgs := probs.map(func(p): return "%s %s" % [p.severity, p.message])
 	assert_true(msgs.any(func(m): return m.begins_with("error") and m.contains("no enemy #5")), str(msgs))
+	assert_eq(msgs.filter(func(m): return m.contains("no enemy #5")).size(), 2, "both the party command and Force Flee check the number")
 	assert_false(msgs.any(func(m): return m.contains("#2")), "enemy #2 is a member of the group: %s" % str(msgs))
 	# On a map they can never work: flagged, also inside a branch.
 	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
@@ -420,6 +506,13 @@ func test_validator_checks_enemy_targets() -> void:
 	assert_eq(w.size(), 1, str(p2))
 	assert_eq(w[0].severity, "warning")
 	assert_eq(w[0].path, "events/0/pages/0/commands/0/then/0/target")
+	# Force Flee on a map gets the same battle-only warning.
+	var ev2 := {"id": "f", "position": [1, 1], "pages": [{"commands": [{"type": "force_flee", "target": "enemies"}]}]}
+	var p3 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev2]}, reg, "events.json")
+	var w3 := p3.filter(func(p): return str(p.message).contains("only works in a battle event"))
+	assert_eq(w3.size(), 1, str(p3))
+	assert_eq(w3[0].severity, "warning")
+	assert_eq(w3[0].path, "events/0/pages/0/commands/0")
 
 
 # --- Game Data: play counters and last used (#54) -----------------------------------------------------
