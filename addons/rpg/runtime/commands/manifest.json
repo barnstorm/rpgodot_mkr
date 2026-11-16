@@ -19,6 +19,7 @@
 		"break_loop.gd",
 		"wait.gd",
 		"call_common_event.gd",
+	"call_event.gd",
 		"exit_event.gd",
 		"comment.gd",
 		"erase_event.gd",

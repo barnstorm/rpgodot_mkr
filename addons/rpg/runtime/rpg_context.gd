@@ -88,6 +88,23 @@ func run_list(list: Variant, label := "") -> RPGResult:
 	return await interpreter.run_list(list, label)
 
 
+## Runs a map event's page inline as a subroutine (Call Event). While it runs, the called event is
+## "this event", so self switches, self variables and \E[] codes in the page belong to it; the
+## caller's event is restored afterwards.
+func run_event_page(ev: Node, commands: Array, label: String) -> RPGResult:
+	var prev_event := event
+	var prev_map := _event_map
+	var prev_id := _event_id
+	event = ev
+	_event_map = str(ev.map_id)
+	_event_id = str(ev.event_id)
+	var r: RPGResult = await interpreter.run_list(commands, label)
+	event = prev_event
+	_event_map = prev_map
+	_event_id = prev_id
+	return r
+
+
 func check_condition(cond: Dictionary) -> bool:
 	return state.check_condition(cond, map_id(), event_id(), self)
 

@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 80 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 81 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -21,6 +21,7 @@ There are 80 built-in commands. The *ID* is the command's `type` in the event JS
 | --- | --- | --- |
 | **Break Loop** | `break_loop` |  |
 | **Call Common Event** | `call_common_event` | Common event |
+| **Call Event** | `call_event` | Event (This event / Event ID / From a variable), Event ID, Holds the event's id, Page |
 | **Comment** | `comment` | Comment |
 | **Conditional Branch** | `if` | If, Then, Else |
 | **Erase Event** | `erase_event` |  |
