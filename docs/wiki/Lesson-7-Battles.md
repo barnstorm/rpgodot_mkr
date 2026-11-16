@@ -12,7 +12,7 @@ On the Database's **Enemies** tab, press **New**: `wolf`, *Wolf*.
 - **Level** and **Stats**: HP, SP and the rule system's stats.
 - **Experience** and **Gold** won.
 - **Item drops**: items with a chance %.
-- **Action patterns**: what it does. Each row is a skill (or *attack*, *guard*, *wait*, *escape*), a **Rating** (1–10: higher is chosen more often) and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %**, or a **Switch**.
+- **Action patterns**: what it does. Each row is a skill (or *attack*, *guard*, *wait*, *escape*), a **Rating** (1–10: higher is chosen more often) and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %** or **Own MP %**, *Has a state* (say, cure itself when poisoned), the **Party level** (average or highest), **Monsters present** (how many of its own side are still up — "flee when alone"), a **Variable**, or a **Switch**. MP compares the spell resource as a percent, like the MP battle-event condition.
 - **Traits**: element rates (weak to fire), state resistances and so on.
 
 ## 2. An enemy group

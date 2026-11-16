@@ -399,6 +399,33 @@ func test_validator_checks_troop_condition_kinds() -> void:
 	assert_true(p3.any(func(p): return str(p.message).contains("Unknown condition kind 'enemy_turns'")), str(p3))
 
 
+func test_validator_checks_enemy_action_conditions() -> void:
+	_sample_env()
+	var good := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "<=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state", "state": "poison"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_level", "pick": "highest", "op": ">=", "level": 5}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "enemies_alive", "op": "<=", "count": 1}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}},
+	]}
+	var probs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [good]})
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_loyalty"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "~=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "op": ">=", "against": "sometimes"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "switch"}},
+	]}
+	var msgs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [bad]}).map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown condition kind 'party_loyalty'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid state")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid variable")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+
+
 func test_validator_battle_branch_kinds() -> void:
 	_sample_env()
 	var reg: RPGCommandRegistry = env.rpg.registry
