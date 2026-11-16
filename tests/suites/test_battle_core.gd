@@ -219,6 +219,33 @@ func test_battle_page_eligibility() -> void:
 	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["per_turn", "every", "hurt_hero", "flag"], "turn 3")
 
 
+func test_turn_end_page_condition() -> void:
+	var troop := {"id": "t", "members": [{"enemy": "slime"}], "pages": [
+		{"id": "once", "conditions": [{"kind": "turn_end"}], "span": "once_per_battle"},
+		{"id": "each", "conditions": [{"kind": "turn_end"}, {"kind": "turn", "n": 1, "every": 1}], "span": "every_check"},
+		{"id": "per_turn", "conditions": [{"kind": "turn_end"}], "span": "once_per_turn"},
+		{"id": "flagged", "conditions": [{"kind": "turn_end"}, {"kind": "switch", "id": "boss_flag"}], "span": "every_check", "priority": 1},
+	]}
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], troop, rules, RPGRandom.new(1))
+	core.start()
+	var switches := {"boss_flag": false}
+	core.switch_reader = func(id): return switches.get(id, false)
+	core.begin_turn()
+	assert_false(core.page_conditions_met({"conditions": [{"kind": "turn_end"}]}, "start_of_turn"), "only true when a turn ends")
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), [], "not at the start of a turn")
+	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), [], "nor after an action")
+	switches.boss_flag = true
+	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["flagged", "once", "each", "per_turn"], "turn 1 ends; the switch AND holds")
+	core.end_turn()
+	core.begin_turn()
+	switches.boss_flag = false
+	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["each", "per_turn"], "turn 2 ends: once per battle is done, switch off")
+	core.end_turn()
+	core.begin_turn()
+	switches.boss_flag = true
+	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["flagged", "each", "per_turn"], "turn 3 ends: every check keeps firing")
+
+
 func test_sample_goblin_page() -> void:
 	var core := _core(["hero"], "goblin_boss", 5)
 	var fired := []

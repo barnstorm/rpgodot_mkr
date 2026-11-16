@@ -988,6 +988,7 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 ##   {kind: "enemy_hp", index, op, percent}
 ##   {kind: "actor_hp", id, op, percent}
 ##   {kind: "switch", id, value?: true}
+##   {kind: "turn_end"}                 only true at the end_of_turn checkpoint
 ## With `consume` (default) the returned pages are recorded as run, so their span is honoured.
 func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Array:
 	var pages: Array = troop.get("pages", [])
@@ -1004,7 +1005,7 @@ func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Arr
 			"once_per_turn":
 				if int(_page_runs.get(pid, -1)) == turn:
 					continue
-		if not page_conditions_met(p):
+		if not page_conditions_met(p, checkpoint_kind):
 			continue
 		found.append({"page": p, "i": i, "priority": int(p.get("priority", 0)), "id": pid})
 	found.sort_custom(func(x, y):
@@ -1023,17 +1024,17 @@ static func page_id(p: Dictionary, i: int) -> String:
 	return str(p.get("id", "page_%d" % i))
 
 
-func page_conditions_met(p: Dictionary) -> bool:
+func page_conditions_met(p: Dictionary, checkpoint_kind := "") -> bool:
 	var conds: Array = p.get("conditions", [])
 	if conds.is_empty():
 		return false
 	for c in conds:
-		if not _page_condition(c):
+		if not _page_condition(c, checkpoint_kind):
 			return false
 	return true
 
 
-func _page_condition(c: Dictionary) -> bool:
+func _page_condition(c: Dictionary, checkpoint_kind := "") -> bool:
 	match str(c.get("kind", "")):
 		"turn":
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
@@ -1050,6 +1051,8 @@ func _page_condition(c: Dictionary) -> bool:
 			return false
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
+		"turn_end":
+			return checkpoint_kind == "end_of_turn"
 	# Other kinds (extension kinds marked "battle": true): the battle scene asks the game state.
 	if condition_reader.is_valid():
 		return bool(condition_reader.call(c))
