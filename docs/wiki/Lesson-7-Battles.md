@@ -56,7 +56,7 @@ When a random battle starts there is a small chance of a **preemptive** attack (
 
 | Option | Meaning |
 | --- | --- |
-| Enemy group | Who you fight |
+| Enemy group source | Who you fight: *Enemy group* picks one here, *Enemy group named by a variable* fights the group whose ID the variable holds (checked when the battle starts), and *Random encounter* rolls this map's own encounter list, exactly as a step-triggered battle would |
 | Can escape | Allows *Escape*; adds an *If escaped* branch |
 | Continue when lost | Without it, losing is game over; with it, the *If lost* branch runs |
 | Battle scene | Empty for the default battle, or your own scene (see [For programmers](For-Programmers.md)) |

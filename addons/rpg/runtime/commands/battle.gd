@@ -9,7 +9,9 @@ static func descriptor() -> Dictionary:
 	return {
 		"type": "battle", "schema_version": 1, "category": "scenes", "label": "Battle Processing",
 		"fields": [
-			{"key": "troop", "kind": "ref", "ref": "troop", "label": "Enemy group", "required": true},
+			{"key": "troop_source", "kind": "choice", "options": ["troop", "variable", "encounter"], "option_labels": ["Enemy group", "Enemy group named by a variable", "Random encounter (this map)"], "default": "troop", "label": "Enemy group source"},
+			{"key": "troop", "kind": "ref", "ref": "troop", "label": "Enemy group", "required": true, "show_if": {"key": "troop_source", "equals": ["troop", null]}},
+			{"key": "variable", "kind": "ref", "ref": "variable", "label": "Variable", "required": true, "show_if": {"key": "troop_source", "equals": "variable"}},
 			{"key": "can_escape", "kind": "bool", "default": true, "label": "Can escape"},
 			{"key": "can_lose", "kind": "bool", "default": false, "label": "Continue when lost"},
 			{"key": "scene", "kind": "resource", "res": "scene", "default": "", "label": "Battle scene (blank = default)"},
@@ -24,6 +26,11 @@ static func descriptor() -> Dictionary:
 
 
 func summary(args: Dictionary) -> String:
+	match str(args.get("troop_source", "troop")):
+		"variable":
+			return "Battle: group V[%s]" % args.get("variable", "?")
+		"encounter":
+			return "Battle: random encounter"
 	return "Battle: %s" % args.get("troop", "?")
 
 
@@ -37,7 +44,23 @@ func child_lists(args: Dictionary) -> Array:
 
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
-	var troop := str(args.get("troop", ""))
+	# Where the group comes from (#38): picked here, named by a variable, or the same roll a
+	# random encounter on this map would make.
+	var troop := ""
+	match str(args.get("troop_source", "troop")):
+		"variable":
+			troop = str(ctx.state.get_variable(str(args.get("variable", ""))))
+			if troop == "":
+				return RPGResult.error("Battle: variable '%s' holds no enemy group." % args.get("variable", "?"))
+		"encounter":
+			if ctx.map == null or ctx.map.player == null:
+				return RPGResult.error("Battle: no map is running, so there is no encounter list to roll from.")
+			var g: Dictionary = RPGPlayer.pick_encounter_group(ctx.map.props, ctx.map.region_at(ctx.map.player.cell), ctx.rpg.rng)
+			if g.is_empty():
+				return RPGResult.error("Battle: map '%s' has no encounter group here." % ctx.map_id())
+			troop = str(g.troop)
+		_:
+			troop = str(args.get("troop", ""))
 	if not ctx.data.has_record("troops", troop):
 		return RPGResult.error("Battle: enemy group '%s' does not exist." % troop)
 	var scene := str(args.get("scene", ""))

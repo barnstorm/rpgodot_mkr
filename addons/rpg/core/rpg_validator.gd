@@ -547,6 +547,12 @@ static func command_structure(c: Dictionary, registry: RPGCommandRegistry, file 
 			"ref":
 				if typeof(c[k]) != TYPE_STRING:
 					out.append(problem("error", file, rec, k, "%s/%s" % [path, k], "'%s' must be an ID." % f.get("label", k), ""))
+	# A group named by a variable (#38) can only be checked when the battle starts, so say so
+	# instead of staying quiet about it.
+	if type == "battle" and str(c.get("troop_source", "troop")) == "variable":
+		out.append(problem("warning", file, rec, "variable", "%s/variable" % path,
+			"Battle Processing: the enemy group comes from variable '%s', so it is only checked when the battle starts." % c.get("variable", "?"),
+			"Put an enemy group's ID in the variable before the battle (Set Variable or a plugin)."))
 	return out
 
 
