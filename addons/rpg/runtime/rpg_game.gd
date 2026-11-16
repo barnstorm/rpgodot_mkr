@@ -291,6 +291,11 @@ func setup_test_party(party: Array) -> void:
 
 func _make_player() -> void:
 	if player != null:
+		# Take the old player off its map before freeing it, or the map keeps a freed node in its
+		# player slot still blocking its cell (a same-map transfer would land on it and fail).
+		if map != null:
+			map.remove_player()
+			map.player = null
 		for f in player.followers:
 			f.queue_free()
 		player.queue_free()
@@ -354,7 +359,9 @@ func refresh_party_graphics() -> void:
 
 ## Map transfer (spec "Transfers"). Returns RPGResult.
 ## `caller` is the interpreter running the Transfer Player command, if any (see cancel_owned).
-func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", fallback_distance := 0, caller: RPGInterpreter = null) -> RPGResult:
+## `rebuild` forces the full path — shut the map down and set it up again — even when the map id is
+## unchanged: a load needs the saved map state (pages, event positions) applied to a fresh map.
+func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", fallback_distance := 0, caller: RPGInterpreter = null, rebuild := false) -> RPGResult:
 	# 1. Check the destination.
 	if not rpg.data.maps.has(map_id):
 		return RPGResult.error("Transfer: map '%s' does not exist." % map_id)
@@ -377,13 +384,21 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	rpg.scheduler.lock_input("transfer")
 	var old_map := map
 	var final_facing := facing if facing != "keep" else (player.facing if player else "down")
-	# 2. Stop tasks owned by the current map.
+	# 2. A transfer to the map the player already stands on moves them without rebuilding it:
+	# erased events stay erased, running parallels keep running and event positions are kept (RPG
+	# Maker only sets a map up when the map id changes).
+	if not rebuild and old_map != null and old_map.map_id == map_id:
+		var moved: RPGResult = await _transfer_within_map(old_map, pos, final_facing, fade, fallback_distance)
+		transferring = false
+		rpg.scheduler.unlock_input("transfer")
+		return moved
+	# 3. Stop tasks owned by the current map.
 	if old_map != null:
 		await old_map.shutdown(caller)
-	# 3. Fade out.
+	# 4. Fade out.
 	if fade == "black" or fade == "white":
 		await rpg.screen.fade_out(0.25, Color.WHITE if fade == "white" else Color.BLACK)
-	# 4. Load the destination scene and events.
+	# 5. Load the destination scene and events.
 	var new_map: RPGMap
 	if packed != null:
 		var inst := packed.instantiate()
@@ -400,7 +415,7 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 		world.remove_child(old_map)
 	world.add_child(new_map)
 	new_map.start(rpg)
-	# 5. Place the player and followers (a transfer onto an occupied cell fails unless it opts in).
+	# 6. Place the player and followers (a transfer onto an occupied cell fails unless it opts in).
 	if player == null:
 		_make_player()
 	var target := pos
@@ -431,9 +446,9 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	_sync_windowskin()
 	if old_map != null:
 		old_map.queue_free()
-	# 6. Refresh pages.
+	# 7. Refresh pages.
 	new_map.refresh_pages()
-	# 7. Start the map's music.
+	# 8. Start the map's music.
 	var props2: Dictionary = new_map.props
 	var vehicle_music: bool = rpg.state.riding != "" and player.has_meta("map_bgm")
 	if props2.get("music") is Dictionary and str(props2.music.get("file", "")) == "" and not vehicle_music:
@@ -449,7 +464,7 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	if fade == "black" or fade == "white" or rpg.screen.is_faded:
 		if not rpg.screen.get_meta("hold_fade", false):
 			await rpg.screen.fade_in(0.25)
-	# 8. Give control back.
+	# 9. Give control back.
 	transferring = false
 	rpg.scheduler.unlock_input("transfer")
 	rpg.request_refresh()
@@ -458,6 +473,38 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 		request_autosave("transfer")
 	rpg.map_entered.emit(map_id)
 	_first_map_after_start = false
+	return RPGResult.ok()
+
+
+## The same-map path of transfer(): the fade still plays and the player (with a ridden vehicle) is
+## placed at the destination, but the live map keeps running — no shutdown, so erased events stay
+## erased and parallels are not restarted, and no map_left / map_entered, music change or map
+## name, since the map did not change.
+func _transfer_within_map(m: RPGMap, pos: Vector2i, final_facing: String, fade: String, fallback_distance: int) -> RPGResult:
+	# A transfer onto an occupied cell fails unless it opts in to the nearest free one.
+	var target := pos
+	if m.movement.is_occupied(pos, player):
+		if fallback_distance > 0:
+			target = m.movement.nearest_free(pos, player, fallback_distance)
+		else:
+			target = Vector2i(-1, -1)
+	if target == Vector2i(-1, -1):
+		return RPGResult.error("Transfer: cell %s on map '%s' is occupied." % [pos, m.map_id])
+	if fade == "black" or fade == "white":
+		await rpg.screen.fade_out(0.25, Color.WHITE if fade == "white" else Color.BLACK)
+	if player == null:
+		_make_player()
+	# Riding a vehicle through a transfer takes the vehicle along.
+	if rpg.state.riding != "":
+		load("res://addons/rpg/runtime/rpg_vehicles.gd").park(rpg.state, rpg.state.riding, m.map_id, target, final_facing)
+	m.add_player(player, target, final_facing)
+	_apply_leader_graphic()
+	if fade == "black" or fade == "white" or rpg.screen.is_faded:
+		if not rpg.screen.get_meta("hold_fade", false):
+			await rpg.screen.fade_in(0.25)
+	rpg.request_refresh()
+	if bool(rpg.data.system.get("auto_save", false)):
+		request_autosave("transfer")
 	return RPGResult.ok()
 
 
@@ -737,5 +784,5 @@ func load_from(save: Dictionary) -> RPGResult:
 	var old := map
 	# An NPC rebuilt at its start cell may now stand where the player saved: use the nearest
 	# free cell instead of failing half-way through a load.
-	var r: RPGResult = await transfer(str(m.get("id", "")), Vector2i(int(pos[0]), int(pos[1])), str(m.get("facing", "down")), "none", LOAD_FALLBACK_DISTANCE)
+	var r: RPGResult = await transfer(str(m.get("id", "")), Vector2i(int(pos[0]), int(pos[1])), str(m.get("facing", "down")), "none", LOAD_FALLBACK_DISTANCE, null, true)
 	return r
