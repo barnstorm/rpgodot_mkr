@@ -67,6 +67,13 @@ static func describe_condition(c: Variant) -> String:
 			var cp_t := str(c.get("target", "player"))
 			var cp_subject: String = {"player": "Player", "this": "This event", "": "This event"}.get(cp_t, "[%s]" % cp_t)
 			return "%s can step %s %d cell%s" % [cp_subject, c.get("facing", "down"), int(c.get("distance", 1)), "s" if int(c.get("distance", 1)) != 1 else ""]
+		"turn":
+			return ("Turn is %d, then every %d" % [int(c.get("n", 0)), int(c.get("every", 0))]) if int(c.get("every", 0)) > 0 else "Turn is %d" % int(c.get("n", 0))
+		"enemy_hp": return "Enemy #%d HP %s %d%%" % [int(c.get("index", 0)) + 1, c.get("op", "<="), int(c.get("percent", 100))]
+		"actor_hp": return "[%s] HP %s %d%%" % [c.get("id", ""), c.get("op", "<="), int(c.get("percent", 100))]
+		"actor_can_act": return "[%s] can act" % c.get("id", "")
+		"enemy_can_act": return "Enemy #%d can act" % (int(c.get("index", 0)) + 1)
+		"enemy_is_target": return "Enemy #%d is the target" % (int(c.get("index", 0)) + 1)
 		"all": return "All of %d conditions" % c.get("conditions", []).size()
 		"any": return "Any of %d conditions" % c.get("conditions", []).size()
 		"not": return "Not (%s)" % describe_condition(c.get("condition"))

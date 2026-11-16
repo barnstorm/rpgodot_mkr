@@ -405,12 +405,17 @@ func test_e23_move_route_character_is_a_dropdown() -> void:
 func test_e23_condition_kinds_and_choices_summary() -> void:
 	var branch := RPGConditionEditor.new(data, registry, false, {}, true)
 	var page := RPGConditionEditor.new(data, registry, false, {})
+	var battle := RPGConditionEditor.new(data, registry, true, {})
 	for k in ["actor", "facing", "button", "started_by", "formula", "can_pass", "item"]:
 		assert_has(branch.kinds(), k)
 	assert_false(page.kinds().has("facing"), "facing is a Conditional Branch condition")
 	assert_false(page.kinds().has("started_by"), "started by is a Conditional Branch condition")
 	assert_false(page.kinds().has("can_pass"), "can pass is a Conditional Branch condition")
 	assert_has(page.kinds(), "formula", "a formula works on pages too")
+	for k in ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]:
+		assert_has(battle.kinds(), k, "battle page condition kind")
+	assert_false(page.kinds().has("enemy_hp"), "enemy HP is a battle page condition")
+	battle.queue_free()
 	tree.root.add_child(branch)
 	branch.set_value({"kind": "actor", "id": "hero", "check": "skill", "skill": "heal", "class": "warrior"})
 	branch.form().set_field("skill", "fire")
