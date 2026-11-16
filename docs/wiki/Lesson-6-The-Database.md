@@ -61,7 +61,7 @@ A class decides how its actors grow. Each stat is either **Per level** (a number
 3. **Price**: 150. **Consumed when used**: on. **Target**: one ally. **Usable**: always (menu and battle).
 4. **Effects**: change the *recover* effect to a bigger amount.
 
-Effects can recover HP or SP, deal damage, add or remove a state, raise a stat permanently (*grow*), teach a skill, or run a **common event**.
+Effects can recover HP or SP, deal damage, add or remove a state, raise a stat permanently (*grow*), teach a skill, grant TP (*Gain TP*), make the target leave the battle (*Special Effect: Escape* — whoever it hits is out of the fight, alone), or run a **common event**.
 
 ## 4. A spell
 
