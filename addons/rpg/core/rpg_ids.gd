@@ -60,3 +60,7 @@ static func unique(base: String, taken: Variant, retired: Array = []) -> String:
 
 static func self_switch_key(map_id: String, event_id: String, letter: String) -> String:
 	return "%s/%s/%s" % [map_id, event_id, letter]
+
+
+static func self_variable_key(map_id: String, event_id: String, name: String) -> String:
+	return "%s/%s/%s" % [map_id, event_id, name]

@@ -1,7 +1,7 @@
 @tool
 extends RPGCommand
-## Runs a common event inside the caller's interpreter, then continues. Recursion is allowed up
-## to the interpreter's depth limit.
+## Runs a common event inside the caller's interpreter, then continues. Nested calls (Call Common
+## Event, Call Event) are capped at the interpreter's depth limit — 100, like MV.
 
 
 static func descriptor() -> Dictionary:
@@ -19,7 +19,12 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var ce: Dictionary = ctx.data.common_events.get(str(args.get("id", "")), {})
 	if ce.is_empty():
 		return RPGResult.error("Common event '%s' does not exist." % args.get("id", ""))
-	var r: RPGResult = await ctx.run_list(ce.get("commands", []), "common:" + str(args.id))
+	var label := "common:" + str(args.id)
+	var err := ctx.interpreter.push_call(label)
+	if err != "":
+		return RPGResult.error(err)
+	var r: RPGResult = await ctx.run_list(ce.get("commands", []), label)
+	ctx.interpreter.pop_call()
 	if r.flow == "exit":
 		# Exit Event inside a common event ends only the common event.
 		return RPGResult.ok()

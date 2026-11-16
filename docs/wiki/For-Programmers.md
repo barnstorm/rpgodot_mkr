@@ -18,7 +18,7 @@ Useful members:
 
 | Member | What it does |
 | --- | --- |
-| `get_switch`, `set_switch`, `get_variable`, `set_variable`, `get_self_switch`, `set_self_switch` | The game's memory |
+| `get_switch`, `set_switch`, `get_variable`, `set_variable`, `get_self_switch`, `set_self_switch`, `get_self_variable`, `set_self_variable` | The game's memory |
 | `run_common_event(id)`, `run_commands(commands)` | Run event commands from code (await them) |
 | `current_map()` | The map node being played |
 | `extension(id)`, `extension_enabled(id)`, `extension_setting(id, key)`, `option(id, key)` | Extensions and their settings |
@@ -28,7 +28,7 @@ Useful members:
 | `register_condition_kind(kind, check)` | A new condition kind |
 | `battle_hook(hook, args, mode)` | Run a battle hook (below) |
 
-Signals: `switch_changed`, `variable_changed`, `self_switch_changed`, `title_shown`, `new_game_started`, `game_loaded`, `map_entered`, `map_left`, `player_stepped(cell, region, terrain)`, `menu_opened`, `menu_closed`, `battle_started`, `battle_ended(outcome, result)`, `actor_levelled`, `quitting`, `option_changed`, `message_opened`, `message_char`, `message_closed`, `autosaved`, `error_reported`, and the battle signals `battle_scene_ready`, `turn_started`, `action_chosen`, `damage_calculated`, `state_changed`, `battler_defeated`, `victory`.
+Signals: `switch_changed`, `variable_changed`, `self_switch_changed`, `self_variable_changed`, `title_shown`, `new_game_started`, `game_loaded`, `map_entered`, `map_left`, `player_stepped(cell, region, terrain)`, `menu_opened`, `menu_closed`, `battle_started`, `battle_ended(outcome, result)`, `actor_levelled`, `quitting`, `option_changed`, `message_opened`, `message_char`, `message_closed`, `autosaved`, `error_reported`, and the battle signals `battle_scene_ready`, `turn_started`, `action_chosen`, `damage_calculated`, `state_changed`, `battler_defeated`, `victory`.
 
 ## Custom event commands
 

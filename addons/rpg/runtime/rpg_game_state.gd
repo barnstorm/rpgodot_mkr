@@ -8,6 +8,7 @@ extends RefCounted
 signal switch_changed(id: String, value: bool)
 signal variable_changed(id: String, value: Variant)
 signal self_switch_changed(key: String, value: bool)
+signal self_variable_changed(key: String, value: Variant)
 signal gold_changed(value: int)
 signal items_changed(kind: String, id: String, count: int)
 signal party_changed()
@@ -30,6 +31,9 @@ var rules: RefCounted = null
 var switches: Dictionary = {}
 var variables: Dictionary = {}
 var self_switches: Dictionary = {}
+## Per-event variables: "map/event/name" -> value. Untyped (they are not declared anywhere): the
+## first write fixes the type, later writes must fit it. Reads of a never-set one give 0.
+var self_variables: Dictionary = {}
 var gold := 0
 ## kind ("items", "weapons", "armors") -> {id: count}
 var inventory: Dictionary = {"items": {}, "weapons": {}, "armors": {}}
@@ -38,6 +42,9 @@ var party: Array[String] = []
 var actors: Dictionary = {}
 ## Persistent per-event changes: "map/event" -> {position, facing}
 var event_changes: Dictionary = {}
+## Runtime-spawned event copies (#66): map id -> Array of event data. The map rebuilds these on
+## top of the placed events, so a spawned copy survives map changes and saves like a placed one.
+var spawned_events: Dictionary = {}
 var followers_visible := true
 ## Vehicles: {boat|ship|airship: {map, position: [x, y], facing}} and the one being ridden ("").
 var vehicles: Dictionary = {}
@@ -70,10 +77,11 @@ var errors: Array[String] = []
 ## Common events reserved by items and skills used outside battle ("Common Event" effects,
 ## RPGRuleSystem.common_events), run by the map once the menu has closed. Not saved.
 var reserved_common_events: Array[String] = []
-## RPG Maker's play counters: saves / battles / victories / defeats / escapes (#54).
-var counters: Dictionary = {}
-## The last item / skill / actor / target_actor / target_enemy used (#54). Items, skills and
-## actors are ids; target_enemy is the troop index (0 = first member).
+## Play counters Game Data can read (RPG Maker's Other: saves, battles, wins, defeats, escapes).
+var counters: Dictionary = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
+## Game Data "last used": what the most recent battle action used and targeted
+## ({item, skill, actor, target_actor, target_enemy}). Battle actions fill it; the values stay
+## until the next battle changes them.
 var last_used: Dictionary = {}
 
 
@@ -95,12 +103,29 @@ func take_reserved_common_events() -> Array[String]:
 	return out
 
 
+## Increments a play counter (see `counters`) by one.
+func bump_counter(key: String) -> void:
+	if not counters.has(key):
+		_err("Unknown counter '%s'." % key)
+		return
+	counters[key] = int(counters[key]) + 1
+
+
+## Records Game Data "last used" values (see `last_used`); only the given keys change. Battle
+## actions call this with what they used and targeted.
+func record_last_used(values: Dictionary) -> void:
+	for k in values:
+		last_used[k] = values[k]
+
+
 ## Resets to a new game using definitions and the System record.
 func new_game() -> void:
 	switches.clear()
 	variables.clear()
 	self_switches.clear()
+	self_variables.clear()
 	event_changes.clear()
+	spawned_events.clear()
 	extension_sections.clear()
 	inventory = {"items": {}, "weapons": {}, "armors": {}}
 	party.clear()
@@ -108,6 +133,8 @@ func new_game() -> void:
 	play_time = 0.0
 	steps = 0
 	walk_steps = 0
+	last_used.clear()
+	counters = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
 	riding = ""
 	vehicles = RPGVehicles.initial_state(data) if data else {}
 	access = {"menu": true, "save": true, "encounters": true}
@@ -116,8 +143,6 @@ func new_game() -> void:
 	music_overrides = {}
 	map_overrides = {}
 	windowskin = ""
-	counters = {}
-	last_used = {}
 	if data:
 		for id in data.switches:
 			switches[id] = false
@@ -163,42 +188,6 @@ func set_switch(id: String, value: bool) -> bool:
 	switch_changed.emit(id, value)
 	changed.emit()
 	return true
-
-
-## Switch ids in the order state.json declares them: a Control Switch range target runs over
-## this order, as switch numbers do in RPG Maker (#55).
-func switch_order() -> Array:
-	var ids: Array = []
-	if data == null:
-		return ids
-	for s in data.state_defs.get("switches", []):
-		ids.append(str(s.get("id", "")))
-	return ids
-
-
-## Variable ids in the order state.json declares them: a Control Variable range target runs over
-## this order, as variable numbers do in RPG Maker (#54).
-func variable_order() -> Array:
-	var ids: Array = []
-	if data == null:
-		return ids
-	for v in data.state_defs.get("variables", []):
-		ids.append(str(v.get("id", "")))
-	return ids
-
-
-## Adds one to a play counter (saves / battles / victories / defeats / escapes) and tells the
-## pages a value they can read changed (#54).
-func bump(counter: String) -> void:
-	counters[counter] = int(counters.get(counter, 0)) + 1
-	changed.emit()
-
-
-## Records the last thing used (item / skill / actor / target_actor / target_enemy) for the
-## `last_used` game data kind (#54).
-func note_use(what: Dictionary) -> void:
-	for k in what:
-		last_used[k] = what[k]
 
 
 # --- variables --------------------------------------------------------------------
@@ -287,6 +276,70 @@ func set_self_switch(map_id: String, event_id: String, letter: String, value: bo
 	self_switch_changed.emit(key, value)
 	changed.emit()
 	return true
+
+
+# --- self variables -----------------------------------------------------------------
+
+## An event's variable. Never-set ones read as 0.
+func get_self_variable(map_id: String, event_id: String, name: String) -> Variant:
+	return self_variables.get(RPGIds.self_variable_key(map_id, event_id, name), 0)
+
+
+## The type a self variable currently holds ("int" while it has never been set).
+func self_variable_type(map_id: String, event_id: String, name: String) -> String:
+	var v: Variant = self_variables.get(RPGIds.self_variable_key(map_id, event_id, name), null)
+	match typeof(v):
+		TYPE_FLOAT: return "float"
+		TYPE_BOOL: return "bool"
+		TYPE_STRING: return "string"
+	return "int"
+
+
+## Sets an event's variable. The first write fixes its type; later writes are coerced to it and
+## refused when they do not fit (same rule as declared variables).
+func set_self_variable(map_id: String, event_id: String, name: String, value: Variant) -> bool:
+	if not RPGIds.is_valid(name):
+		_err("Self variable names use lowercase letters, digits and _ (got '%s')." % name)
+		return false
+	var key := RPGIds.self_variable_key(map_id, event_id, name)
+	if self_variables.has(key):
+		var t := self_variable_type(map_id, event_id, name)
+		var coerced: Variant = coerce(t, value)
+		if coerced == null:
+			_err("Self variable '%s' is %s; cannot store %s." % [name, t, var_to_str(value)])
+			return false
+		if typeof(coerced) == typeof(self_variables[key]) and coerced == self_variables[key]:
+			return true
+		self_variables[key] = coerced
+	else:
+		match typeof(value):
+			TYPE_INT, TYPE_FLOAT, TYPE_BOOL, TYPE_STRING:
+				pass
+			_:
+				_err("Self variable '%s' can hold a number, true/false or text." % name)
+				return false
+		self_variables[key] = value
+	self_variable_changed.emit(key, self_variables[key])
+	changed.emit()
+	return true
+
+
+## Clears every self switch and self variable of one event, or of a whole map when `event_id` is
+## empty. Returns how many values were cleared.
+func reset_self_state(map_id: String, event_id := "") -> int:
+	var prefix := map_id + "/" + (event_id + "/" if event_id != "" else "")
+	var n := 0
+	for key in self_switches.keys():
+		if str(key).begins_with(prefix):
+			self_switches.erase(key)
+			n += 1
+	for key in self_variables.keys():
+		if str(key).begins_with(prefix):
+			self_variables.erase(key)
+			n += 1
+	if n > 0:
+		changed.emit()
+	return n
 
 
 # --- gold and items -----------------------------------------------------------------
@@ -475,19 +528,30 @@ static func compare(a: Variant, op: String, b: Variant) -> bool:
 	return false
 
 
-## Resolves an operand value: a plain value, {variable: id}, {pointer: id} (the value of the
-## variable whose id that variable holds), {random: [lo, hi]} or {game_data: {...}}. `ctx` (the
-## running command's RPGContext) is needed by kinds that read the map, characters or the battle.
+## Resolves an operand ({variable}, {pointer}, {random}, {game_data}) to its value. `ctx` (the
+## running command's context) is needed by game data that reads the map or the running battle.
 func resolve_operand(v: Variant, ctx: Object = null) -> Variant:
 	if v is Dictionary:
 		if v.has("variable"):
 			return get_variable(v.variable)
-		if v.has("pointer"):
-			var held := str(get_variable(str(v.pointer)))
-			if held == "" or not variables.has(held):
-				_err("Pointer variable '%s' holds no variable id." % v.pointer)
+		if v.has("self_variable"):
+			# An event's own variable: {self_variable: {map, event, name}}. Blank map/event is
+			# the running command's map and event.
+			var sv: Dictionary = v.self_variable
+			var m := str(sv.get("map", ""))
+			var e := str(sv.get("event", ""))
+			if (m == "" or e == "") and ctx != null and ctx.has_method("map_id"):
+				if m == "":
+					m = ctx.map_id()
+				if e == "":
+					e = ctx.event_id()
+			if m == "" or e == "":
+				_err("Game data: an event's self variable needs a running event (or a map and event).")
 				return 0
-			return get_variable(held)
+			return get_self_variable(m, e, str(sv.get("name", "")))
+		if v.has("pointer"):
+			# Indirect source: the value of the variable whose id another variable holds.
+			return get_variable(str(get_variable(str(v.pointer))))
 		if v.has("random"):
 			var r: Array = v.random
 			return rng.randi_range(int(r[0]), int(r[1])) if rng != null else randi_range(int(r[0]), int(r[1]))
@@ -497,12 +561,11 @@ func resolve_operand(v: Variant, ctx: Object = null) -> Variant:
 
 
 ## RPG Maker's "Game Data" operand: {kind: item|weapon|armor, id} (count held), gold, steps,
-## play_time (seconds), party_size, {kind: actor, id, field: level|exp|equip|<resource>|<stat>},
-## {kind: character, target: player|this|follower|<event id>, field: x|y|direction|screen_x|
-## screen_y}, map_id, {kind: party_member, index}, {kind: last_used, field: item|skill|actor|
-## target_actor|target_enemy}, {kind: counter, field: saves|battles|victories|defeats|escapes},
-## and {kind: enemy, index, field} during a battle (#54). Directions are RM numbers: 2 down,
-## 4 left, 6 right, 8 up.
+## play_time (seconds), party_size, {kind: actor, id, field} (level, exp, a resource, an equip
+## slot's item id, or a stat), {kind: character, target, field} (x, y, direction, screen_x,
+## screen_y), map_id, {kind: party_member, slot} (the actor id in that slot), {kind: last_used,
+## what}, {kind: counter, which}, or {kind: enemy, index, field} (a stat of an enemy in the
+## running battle). Kinds that read the map or the battle need `ctx`.
 func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 	var kind := str(g.get("kind", ""))
 	match kind:
@@ -520,65 +583,99 @@ func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 			return int(play_time)
 		"party_size":
 			return party.size()
-		"map_id":
-			if ctx == null or not ("map" in ctx) or ctx.map == null:
-				_err("Game data: the map id needs a running event context.")
-				return ""
-			return str(ctx.map.map_id)
-		"party_member":
-			var i := int(g.get("index", 0))
-			return str(party[i]) if i >= 0 and i < party.size() else ""
-		"last_used":
-			var lf := str(g.get("field", "item"))
-			if lf == "target_enemy":
-				return int(last_used.get("target_enemy", -1))
-			return str(last_used.get(lf, ""))
-		"counter":
-			return int(counters.get(str(g.get("field", "battles")), 0))
-		"character":
-			return _character_data(g, ctx)
 		"actor":
 			var b: Variant = actor(str(g.get("id", "")))
 			if b == null:
 				_err("Game data: actor '%s' is not available." % g.get("id", ""))
 				return 0
-			var field := str(g.get("field", "level"))
-			if field == "equip":
-				return str(b.equips.get(str(g.get("slot", "")), "")) if "equips" in b else ""
-			if field == "level":
-				return int(b.level)
-			if field == "exp":
-				return int(b.exp)
-			if b.resources.has(field):
-				return int(b.resources[field])
-			if rules != null and rules.has_method("stat_block"):
-				var blk: Dictionary = rules.stat_block(b)
-				if blk.has(field):
-					return blk[field]
-			_err("Game data: actors have no '%s'." % field)
-			return 0
+			var fv: Variant = _battler_field(b, str(g.get("field", "level")))
+			if fv == null:
+				_err("Game data: actors have no '%s'." % g.get("field", "level"))
+				return 0
+			return fv
+		"character":
+			return _character_data(g, ctx)
+		"map_id":
+			if ctx == null or not ("map_id" in ctx):
+				_err("Game data: the map id needs a running command (use it in an event).")
+				return ""
+			return str(ctx.map_id())
+		"party_member":
+			var slot := int(g.get("slot", 0))
+			return str(party[slot]) if slot >= 0 and slot < party.size() else ""
+		"last_used":
+			return last_used.get(str(g.get("what", "item")), "")
+		"counter":
+			var which := str(g.get("which", "battles"))
+			if not counters.has(which):
+				_err("Game data: unknown counter '%s'." % which)
+				return 0
+			return int(counters[which])
 		"enemy":
-			return _enemy_data(g, ctx)
+			var core: Variant = _battle_core(ctx)
+			if core == null:
+				_err("Game data: enemy stats only work in a battle.")
+				return 0
+			var idx := int(g.get("index", 0))
+			var e: Array = core.enemies
+			if idx < 0 or idx >= e.size():
+				_err("Game data: there is no enemy number %d." % idx)
+				return 0
+			var ev: Variant = _battler_field(e[idx], str(g.get("field", "hp")))
+			if ev == null:
+				_err("Game data: enemies have no '%s'." % g.get("field", "hp"))
+				return 0
+			return ev
 	_err("Game data: unknown kind '%s'." % kind)
 	return 0
 
 
-## The `character` game data kind: where a character is and which way it faces (#54).
+## One value of an actor or enemy battler: level, exp, a resource, the item id in an equip slot
+## (the slot's name is the field), or a base stat. Returns null when there is no such field.
+func _battler_field(b: Variant, field: String) -> Variant:
+	if field == "level":
+		return int(b.level)
+	if field == "exp":
+		return int(b.exp)
+	if b is Object and "resources" in b and b.resources.has(field):
+		return int(b.resources[field])
+	if b is Object and "equips" in b and b.equips.has(field):
+		return str(b.equips[field])
+	if rules != null and rules.has_method("stat_block"):
+		var blk: Dictionary = rules.stat_block(b)
+		if blk.has(field):
+			return blk[field]
+	return null
+
+
+## The running battle's core through a command context, or null (no battle).
+func _battle_core(ctx: Object) -> Variant:
+	if ctx != null and "battle" in ctx and ctx.battle != null and ctx.battle.has_method("core"):
+		return ctx.battle.core()
+	return null
+
+
+## Directions as RPG Maker numbers them (RM2000/2003 Control Variables), for ports and HUD math.
+const RM_DIRECTIONS := {"down": 2, "left": 4, "right": 6, "up": 8}
+
+
+## Game data "character": where a character is. `target` is "player", "this", an event id, or
+## "follower" with `index` (0 = right behind the player). `field` is x, y (map cells), direction
+## (the numbers above), or screen_x / screen_y (pixels on screen, for picture HUDs).
 func _character_data(g: Dictionary, ctx: Object) -> Variant:
 	if ctx == null or not ctx.has_method("character"):
-		_err("Game data: character position needs a running event context.")
+		_err("Game data: character needs a running event (use it in a command).")
 		return 0
 	var target := str(g.get("target", "player"))
-	var ch: Node = null
+	var ch: Variant = null
 	if target == "follower":
-		var p: Node = ctx.map.player if ctx.map != null else null
-		var fl: Array = p.followers if p != null and "followers" in p else []
+		var fs: Variant = ctx.map.player.followers if ctx.map != null and ctx.map.get("player") != null else []
 		var fi := int(g.get("index", 0))
-		ch = fl[fi] if fi >= 0 and fi < fl.size() else null
+		ch = fs[fi] if fs is Array and fi >= 0 and fi < (fs as Array).size() else null
 	else:
 		ch = ctx.character(target)
-	if ch == null or not ("cell" in ch):
-		_err("Game data: character '%s' is not on this map." % target)
+	if ch == null:
+		_err("Game data: '%s' is not on this map." % target)
 		return 0
 	var field := str(g.get("field", "x"))
 	match field:
@@ -587,51 +684,12 @@ func _character_data(g: Dictionary, ctx: Object) -> Variant:
 		"y":
 			return int(ch.cell.y)
 		"direction":
-			# RPG Maker numbers, for tutorials that do arithmetic on them: 2 down, 4 left, 6 right, 8 up.
-			return {"down": 2, "left": 4, "right": 6, "up": 8}.get(str(ch.facing), 2)
+			return int(RM_DIRECTIONS.get(str(ch.facing), 0))
 		"screen_x":
-			return _screen_pos(ch).x
+			return int(round(ch.global_position.x)) if ch is Node2D else 0
 		"screen_y":
-			return _screen_pos(ch).y
-	_err("Game data: characters have no '%s'." % field)
-	return 0
-
-
-## A character's pixel position on screen (for picture HUDs), or its map pixels when it is not
-## in the tree yet.
-static func _screen_pos(ch: Node2D) -> Vector2:
-	if ch.is_inside_tree():
-		return ch.get_viewport_transform() * ch.global_position
-	return ch.position
-
-
-## The `enemy` game data kind: one stat of a troop member, readable only during a battle (#54).
-func _enemy_data(g: Dictionary, ctx: Object) -> Variant:
-	var core: Variant = null
-	if ctx != null and "battle" in ctx:
-		var facade: Variant = ctx.get("battle")
-		if facade != null and facade.valid():
-			core = facade.core()
-	if core == null:
-		_err("Game data: enemy stats are only readable during a battle.")
-		return 0
-	var i := int(g.get("index", 0))
-	if i < 0 or i >= core.enemies.size():
-		_err("Game data: the troop has no enemy #%d." % (i + 1))
-		return 0
-	var b: Variant = core.enemies[i]
-	var field := str(g.get("field", "level"))
-	if field == "level":
-		return int(b.level)
-	if field == "exp":
-		return int(b.exp)
-	if b.resources.has(field):
-		return int(b.resources[field])
-	if core.rules != null and core.rules.has_method("stat_block"):
-		var blk: Dictionary = core.rules.stat_block(b)
-		if blk.has(field):
-			return blk[field]
-	_err("Game data: enemies have no '%s'." % field)
+			return int(round(ch.global_position.y)) if ch is Node2D else 0
+	_err("Game data: a character has no '%s'." % field)
 	return 0
 
 
@@ -654,7 +712,23 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return compare(float(cur), cond.get("op", "=="), float(rhs))
 		"self_switch":
 			var letter: String = cond.get("id", cond.get("switch", "A"))
-			return get_self_switch(map_id, event_id, letter) == bool(cond.get("value", true))
+			# Blank map/event is the event the condition belongs to (a page, the running branch).
+			var m := str(cond.get("map", map_id))
+			var e := str(cond.get("event", event_id))
+			return get_self_switch(m, e, letter) == bool(cond.get("value", true))
+		"self_variable":
+			var sname := str(cond.get("name", cond.get("id", "")))
+			var sm := str(cond.get("map", map_id))
+			var se := str(cond.get("event", event_id))
+			var scur: Variant = get_self_variable(sm, se, sname)
+			var srhs: Variant = resolve_operand(cond.get("value", 0), ctx)
+			var st := self_variable_type(sm, se, sname)
+			if st == "bool" or st == "string":
+				var sop: String = cond.get("op", "==")
+				if not ["==", "=", "!=", "≠"].has(sop):
+					return false
+				return compare(scur, sop, srhs)
+			return compare(float(scur), cond.get("op", "=="), float(srhs))
 		"item":
 			var k: String = cond.get("item_kind", "items")
 			return item_count(cond.get("id", ""), k) >= int(cond.get("count", 1)) or (int(cond.get("count", 1)) <= 1 and has_item(cond.get("id", ""), k, true))
@@ -672,7 +746,59 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return str(ch.facing) == str(cond.get("facing", "down"))
 		"button":
 			var action := "rpg_" + str(cond.get("button", "ok"))
-			return InputMap.has_action(action) and Input.is_action_pressed(action)
+			if not InputMap.has_action(action):
+				return false
+			match str(cond.get("mode", "held")):
+				"pressed":
+					return Input.is_action_just_pressed(action)
+				"repeated":
+					# Re-fires about every quarter second while held, like a text cursor.
+					return Input.is_action_just_pressed(action) or (Input.is_action_pressed(action) and Engine.get_process_frames() % 15 == 0)
+			return Input.is_action_pressed(action)
+		"started_by":
+			# Conditional Branch only: reads the event that is running the branch. A page runs either
+			# through its trigger or because Call Event opened it; inside a called page only "call" holds.
+			if ctx == null or not ctx.has_method("character"):
+				_err("Started by can only be checked in a Conditional Branch.")
+				return false
+			var by := str(cond.get("by", "action_button"))
+			if ctx.interpreter != null and ctx.interpreter.in_called_page > 0:
+				return by == "call"
+			var ev: Variant = ctx.character("this")
+			if ev == null or not ("trigger" in ev):
+				return false
+			return by == str(ev.trigger)
+		"formula":
+			# The formula language with empty a/b/s and the project's variables and RNG.
+			var r: Dictionary = RPGFormula.evaluate_text(str(cond.get("text", "")), {"a": {}, "b": {}, "v": variables, "s": {}, "rng": rng})
+			if not r.ok:
+				_err("Formula condition: %s." % r.error)
+				return false
+			var val: Variant = r.value
+			return bool(val) if val is bool else float(val) != 0.0
+		"can_pass":
+			# Conditional Branch only: walks cells with the map's navigation rules.
+			if ctx == null or not ctx.has_method("character"):
+				_err("Can pass can only be checked in a Conditional Branch.")
+				return false
+			var walker: Variant = ctx.character(str(cond.get("target", "player")))
+			if walker == null or not ("cell" in walker):
+				_err("Can pass: '%s' is not on this map." % cond.get("target", "player"))
+				return false
+			var dirs := {"down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT, "up": Vector2i.UP}
+			var d := Vector2i(dirs.get(str(cond.get("facing", "down")), Vector2i.ZERO))
+			if d == Vector2i.ZERO:
+				_err("Can pass: unknown facing '%s'." % cond.get("facing", "down"))
+				return false
+			var m: Node = ctx.map
+			if m == null:
+				return false
+			var cell: Vector2i = walker.cell
+			for i in clampi(int(cond.get("distance", 1)), 1, 20):
+				if not m.movement.can_move(walker, cell, d):
+					return false
+				cell += d
+			return true
 		"vehicle":
 			# Riding a given vehicle ("" / "none" = on foot).
 			var want := str(cond.get("id", cond.get("vehicle", "")))
@@ -691,6 +817,8 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return false
 		"not":
 			return not check_condition(cond.get("condition", {}), map_id, event_id, ctx)
+		"turn", "enemy_hp", "actor_hp", "actor_can_act", "enemy_can_act", "enemy_is_target":
+			return _battle_condition(kind, cond, ctx)
 	if condition_kinds.has(kind):
 		var r: Variant = (condition_kinds[kind] as Callable).call(cond, {"map_id": map_id, "event_id": event_id, "ctx": ctx, "state": self})
 		return bool(r) if r != null else false
@@ -698,8 +826,24 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 	return false
 
 
+## Battle kinds of a Conditional Branch (RM2000/2003): the troop page checks (turn, enemy HP,
+## actor HP) and the branch-only can-act / is-target checks, read from the running battle
+## through the running command's context. Outside a battle they are false with a warning.
+func _battle_condition(kind: String, cond: Dictionary, ctx: Object) -> bool:
+	var core: Variant = null
+	if ctx != null and "battle" in ctx and ctx.battle != null and ctx.battle.has_method("core"):
+		core = ctx.battle.core()
+	if core == null:
+		_err("Condition '%s' only works in a battle." % kind)
+		return false
+	if kind == "turn" or kind == "enemy_hp" or kind == "actor_hp":
+		return core.page_conditions_met({"conditions": [cond]})
+	return core.branch_check(kind, cond)
+
+
 ## Actor condition: in the party (default), or name / class / skill learned / weapon or armour
-## equipped / state, by `check` ({kind: "actor", id, check, name | class | skill | weapon | armor | state}).
+## equipped / state, or a level / HP / SP test (with `op` and `value`; HP and SP may compare
+## percentages), by `check` ({kind: "actor", id, check, ...}).
 func _check_actor(cond: Dictionary) -> bool:
 	var id := str(cond.get("id", ""))
 	var check := str(cond.get("check", "in_party"))
@@ -719,6 +863,22 @@ func _check_actor(cond: Dictionary) -> bool:
 			return b is Object and "equips" in b and b.equips.values().has(str(cond.get(check, "")))
 		"state":
 			return b is Object and b.has_method("has_state") and b.has_state(str(cond.get("state", "")))
+		"level":
+			var lv := 0
+			if b is Dictionary:
+				lv = int(b.get("level", 0))
+			elif "level" in b:
+				lv = int(b.level)
+			return compare(lv, str(cond.get("op", ">=")), int(resolve_operand(cond.get("value", 1))))
+		"hp", "sp":
+			var res := RPGPartyUtil.get_res(b, check)
+			var want := int(resolve_operand(cond.get("value", 1)))
+			if cond.get("percent", false):
+				var mx := 9999
+				if rules != null and rules.has_method("max_resource"):
+					mx = int(rules.max_resource(b, check))
+				return compare(int(res * 100.0 / maxi(mx, 1)), str(cond.get("op", ">=")), want)
+			return compare(res, str(cond.get("op", ">=")), want)
 	_err("Unknown actor check '%s'." % check)
 	return false
 
@@ -741,11 +901,13 @@ func to_dict() -> Dictionary:
 		"switches": switches.duplicate(),
 		"variables": variables.duplicate(),
 		"self_switches": self_switches.duplicate(),
+		"self_variables": self_variables.duplicate(),
 		"gold": gold,
 		"inventory": inventory.duplicate(true),
 		"party": Array(party),
 		"actors": actor_data,
 		"event_changes": event_changes.duplicate(true),
+		"spawned_events": spawned_events.duplicate(true),
 		"followers_visible": followers_visible,
 		"vehicles": vehicles.duplicate(true),
 		"riding": riding,
@@ -759,7 +921,7 @@ func to_dict() -> Dictionary:
 		"map_overrides": map_overrides.duplicate(true),
 		"windowskin": windowskin,
 		"counters": counters.duplicate(),
-		"last_used": last_used.duplicate(true),
+		"last_used": last_used.duplicate(),
 	}
 
 
@@ -771,6 +933,7 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 		var c: Variant = coerce(variable_type(id), vars[id])
 		variables[id] = c if c != null else vars[id]
 	self_switches = d.get("self_switches", {}).duplicate()
+	self_variables = d.get("self_variables", {}).duplicate() if d.get("self_variables") is Dictionary else {}
 	gold = int(d.get("gold", 0))
 	inventory = {"items": {}, "weapons": {}, "armors": {}}
 	var inv: Dictionary = d.get("inventory", {})
@@ -787,6 +950,7 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 		else:
 			actors[id] = actor_data[id]
 	event_changes = d.get("event_changes", {}).duplicate(true)
+	spawned_events = d.get("spawned_events", {}).duplicate(true) if d.get("spawned_events") is Dictionary else {}
 	followers_visible = bool(d.get("followers_visible", true))
 	# Saves from before vehicles existed start with the vehicles where a new game has them.
 	vehicles = d.get("vehicles", {}).duplicate(true) if d.get("vehicles") is Dictionary else (RPGVehicles.initial_state(data) if data else {})
@@ -803,8 +967,11 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 	music_overrides = d.get("music_overrides", {}).duplicate(true) if d.get("music_overrides") is Dictionary else {}
 	map_overrides = d.get("map_overrides", {}).duplicate(true) if d.get("map_overrides") is Dictionary else {}
 	windowskin = str(d.get("windowskin", ""))
-	counters = d.get("counters", {}).duplicate() if d.get("counters") is Dictionary else {}
-	last_used = d.get("last_used", {}).duplicate(true) if d.get("last_used") is Dictionary else {}
+	counters = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
+	if d.get("counters") is Dictionary:
+		for k in counters:
+			counters[k] = int(d.counters.get(k, 0))
+	last_used = d.get("last_used", {}).duplicate() if d.get("last_used") is Dictionary else {}
 	changed.emit()
 
 

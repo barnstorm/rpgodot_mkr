@@ -30,9 +30,11 @@ A cutscene is usually an event with the trigger **Autorun**. It starts as soon a
 - **Turn**: the four directions, 90° left or right, around, random, toward or away from the player.
 - **Other**: jump, wait, speed, frequency, graphic, opacity, switch ON/OFF, sound, walking and stepping animation, direction fix, walk through, hide and show.
 
-Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event waits before the next command). Press **Preview** to watch the route drawn on the map in the editor.
+Options: **Repeat**, **Skip if blocked**, and **Wait until done** (the event waits before the next command). With *Skip if blocked* off, a step whose way is blocked waits for the way to clear, however long that takes — the debug screen shows where a character is waiting. Press **Preview** to watch the route drawn on the map in the editor.
 
-An event's page can have a **Custom route** as its movement too, for guards who patrol.
+An event's page can have a **Custom route** as its movement too, for guards who patrol — or a *Vertical* / *Horizontal* movement type, when a simple up-and-down patrol is all a guard needs.
+
+A forced route takes over: while it plays, the character's own movement (random, approach, a custom route) is paused, and a custom route resumes where it left off when the forced route ends. If the event's page changes mid-route, the VX Ace style [rule system](Rule-Systems.md) cancels the forced route, as MV does; the classic rules keep it, and a custom route restarts from its first step unless both pages use the same route.
 
 ## 3. Screen effects
 
@@ -62,6 +64,8 @@ Parallel event "waves"
 ```
 
 A parallel event shouldn't stop the player; avoid messages in it.
+
+While the menu, a shop, the save screen or a battle is open, parallel events and wandering NPCs sleep, and a Wait picks up where it left off when the screen closes — the map is suspended behind those screens, as in RPG Maker. Message boxes don't suspend it. (The Run Scene command can turn this off for an overlay scene, like a HUD, that runs on top of the live map.)
 
 ## 5. Common events
 
