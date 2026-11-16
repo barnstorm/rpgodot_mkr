@@ -31,7 +31,9 @@ const CONDITION_BUTTONS := ["ok", "cancel", "dash", "up", "down", "left", "right
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
 const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
-const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "actor_hp", "switch", "turn_end"]
+const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]
+## Battle commands a command_used condition can name (action kinds of RPGBattleCore).
+const BATTLE_COMMAND_KINDS := ["attack", "skill", "item", "guard", "escape"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 
 ## Singular reference kind -> database type.
@@ -413,12 +415,18 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 			var letter := str(c.get("id", c.get("switch", "")))
 			if not RPGIds.SELF_SWITCHES.has(letter):
 				out.append(problem("error", file, rec, "condition", path + "/id", "Self switch '%s' does not exist. Self switches are A, B, C and D." % letter, "Pick A, B, C or D."))
-		"variable", "gold", "enemy_hp", "actor_hp":
+		"variable", "gold", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns":
 			var op := str(c.get("op", "=="))
 			if not OPS.has(op):
 				out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % op, "Use ==, !=, <, <=, > or >=."))
-			if kind != "enemy_hp" and kind != "actor_hp":
+			if kind == "variable" or kind == "gold":
 				_operand_structure(c.get("value", 0), file, rec, path + "/value", out)
+		"command_used":
+			var cmd := str(c.get("command", "attack"))
+			if not BATTLE_COMMAND_KINDS.has(cmd):
+				out.append(problem("error", file, rec, "condition", path + "/command", "Unknown battle command '%s'." % cmd, "Use one of: %s." % ", ".join(PackedStringArray(BATTLE_COMMAND_KINDS))))
+			elif cmd == "skill" and str(c.get("skill", "")) == "":
+				out.append(problem("error", file, rec, "condition", path + "/skill", "A Skill command condition needs the skill.", "Pick the skill in the condition."))
 		"actor":
 			var check := str(c.get("check", "in_party"))
 			if not ACTOR_CHECKS.has(check):
@@ -440,7 +448,7 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 				_condition_structure(c.conditions[i], file, rec, "%s/conditions/%d" % [path, i], out, battle)
 		"not":
 			_condition_structure(c.get("condition"), file, rec, path + "/condition", out, battle)
-	if kind in ["switch", "variable", "item", "actor"] and not RPGIds.is_valid(c.get("id")):
+	if kind in ["switch", "variable", "item", "actor", "actor_hp", "actor_mp", "actor_turns", "command_used"] and not RPGIds.is_valid(c.get("id")):
 		out.append(problem("error", file, rec, "condition", path + "/id", "This %s condition has no valid ID." % kind, "Pick a %s from the list." % kind))
 
 
@@ -751,11 +759,15 @@ static func _cond_refs(c: Variant, path: String, ctx: Dictionary, acc: Dictionar
 				_add_ref(acc, ctx, "variable", v, "variable", path + "/value/variable", "read", false, "condition")
 		"item":
 			_add_ref(acc, ctx, item_kind_to_ref(str(c.get("item_kind", "items"))), c, "id", path + "/id", "read", false, "condition")
-		"actor", "actor_hp":
+		"actor", "actor_hp", "actor_mp", "actor_turns":
 			_add_ref(acc, ctx, "actor", c, "id", path + "/id", "read", false, "condition")
 			var check := str(c.get("check", "in_party"))
 			if check in ["class", "skill", "weapon", "armor", "state"] and str(c.get(check, "")) != "":
 				_add_ref(acc, ctx, check, c, check, path + "/" + check, "read", false, "condition")
+		"command_used":
+			_add_ref(acc, ctx, "actor", c, "id", path + "/id", "read", false, "condition")
+			if str(c.get("skill", "")) != "":
+				_add_ref(acc, ctx, "skill", c, "skill", path + "/skill", "read", false, "condition")
 		"gold":
 			var g: Variant = c.get("value")
 			if g is Dictionary and g.has("variable"):
