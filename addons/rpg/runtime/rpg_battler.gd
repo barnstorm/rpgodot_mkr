@@ -86,8 +86,10 @@ func set_resource(res_id: String, value: int) -> void:
 	resources[res_id] = value
 
 
+## Dead means the death state: every path that empties the life resource adds it, and a battler
+## that resists it never gets it — it stays alive at 0 life (immortal, as VX Ace's Immortal flag).
 func is_dead() -> bool:
-	return has_state(death_state) or (resources.has(life_resource) and int(resources[life_resource]) <= 0)
+	return has_state(death_state)
 
 
 func is_alive() -> bool:

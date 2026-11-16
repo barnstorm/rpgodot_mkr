@@ -203,9 +203,10 @@ func test_enemy_ai_condition_list() -> void:
 	t.add_state("poison", 3)
 	assert_eq(core.choose_enemy_action(t).kind, "wait", "poisoned: wait")
 	t.remove_state("poison")
-	core.enemies[1].set_resource("hp", 0)
+	rules.add_state(core.enemies[1], rules.death_state())
 	assert_false(core.enemies[1].is_active(), "the slime is down")
 	assert_eq(core.choose_enemy_action(t).kind, "wait", "alone on its side (1 <= 1 alive): wait")
+	rules.remove_state(core.enemies[1], rules.death_state())
 	core.enemies[1].set_resource("hp", 40)
 	core.condition_reader = func(c): return str(c.get("kind")) == "variable" and str(c.get("id")) == "boss_rage" and int(c.get("value", 0)) == 1
 	assert_eq(core.choose_enemy_action(t).kind, "guard", "boss_rage == 1 (ref 'variable', operand 'against'): guard")
@@ -423,7 +424,7 @@ func test_conditional_branch_battle_checks() -> void:
 	while not r.is_empty():
 		r = core.next_action()
 	assert_false(core.branch_check("enemy_is_target", {"index": 0}), "an enemy attacked the hero: no enemy is the target")
-	core.enemies[0].set_resource("hp", 0)
+	rules.add_state(core.enemies[0], rules.death_state())
 	assert_false(core.branch_check("enemy_can_act", {"index": 0}), "a defeated enemy cannot act")
 	rules.add_state(core.party[0], "sleep")
 	assert_false(core.branch_check("actor_can_act", {"id": "hero"}), "a sleeping actor cannot act")
@@ -537,3 +538,51 @@ func test_d4_common_event_effect_in_battle() -> void:
 	st.reserve_common_event("count_up")
 	assert_eq(st.take_reserved_common_events(), ["count_up"])
 	assert_true(st.reserved_common_events.is_empty())
+
+
+# --- State timing (#49) -----------------------------------------------------------------------
+
+
+func _turns_of(b: RPGBattler, state_id: String) -> int:
+	for s in b.states:
+		if s.id == state_id:
+			return int(s.turns)
+	return -1
+
+
+## An "action end" state wears off right after its battler's second action, without waiting for
+## the turn to end (the turn's end neither counts it down nor slips it away early).
+func test_action_end_states_wear_off_with_the_action() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	poison["turns_min"] = 2
+	poison["turns_max"] = 2
+	poison["auto_removal"] = "action_end"
+	var core := _core(["hero"], "slimes", 21)
+	var hero: RPGBattler = core.party[0]
+	assert_true(rules.add_state(hero, "poison"))
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "attack", "target": 0}))
+	var r := core.next_action()
+	while not r.is_empty():
+		if r.user == hero:
+			assert_true(hero.has_state("poison"), "one action is not enough")
+			assert_eq(_turns_of(hero, "poison"), 1, "the action counts it down")
+			assert_true(r.get("ticks", []).is_empty(), "nothing to report while it stays")
+		r = core.next_action()
+	for t in core.end_turn():
+		assert_false(t.removed_states.has("poison"), "the turn's end does not count it down")
+	assert_eq(_turns_of(hero, "poison"), 1)
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "attack", "target": 0}))
+	var seen_removal := false
+	r = core.next_action()
+	while not r.is_empty():
+		if r.user == hero:
+			var removed := []
+			for t in r.get("ticks", []):
+				removed.append_array(t.removed_states)
+			assert_eq(removed, ["poison"], "wears off right after the second action")
+			assert_false(hero.has_state("poison"))
+			seen_removal = true
+		r = core.next_action()
+	assert_true(seen_removal)

@@ -414,6 +414,30 @@ func test_states_that_skip_turns_still_work() -> void:
 	assert_false(r.ticks.is_empty(), "the state's end is reported with the turn")
 
 
+## #49: a state set to wear off at "action end" counts down right after its battler's action,
+## without waiting for the ATB turn to end.
+func test_action_end_states_wear_off_right_after_the_action() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	poison["turns_min"] = 1
+	poison["turns_max"] = 1
+	poison["auto_removal"] = "action_end"
+	var core := _core(["hero"], "slimes", "atb", 21)
+	var hero: RPGBattler = core.party[0]
+	assert_true(rules.add_state(hero, "poison"))
+	core.gauges[hero] = 0.99
+	for e in core.enemies:
+		core.gauges[e] = 0.0
+	core.begin_turn()
+	core.atb_advance_to_next()
+	assert_eq(core.ready_queue, [hero])
+	var r := core.act(hero)
+	assert_false(hero.has_state("poison"), "wears off right after the action")
+	var removed := []
+	for t in r.ticks:
+		removed.append_array(t.removed_states)
+	assert_eq(removed, ["poison"], "the wear-off is reported with the action")
+
+
 func test_atb_turn_counter_for_troop_pages() -> void:
 	var troop := {"id": "t", "can_escape": true, "members": [
 		{"enemy": "slime", "position": [100, 120]}, {"enemy": "bat", "position": [200, 120]}],
@@ -796,11 +820,11 @@ func test_core_appear_brings_hidden_members_in() -> void:
 
 func test_core_appear_takes_back_a_win() -> void:
 	var core := _core(["hero"], _later_troop(), "turn", 4)
-	core.enemies[0].set_resource("hp", 0)
+	rules.add_state(core.enemies[0], "knockout")
 	assert_eq(core.battle_over(), "win", "every visible enemy has fallen")
 	assert_eq(core.appear(1).size(), 1)
 	assert_eq(core.battle_over(), "", "reinforcements: the battle goes on")
-	core.enemies[1].set_resource("hp", 0)
+	rules.add_state(core.enemies[1], "knockout")
 	assert_eq(core.battle_over(), "win")
 	assert_eq(int(core.rewards().exp), 12, "both slimes give their EXP")
 	# A result set from outside (abort battle) stays.
@@ -810,7 +834,7 @@ func test_core_appear_takes_back_a_win() -> void:
 	assert_eq(c2.battle_over(), "win", "a forced result is kept")
 	# A hidden member that never appears gives nothing.
 	var c3 := _core(["hero"], _later_troop(), "turn", 4)
-	c3.enemies[0].set_resource("hp", 0)
+	rules.add_state(c3.enemies[0], "knockout")
 	assert_eq(c3.battle_over(), "win")
 	assert_eq(int(c3.rewards().exp), 6, "only the slime that fought")
 

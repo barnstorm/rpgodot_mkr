@@ -293,6 +293,12 @@ func next_action() -> Dictionary:
 		var before := _vitals()
 		_hook("turn_started", [b])
 		var result := _execute(b)
+		# States set to wear off at the battler's action end tick right here (MV's Action End),
+		# with the action's result for the UI; the rest wait for end_turn().
+		var tick := rules.tick_states(b, "action_end")
+		if not tick.lines.is_empty():
+			tick.battler = b
+			result["ticks"] = [tick]
 		_note_command(b, result)
 		report_changes()
 		if _vitals() != before:
@@ -870,9 +876,15 @@ func act(b: RPGBattler) -> Dictionary:
 		if not _extra.has(b):
 			_extra[b] = 0 if str(b.action.get("kind", "")) == "escape" else maxi(1, rules.action_times(b)) - 1
 		res = _execute(b)
+		# Action-end states tick after each action (extra actions too, as MV's Action End).
+		var tick := rules.tick_states(b, "action_end")
+		if not tick.lines.is_empty():
+			tick.battler = b
+			res["ticks"] = [tick]
 		_note_command(b, res)
 	res["skipped"] = skipped
-	res["ticks"] = []
+	if not res.has("ticks"):
+		res["ticks"] = []
 	if not skipped and int(_extra.get(b, 0)) > 0 and b.is_active() and rules.can_act(b) and not res.escaped and battle_over() == "":
 		# "action_times": another action right away (the player picks it for an actor).
 		_extra[b] = int(_extra[b]) - 1
