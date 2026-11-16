@@ -486,13 +486,19 @@ static func _tile_key(ts: TileSet, td: TileData) -> String:
 	return ""
 
 
-## Cancels every task this map owns and waits for cleanup (called before unloading).
+## Cancels every task this map owns and waits for cleanup (called before unloading). The
+## RM2000-style option (RPGRuleSystem.parallel_map_event_survives_map_change) spares the parallel
+## map event that ran the transfer: it keeps executing its current pass on the new map instead of
+## being cancelled with its map.
 func shutdown(caller: RPGInterpreter = null) -> void:
 	if rpg == null:
 		return
 	var id := map_id
 	var mine := func(owner: Dictionary): return owner.get("kind", "") == "map_event" and owner.get("map", "") == id
-	await rpg.scheduler.cancel_owned(mine, "map unloaded", caller)
+	var spare := Callable()
+	if rpg.rules != null and rpg.rules.has_method("parallel_map_event_survives_map_change") and bool(rpg.rules.parallel_map_event_survives_map_change()):
+		spare = func(task: RPGScheduler.ParallelTask): return task.interpreter == caller
+	await rpg.scheduler.cancel_owned(mine, "map unloaded", caller, spare)
 	stop_routes()
 	remove_player()
 

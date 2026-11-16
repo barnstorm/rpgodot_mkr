@@ -41,6 +41,10 @@ var call_chain: Array[String] = []
 ## a battle suspends the map (RPG Maker's map scene), resuming at the same command when it closes.
 ## Main interpreters never sleep (the one that opened the screen is waiting on it).
 var suspends_with_map := false
+## True while this interpreter's parallel task is paused (its condition switch went off under the
+## classic rules): it sleeps at its current command until the flag clears, keeping its whole run
+## so it carries on at that command when the switch returns (RM2000/2003 behaviour).
+var paused := false
 
 var _frame := -1
 var _count := 0
@@ -238,10 +242,10 @@ func _spend_budget() -> void:
 		_count = 1
 
 
-## A parallel sleeps here while a menu, shop, save screen or battle suspends the map, and
-## resumes at this exact command when the screen closes.
+## A parallel sleeps here while a menu, shop, save screen or battle suspends the map, or while its
+## task is paused, and resumes at this exact command when the screen closes or it is un-paused.
 func _sleep_while_suspended() -> void:
-	while rpg.scheduler.map_suspended() and not token.is_cancelled:
+	while (rpg.scheduler.map_suspended() or paused) and not token.is_cancelled:
 		await rpg.get_tree().process_frame
 
 

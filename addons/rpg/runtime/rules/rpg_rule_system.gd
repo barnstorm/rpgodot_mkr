@@ -213,6 +213,25 @@ func slip_knockout() -> bool:
 	return bool(definition.get("slip_knockout", true))
 
 
+## What a parallel common event's condition switch going off does to its run: "pause" freezes it
+## at its current command and carries on there when the switch returns (RM2000/2003); "restart"
+## discards the run, and the event starts from the top when the switch returns (MV).
+func parallel_switch_off() -> String:
+	return str(definition.get("parallel_switch_off", "restart"))
+
+
+## What a map change does to a running parallel common event: "keep" lets it run on across the
+## transfer (RM2000/2003); "restart" discards it and it starts from the top on the new map (MV).
+func parallel_map_change() -> String:
+	return str(definition.get("parallel_map_change", "keep"))
+
+
+## RM2000-style option: the parallel map event that runs a transfer keeps executing on the new map
+## (its current pass finishes there); by default, like MV, it stops with its map.
+func parallel_map_event_survives_map_change() -> bool:
+	return bool(definition.get("parallel_map_event_survives_map_change", false))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 
