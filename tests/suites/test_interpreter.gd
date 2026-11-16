@@ -1065,6 +1065,178 @@ func test_page_change_resets_a_custom_route_when_the_new_page_differs() -> void:
 	assert_eq(ev.cell, Vector2i(4, 4), "the rest of the old route never plays")
 
 
+# --- Wait for All Movement / Halt All Movement (#59) ----------------------------------------------
+
+
+func test_wait_for_movement_waits_for_every_forced_route() -> void:
+	# Two routes started without waiting (an event and the player): the command returns only
+	# after both finished. The player's mid-route wait makes "still running" deterministic.
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var ev_start := ev.cell
+	var p: RPGPlayer = env.game.player
+	var p_start := p.cell
+	var outcome: Array = []
+	var run := func() -> void:
+		outcome.append(await env.rpg.run_commands([
+			{"type": "move_route", "target": "chest", "wait": false,
+				"steps": [{"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}]},
+			{"type": "move_route", "target": "player", "wait": false,
+				"steps": [{"step": "right"}, {"step": "right"}, {"wait": 1.0}, {"step": "right"}, {"step": "right"}]},
+			{"type": "wait_for_movement"},
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+		]))
+	run.call()
+	await frames(4)
+	assert_eq(env.rpg.get_variable("counter"), 0, "the wait has not returned while a route runs")
+	assert_true(p.is_route_forced(), "the player's route is parked on its mid-route wait")
+	var done: bool = await _wait_until(func(): return int(env.rpg.get_variable("counter")) >= 1)
+	assert_true(done, "Wait for All Movement returned when the routes finished")
+	var finished: bool = await _wait_until(func(): return outcome.size() > 0)
+	assert_true(finished, "the command list finished")
+	assert_true(outcome[0].is_ok(), str(outcome[0]))
+	assert_eq(ev.cell, ev_start + Vector2i(0, 4), "the event's route played out")
+	assert_eq(p.cell, p_start + Vector2i(4, 0), "the player's route played out")
+	assert_false(ev.is_route_forced() or p.is_route_forced(), "no route is running any more")
+
+
+func test_wait_for_movement_ignores_repeating_routes() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false, "repeat": true,
+			"steps": [{"step": "down"}, {"step": "up"}]},
+		{"type": "wait_for_movement"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 1, "a repeating route does not block the wait")
+	assert_true(ev.is_route_forced(), "the repeating route keeps looping")
+	ev.cancel_forced_route("test done")
+	await frames(2)
+
+
+func test_wait_for_movement_returns_at_once_with_no_routes_running() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "wait_for_movement"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 1, "nothing to wait for: returned at once")
+
+
+func test_halt_movement_cancels_every_forced_route() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var p: RPGPlayer = env.game.player
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+		{"type": "move_route", "target": "player", "wait": false,
+			"steps": [{"step": "up"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced() and p.is_route_forced(), "both routes are parked mid-route")
+	var halted: RPGResult = await env.rpg.run_commands([{"type": "halt_movement"}])
+	assert_true(halted.is_ok(), str(halted))
+	assert_false(ev.is_route_forced(), "the event's route was halted")
+	assert_false(p.is_route_forced(), "the player's route was halted")
+	var ev_at := ev.cell
+	var p_at := p.cell
+	await frames(10)
+	assert_eq(ev.cell, ev_at, "the halted event never moves again")
+	assert_eq(p.cell, p_at, "the halted player never moves again")
+
+
+func test_halt_movement_ends_an_event_waiting_on_its_route() -> void:
+	# The halt comes from a parallel event: the main interpreter is the one parked in the waiting
+	# Move Route, and the scheduler's queue would not start a second main list beside it.
+	env.rpg.data.common_events["halter"] = {"trigger": "parallel", "switch": "clock_on",
+		"commands": [{"type": "halt_movement"}]}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var outcome: Array = []
+	var waiting := func() -> void:
+		outcome.append(await env.rpg.run_commands([
+			{"type": "move_route", "target": "chest", "wait": true,
+				"steps": [{"step": "down"}, {"wait": 30.0}]},
+		]))
+	waiting.call()
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the route is parked mid-route")
+	env.rpg.set_switch("clock_on", true)
+	var ended: bool = await _wait_until(func(): return outcome.size() > 0)
+	assert_true(ended, "the waiting command list ended with the halt")
+	assert_true(outcome[0].is_cancelled(), "the waiting Move Route was cancelled: %s" % str(outcome[0]))
+	env.rpg.set_switch("clock_on", false)
+	await frames(2)
+
+
+func test_halt_movement_resumes_autonomous_movement() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.move_type = "random"
+	ev._move_wait = 0.0
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the forced route is parked mid-route")
+	await env.rpg.run_commands([{"type": "halt_movement"}])
+	var parked := ev.cell
+	var stepped := await _await_step(ev)
+	assert_ne(stepped, parked, "the random walk resumed after the halt")
+
+
+func test_wait_for_movement_blocks_a_parallel_event_until_routes_finish() -> void:
+	env.rpg.data.common_events["mover"] = {
+		"trigger": "parallel", "switch": "clock_on",
+		"commands": [
+			{"type": "wait_for_movement"},
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+		],
+	}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 1.0}, {"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	env.rpg.set_switch("clock_on", true)
+	await frames(6)
+	assert_eq(env.rpg.get_variable("counter"), 0, "the parallel's pass is blocked in the wait")
+	var done: bool = await _wait_until(func(): return int(env.rpg.get_variable("counter")) >= 1)
+	assert_true(done, "the parallel carried on once the route finished")
+	env.rpg.set_switch("clock_on", false)
+	await frames(3)
+
+
+func test_halt_movement_works_in_an_autorun_event() -> void:
+	env.rpg.data.common_events["halter"] = {
+		"trigger": "autorun", "switch": "clock_on",
+		"commands": [
+			{"type": "halt_movement"},
+			{"type": "set_switch", "id": "clock_on", "value": "off"},
+		],
+	}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the forced route is parked mid-route")
+	env.rpg.set_switch("clock_on", true)
+	var halted: bool = await _wait_until(func(): return not ev.is_route_forced())
+	assert_true(halted, "the autorun event halted the route")
+
+
 func test_page_change_keeps_a_custom_route_index_when_the_route_is_the_same() -> void:
 	var route := {"steps": [{"step": "down"}, {"wait": 0.4}, {"step": "right"}], "repeat": true}
 	var ev: RPGEvent = env.game.map.get_event("chest")

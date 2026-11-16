@@ -51,6 +51,9 @@ var _route_token: RPGCancelToken = null
 ## The forced route (Set Move Route) playing now, or null: this character's own movement
 ## pauses while it runs (MV's isMoveRouteForcing).
 var _forced_token: RPGCancelToken = null
+## Whether the playing forced route repeats: a repeating route never blocks Wait for All
+## Movement (RPG Maker's Proceed with Movement ignores looping routes).
+var _forced_repeat := false
 ## The cell a move-route step is parked on, waiting for the way to clear ((-1, -1) = not
 ## waiting) — shown by the debug inspector.
 var _blocked_step_at := Vector2i(-1, -1)
@@ -382,15 +385,23 @@ func run_forced_route(route: Dictionary, token: RPGCancelToken) -> bool:
 	if _forced_token != null and not _forced_token.is_cancelled:
 		_forced_token.cancel("replaced by a new move route")
 	_forced_token = token
+	_forced_repeat = bool(route.get("repeat", false))
 	var ok: bool = await run_route(route, token)
 	if _forced_token == token:
 		_forced_token = null
+		_forced_repeat = false
 	return ok
 
 
 ## True while a forced route (Set Move Route) is playing.
 func is_route_forced() -> bool:
 	return _forced_token != null and not _forced_token.is_cancelled
+
+
+## True while a forced route plays that Wait for All Movement must wait for: a one-pass route.
+## Repeating routes are ignored, as RPG Maker's Proceed with Movement ignores looping routes.
+func has_waitable_forced_route() -> bool:
+	return is_route_forced() and not _forced_repeat
 
 
 ## Ends the forced route early (a page change under the VX Ace style rules does).

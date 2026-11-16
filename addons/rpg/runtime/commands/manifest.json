@@ -37,6 +37,8 @@
 		"transfer_player.gd",
 		"set_event_location.gd",
 		"move_route.gd",
+		"wait_for_movement.gd",
+		"halt_movement.gd",
 		"scroll_map.gd",
 		"toggle_followers.gd",
 		"fade_out.gd",
