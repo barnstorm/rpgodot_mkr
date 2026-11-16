@@ -275,6 +275,90 @@ func test_autorun_common_events_run_in_file_order() -> void:
 	env.rpg.data.common_events.erase("aa_ce")
 
 
+# --- spawn and despawn events (#66) -----------------------------------------------------------------
+
+
+func test_spawned_events_behave_like_placed_ones() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("last_spawn"), "chest_2", "the copy gets a fresh ID")
+	var copy: RPGEvent = env.game.map.get_event("chest_2")
+	assert_true(copy != null, "the copy lives on the map")
+	assert_eq(copy.cell, Vector2i(10, 7), "placed where the command said")
+	# It runs like a placed one: open it with the action button.
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(10, 8))
+	p.force_turn("up")
+	assert_true(p.check_action())
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 100, "the copy's commands ran")
+	assert_eq(copy.page_index, 1, "its own self switch A moved it to page 2")
+	assert_eq(env.game.map.get_event("chest").page_index, 0, "the template is untouched")
+
+
+func test_a_spawned_copy_comes_from_any_map_and_survives_map_changes_and_saves() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "blocker", "map": "house_inside", "position": [4, 4]},
+	], {"kind": "api", "id": "spawn2"})
+	assert_true(r.is_ok(), str(r))
+	# "blocker" is free on town (it lives on house_inside), so the copy keeps the template's ID.
+	var copy_id := str(env.rpg.state.spawned_events.get("town", [])[0].get("id", ""))
+	assert_eq(copy_id, "blocker", "the ID is only numbered when the plain one is taken")
+	var tr: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var back: RPGResult = await env.game.transfer("town", Vector2i(12, 8), "up", "none")
+	assert_true(back.is_ok(), str(back))
+	var copy: RPGEvent = env.game.map.get_event(copy_id)
+	assert_true(copy != null, "the copy came back with the map")
+	assert_eq(copy.cell, Vector2i(4, 4), "where it was spawned")
+	await env.settle()
+	assert_true(env.rpg.saves.save(20).is_ok(), "save")
+	var away: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(away.is_ok(), str(away))
+	var lr: RPGResult = await env.rpg.saves.load_slot(20)
+	assert_true(lr.is_ok(), str(lr))
+	assert_true(env.game.map.get_event(copy_id) != null, "the copy rides through a save")
+	if FileAccess.file_exists(env.rpg.saves.slot_path(20)):
+		DirAccess.remove_absolute(env.rpg.saves.slot_path(20))
+
+
+func test_despawn_removes_a_spawned_copy_for_good() -> void:
+	await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn3"})
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "despawn_event", "event": {"variable": "last_spawn"}},
+	], {"kind": "api", "id": "despawn"})
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.game.map.get_event("chest_2") == null, "gone from the map")
+	assert_true(env.rpg.state.spawned_events.get("town", []).is_empty(), "forgotten in the state")
+	# Not even a map change brings it back (a placed event would return, like after Erase Event).
+	var tr: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var back: RPGResult = await env.game.transfer("town", Vector2i(12, 8), "up", "none")
+	assert_true(back.is_ok(), str(back))
+	assert_true(env.game.map.get_event("chest_2") == null, "still gone after a round trip")
+	assert_true(env.game.map.get_event("chest") != null, "the template stays")
+
+
+func test_despawning_the_running_event_lets_it_finish() -> void:
+	await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn4"})
+	var copy: RPGEvent = env.game.map.get_event("chest_2")
+	# Its own commands remove it first, then keep going: the run must finish, not die mid-list.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "despawn_event", "event": "this"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 5},
+	], {"kind": "event", "map": "town", "event": "chest_2"}, copy)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 5, "the commands after the despawn ran")
+	assert_true(env.game.map.get_event("chest_2") == null, "the copy is gone")
+	assert_true(copy.erased, "the running one was hidden, not freed mid-run")
+
+
 func test_event_debug_info_explains_pages() -> void:
 	var door: Node = null
 	for ev in env.game.map.characters():
