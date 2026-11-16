@@ -117,6 +117,46 @@
 					"commands": []
 				}
 			]
+		},
+		{
+			"id": "zz_runs_first",
+			"name": "Runs first",
+			"position": [6, 0],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [{"kind": "switch", "id": "order_on"}],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {},
+					"priority": "below",
+					"trigger": "parallel",
+					"commands": [
+						{"type": "set_variable", "id": "order_var", "operation": "set", "value": 1},
+						{"type": "wait", "seconds": 0.05}
+					]
+				}
+			]
+		},
+		{
+			"id": "aa_runs_second",
+			"name": "Runs second",
+			"position": [7, 0],
+			"notes": "",
+			"pages": [
+				{
+					"conditions": [{"kind": "switch", "id": "order_on"}],
+					"graphic": null,
+					"movement": {"type": "fixed"},
+					"options": {},
+					"priority": "below",
+					"trigger": "parallel",
+					"commands": [
+						{"type": "set_variable", "id": "order_var", "operation": "set", "value": 2},
+						{"type": "wait", "seconds": 0.05}
+					]
+				}
+			]
 		}
 	]
 }

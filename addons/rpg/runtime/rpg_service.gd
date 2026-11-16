@@ -451,8 +451,9 @@ func _game_running() -> bool:
 	return current_map() != null
 
 
-## Autoruns: checked in a fixed order (map events by ID, then common events by ID) whenever the
-## main interpreter is idle. An autorun repeats while its conditions stay true.
+## Autoruns: checked in a fixed order (map events in file order, then common events in file
+## order — creation order, as in RPG Maker) whenever the main interpreter is idle. An autorun
+## repeats while its conditions stay true.
 func _check_autoruns() -> void:
 	if scheduler.is_main_busy() or not scheduler.input_locks.is_empty():
 		return
@@ -474,8 +475,8 @@ func _check_autoruns() -> void:
 			_note_autorun("%s/%s" % [m.map_id, ev.event_id], "map event '%s' on map '%s'" % [ev.event_id, m.map_id])
 			ev.start_autorun()
 			return
+	# common_events.json's order is the run order (#73): no sorting, as with map events.
 	var ids: Array = data.common_events.keys()
-	ids.sort()
 	for id in ids:
 		var ce: Dictionary = data.common_events[id]
 		if ce.get("trigger", "none") == "autorun" and _common_active(ce):
