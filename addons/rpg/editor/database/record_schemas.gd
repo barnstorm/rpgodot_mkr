@@ -598,14 +598,26 @@ static func _vehicle_fields() -> Array:
 	return out
 
 
-## Enemy action pattern conditions (RPGBattleCore._enemy_condition).
+## Enemy action pattern conditions (RPGBattleCore._enemy_condition). Keys are distinct per
+## field: one flat form serves every kind, so two fields can never share a key (the switch's
+## ref is "id" and the variable's is "variable"; the variable's operand is "against").
 static func _enemy_condition_fields() -> Array:
 	return [
-		{"key": "kind", "kind": "choice", "options": ["always", "turn", "hp", "switch"], "option_labels": ["Always", "Turn", "Own HP %", "Switch"], "default": "always", "label": "When"},
+		{"key": "kind", "kind": "choice", "options": ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"],
+			"option_labels": ["Always", "Turn", "Own HP %", "Own MP %", "Has a state", "Party level", "Monsters present", "Variable", "Switch"],
+			"default": "always", "label": "When"},
 		{"key": "n", "kind": "int", "default": 1, "min": 0, "max": 9999, "label": "Turn", "show_if": {"key": "kind", "equals": "turn"}},
 		{"key": "every", "kind": "int", "default": 0, "min": 0, "max": 9999, "label": "Then every (0 = once)", "show_if": {"key": "kind", "equals": "turn"}},
-		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": "<=", "label": "HP %", "show_if": {"key": "kind", "equals": "hp"}},
-		{"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent", "show_if": {"key": "kind", "equals": "hp"}},
+		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": "<=", "label": "Compare",
+			"show_if": {"key": "kind", "equals": ["hp", "mp", "party_level", "enemies_alive", "variable"]}},
+		{"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent", "show_if": {"key": "kind", "equals": ["hp", "mp"]}},
+		{"key": "state", "kind": "ref", "ref": "state", "default": "", "label": "State", "show_if": {"key": "kind", "equals": "state"}},
+		{"key": "pick", "kind": "choice", "options": ["average", "highest"], "option_labels": ["Average", "Highest"], "default": "average", "label": "Which",
+			"show_if": {"key": "kind", "equals": "party_level"}},
+		{"key": "level", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Level", "show_if": {"key": "kind", "equals": "party_level"}},
+		{"key": "count", "kind": "int", "default": 1, "min": 0, "max": 8, "label": "Monsters", "show_if": {"key": "kind", "equals": "enemies_alive"}},
+		{"key": "variable", "kind": "ref", "ref": "variable", "default": "", "label": "Variable", "show_if": {"key": "kind", "equals": "variable"}},
+		{"key": "against", "kind": "operand", "default": 0, "label": "Value", "show_if": {"key": "kind", "equals": "variable"}},
 		{"key": "id", "kind": "ref", "ref": "switch", "default": "", "label": "Switch", "show_if": {"key": "kind", "equals": "switch"}},
 		{"key": "value", "kind": "bool", "default": true, "label": "is ON", "show_if": {"key": "kind", "equals": "switch"}},
 	]

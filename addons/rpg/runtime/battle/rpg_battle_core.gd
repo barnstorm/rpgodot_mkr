@@ -122,7 +122,9 @@ var _turn_members: Array = []  ## timed: battlers active when this battle turn b
 var _extra := {}               ## timed: battler -> extra actions left ("action_times" traits)
 var _known_states := {}        ## hooks: battler -> state ids last reported
 var _defeated := {}            ## hooks: battlers reported as defeated (until revived)
+var _used_commands := {}       ## actor id -> [{kind, skill}] used this battle turn (command_used)
 var _forced := false          ## the result came from force_result()
+var _last_action_targets: Array = []  ## targets of the most recently executed action
 
 
 func _init(p_party: Array = [], p_troop: Dictionary = {}, p_rules: RPGRuleSystem = null, p_rng: RPGRandom = null) -> void:
@@ -174,6 +176,7 @@ func start() -> void:
 	_result = ""
 	_forced = false
 	_rewards = {}
+	_last_action_targets.clear()
 	_page_runs.clear()
 	_queue.clear()
 	_queue_built = false
@@ -216,6 +219,7 @@ func begin_turn() -> void:
 		return
 	turn += 1
 	phase = "input"
+	_used_commands.clear()   # command_used conditions only see the current battle turn
 	if is_timed():
 		# Timed battles: nobody's action or guard is reset here (that happens per battler, when
 		# its gauge fills); only the turn counter moves on.
@@ -295,6 +299,7 @@ func next_action() -> Dictionary:
 		if not tick.lines.is_empty():
 			tick.battler = b
 			result["ticks"] = [tick]
+		_note_command(b, result)
 		report_changes()
 		if _vitals() != before:
 			checkpoint.emit("after_change")
@@ -324,6 +329,7 @@ func end_turn() -> Array:
 	for b in all_battlers():
 		if not b.is_active():
 			continue
+		b.turns_taken += 1   # one battle turn = one of the battler's own turns (#11)
 		var r := rules.tick_states(b)
 		if not r.lines.is_empty():
 			r.battler = b
@@ -430,6 +436,9 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary) -> void:
 			res.lines.append_array(e.lines)
 		_:
 			res.lines.append(rules.term("wait", [b.name]))
+	# A guard targets its user; escape and wait target nothing. Neither leaves the last action's
+	# targets pointing at an enemy, so the branch check stops holding there.
+	_last_action_targets = [b] if kind == "guard" else []
 
 
 ## Reports what an action used and targeted to `last_used_recorder`. Only actions that really
@@ -576,6 +585,7 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			return
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
 	rules.pay_cost(b, action)
+	_last_action_targets = targets
 	_record_last_used(b, kind, u, targets)
 	match kind:
 		"attack":
@@ -871,6 +881,7 @@ func act(b: RPGBattler) -> Dictionary:
 		if not tick.lines.is_empty():
 			tick.battler = b
 			res["ticks"] = [tick]
+		_note_command(b, res)
 	res["skipped"] = skipped
 	if not res.has("ticks"):
 		res["ticks"] = []
@@ -883,6 +894,7 @@ func act(b: RPGBattler) -> Dictionary:
 	else:
 		_extra.erase(b)
 		if b.is_active():
+			b.turns_taken += 1   # one gauge fill = one of the battler's own turns (#11)
 			var t := rules.tick_states(b)
 			if not t.lines.is_empty():
 				t.battler = b
@@ -1000,6 +1012,8 @@ func _enemy_action_dict(a: Dictionary) -> Dictionary:
 	return {"kind": "skill", "skill": sk, "target": -1}
 
 
+## One action-pattern condition. Shared helpers (_turn_matches, _hp_percent, _mp_percent,
+## _compare, _switch_is) keep the semantics the same as the troop page conditions (#9).
 func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 	if not (c is Dictionary) or c.is_empty():
 		return true
@@ -1010,8 +1024,44 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
 		"hp":
 			return _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
+		"mp":
+			if rules.magic_resource() == "":
+				return false
+			return _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+		"state":
+			return e.has_state(str(c.get("state", "")))
+		"party_level":
+			var levels := []
+			for a in party:
+				if a.is_active():
+					levels.append(float(a.level))
+			if levels.is_empty():
+				return false
+			var lv := levels.max()
+			if str(c.get("pick", "average")) != "highest":
+				lv = levels.reduce(func(s, x): return s + x, 0.0) / levels.size()
+			return _compare(lv, str(c.get("op", ">=")), float(c.get("level", 1)))
+		"enemies_alive":
+			var alive := 0
+			for foe in enemies:
+				if foe.is_active():
+					alive += 1
+			return _compare(float(alive), str(c.get("op", ">=")), float(c.get("count", 1)))
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
+		"variable":
+			# Same variable semantics as page conditions, through condition_reader. The editor
+			# stores the ref under "variable" (the condition's "id" is the switch's key), so both
+			# spellings are accepted here; "against" is the editor's name for the operand.
+			if condition_reader.is_valid():
+				var cc := {
+					"kind": "variable",
+					"id": str(c.get("variable", c.get("id", ""))),
+					"op": str(c.get("op", "==")),
+					"value": c.get("against", c.get("value", 0)),
+				}
+				return bool(condition_reader.call(cc))
+			return false
 	return false
 
 
@@ -1024,9 +1074,15 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 ##        priority, commands, at?: [checkpoint kinds]}
 ## Conditions (all must hold; a page with no conditions never runs):
 ##   {kind: "turn", n, every}            turn == n, or turn >= n and (turn - n) % every == 0
-##   {kind: "enemy_hp", index, op, percent}
-##   {kind: "actor_hp", id, op, percent}
+##   {kind: "enemy_hp"|"enemy_mp", index, op, percent}
+##   {kind: "actor_hp"|"actor_mp", id, op, percent}
+##   {kind: "enemy_turns", index, op, n}   the enemy's own turns (taken or lost)
+##   {kind: "actor_turns", id, op, n}      the actor's own turns (taken or lost)
+##   {kind: "command_used", id, command, skill?}   the actor used this command this battle turn
 ##   {kind: "switch", id, value?: true}
+##   {kind: "turn_end"}                 only true at the end_of_turn checkpoint
+## Other kinds (variable, item, gold, extension kinds marked "battle": true) are answered by
+## condition_reader, which the battle scene wires to rpg.state.check_condition.
 ## With `consume` (default) the returned pages are recorded as run, so their span is honoured.
 func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Array:
 	var pages: Array = troop.get("pages", [])
@@ -1043,7 +1099,7 @@ func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Arr
 			"once_per_turn":
 				if int(_page_runs.get(pid, -1)) == turn:
 					continue
-		if not page_conditions_met(p):
+		if not page_conditions_met(p, checkpoint_kind):
 			continue
 		found.append({"page": p, "i": i, "priority": int(p.get("priority", 0)), "id": pid})
 	found.sort_custom(func(x, y):
@@ -1062,17 +1118,17 @@ static func page_id(p: Dictionary, i: int) -> String:
 	return str(p.get("id", "page_%d" % i))
 
 
-func page_conditions_met(p: Dictionary) -> bool:
+func page_conditions_met(p: Dictionary, checkpoint_kind := "") -> bool:
 	var conds: Array = p.get("conditions", [])
 	if conds.is_empty():
 		return false
 	for c in conds:
-		if not _page_condition(c):
+		if not _page_condition(c, checkpoint_kind):
 			return false
 	return true
 
 
-func _page_condition(c: Dictionary) -> bool:
+func _page_condition(c: Dictionary, checkpoint_kind := "") -> bool:
 	match str(c.get("kind", "")):
 		"turn":
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
@@ -1082,14 +1138,51 @@ func _page_condition(c: Dictionary) -> bool:
 				if e.index == idx:
 					return not e.hidden and _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
 			return false
+		"enemy_mp":
+			if rules.magic_resource() == "":
+				return false
+			var mp_idx := int(c.get("index", 0))
+			for e in enemies:
+				if e.index == mp_idx:
+					return not e.hidden and _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+			return false
 		"actor_hp":
 			for a in party:
 				if a.id == str(c.get("id", "")):
 					return _compare(_hp_percent(a), str(c.get("op", "<=")), float(c.get("percent", 100)))
 			return false
+		"actor_mp":
+			if rules.magic_resource() == "":
+				return false
+			for mp_a in party:
+				if mp_a.id == str(c.get("id", "")):
+					return _compare(_mp_percent(mp_a), str(c.get("op", "<=")), float(c.get("percent", 50)))
+			return false
+		"enemy_turns":
+			var t_idx := int(c.get("index", 0))
+			for e in enemies:
+				if e.index == t_idx:
+					return not e.hidden and _compare(float(e.turns_taken), str(c.get("op", ">=")), float(c.get("n", 1)))
+			return false
+		"actor_turns":
+			for t_a in party:
+				if t_a.id == str(c.get("id", "")):
+					return _compare(float(t_a.turns_taken), str(c.get("op", ">=")), float(c.get("n", 1)))
+			return false
+		"command_used":
+			for u in _used_commands.get(str(c.get("id", "")), []):
+				if str(u.get("kind", "")) != str(c.get("command", "")):
+					continue
+				var want := str(c.get("skill", ""))
+				if want == "" or str(u.get("skill", "")) == want:
+					return true
+			return false
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
-	# Other kinds (extension kinds marked "battle": true): the battle scene asks the game state.
+		"turn_end":
+			return checkpoint_kind == "end_of_turn"
+	# Other kinds (variable, item, gold, extension kinds marked "battle": true): the battle
+	# scene asks the game state through condition_reader.
 	if condition_reader.is_valid():
 		return bool(condition_reader.call(c))
 	push_warning("Battle page condition kind '%s' is not supported" % str(c.get("kind", "")))
@@ -1110,10 +1203,57 @@ func _hp_percent(b: RPGBattler) -> float:
 	return 100.0 * float(b.get_resource(res)) / float(m)
 
 
+## MP percent for the enemy_mp/actor_mp conditions; only called when magic_resource() != ""
+## (a ruleset with no spell resource never matches an MP condition).
+func _mp_percent(b: RPGBattler) -> float:
+	var res := rules.magic_resource()
+	var m := rules.max_resource(b, res)
+	if m <= 0:
+		return 0.0
+	return 100.0 * float(b.get_resource(res)) / float(m)
+
+
+## command_used conditions: remember the command an actor used this battle turn (a cancelled
+## action counts as none). skill is only set for skill commands.
+func _note_command(b: RPGBattler, res: Dictionary) -> void:
+	if not b.is_actor() or bool(res.get("cancelled", false)):
+		return
+	var used := {"kind": str(res.get("kind", "")), "skill": str(res.action.get("skill", ""))}
+	if not _used_commands.has(b.id):
+		_used_commands[b.id] = []
+	(_used_commands[b.id] as Array).append(used)
+
+
 func _switch_is(id: String, value: bool) -> bool:
 	if not switch_reader.is_valid():
 		return false
 	return bool(switch_reader.call(id)) == value
+
+
+## A Conditional Branch battle check (RM2000/2003): whether an actor in the party or an enemy
+## by its 0-based member index can act (present and not held back by a state), and whether an
+## enemy is the target of the action that just ran (true only for a single-enemy action).
+## Battlers that are not in the fight give false. The game state routes these kinds here
+## through the battle facade while a battle runs.
+func branch_check(kind: String, cond: Dictionary) -> bool:
+	match kind:
+		"actor_can_act":
+			for a in party:
+				if a.id == str(cond.get("id", "")):
+					return a.is_active() and rules.can_act(a)
+			return false
+		"enemy_can_act", "enemy_is_target":
+			var e: RPGBattler = null
+			for x in enemies:
+				if x.index == int(cond.get("index", 0)):
+					e = x
+					break
+			if e == null:
+				return false
+			if kind == "enemy_can_act":
+				return e.is_active() and rules.can_act(e)
+			return _last_action_targets.size() == 1 and _last_action_targets[0] == e
+	return false
 
 
 static func _compare(a: float, op: String, b: float) -> bool:

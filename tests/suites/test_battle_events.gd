@@ -287,6 +287,64 @@ func test_change_party_battle_temp_member_leaves_afterwards() -> void:
 	assert_eq(env.rpg.state.party, ["hero"], "but leaves the party when the battle ends")
 
 
+# --- troop page conditions, the RM2003 set (#11) --------------------------------------------------------
+
+
+## A variable condition on a troop page: the scene hands it to rpg.state.check_condition, and the
+## page runs mid-battle once the variable is set.
+func test_troop_page_variable_condition_runs_mid_battle() -> void:
+	_sample_env()
+	var page := {"id": "hook", "conditions": [{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}],
+		"span": "once_per_battle", "commands": [{"type": "set_switch", "id": "rain", "value": "on"}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_false(env.rpg.get_switch("rain"), "the page has not run yet")
+	await env.rpg.run_commands([{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 3}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
+
+
+# --- Conditional Branch battle checks (#50) ------------------------------------------------------------
+
+
+## Runs one Conditional Branch in the running battle; returns true (then) or false (else).
+func _branch(cond: Dictionary) -> bool:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "if", "condition": cond, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 0}]}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "the branch ran: %s" % str(r))
+	return int(env.rpg.state.get_variable("fish_caught")) == 1
+
+
+func test_conditional_branch_battle_checks_in_events() -> void:
+	_sample_env()
+	# A troop page runs an `if` with a page-style check: branches read the running battle too.
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 100}, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": []}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_eq(int(env.rpg.state.get_variable("fish_caught")), 1, "the page's if read the enemy's HP")
+	assert_true(await _branch({"kind": "actor_can_act", "id": "hero"}), "the hero can act")
+	assert_true(await _branch({"kind": "enemy_can_act", "index": 0}), "so can the first slime")
+	assert_true(await _branch({"kind": "turn", "n": 1}), "and it is turn 1")
+	assert_false(await _branch({"kind": "actor_can_act", "id": "mira"}), "an actor outside the battle cannot act")
+	assert_false(await _branch({"kind": "enemy_can_act", "index": 1}), "nor can the hidden member")
+	assert_false(await _branch({"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 50}), "the slime is above half HP")
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "no action has run, nothing is the target")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+	# Outside a battle the checks are quietly false (with a warning logged), not an error.
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "outside a battle the check is false")
+	assert_true(env.rpg.state.errors.size() > 0, "the misuse was reported")
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 
@@ -360,3 +418,84 @@ func test_battle_event_reads_enemy_game_data() -> void:
 	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_lose": true, "can_escape": false}], {"kind": "api", "id": "probe"})
 	assert_true(r.is_ok(), str(r))
 	assert_eq(int(env.rpg.get_variable("fish_caught")), 40, "the first slime's HP read from inside the battle")
+
+
+func test_validator_checks_troop_condition_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var good := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_mp", "index": 0, "op": "<=", "percent": 25},
+		{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2},
+		{"kind": "actor_mp", "id": "hero", "op": "<=", "percent": 50},
+		{"kind": "actor_turns", "id": "hero", "op": "==", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "skill", "skill": "fire"},
+		{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3},
+	], "commands": []}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [good]}, reg, "troops.json")
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_turns", "index": 0, "op": "~=", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "dance"},
+		{"kind": "command_used", "id": "mira", "command": "skill"},
+		{"kind": "actor_mp", "id": "", "op": "<=", "percent": 50},
+	], "commands": []}])
+	var msgs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json").map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown battle command 'dance'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("needs the skill")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+	# Battle-only kinds do not work on map pages.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"conditions": [{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2}], "commands": []}]}
+	var p3 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_true(p3.any(func(p): return str(p.message).contains("Unknown condition kind 'enemy_turns'")), str(p3))
+
+
+func test_validator_checks_enemy_action_conditions() -> void:
+	_sample_env()
+	var good := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "<=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state", "state": "poison"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_level", "pick": "highest", "op": ">=", "level": 5}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "enemies_alive", "op": "<=", "count": 1}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}},
+	]}
+	var probs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [good]})
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_loyalty"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "~=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "op": ">=", "against": "sometimes"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "switch"}},
+	]}
+	var msgs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [bad]}).map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown condition kind 'party_loyalty'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid state")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid variable")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+
+
+func test_validator_battle_branch_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	# Inside a battle event (or a common event) the battle checks are fine.
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "if", "condition": {"kind": "actor_can_act", "id": "hero"}, "then": [], "else": [
+			{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}])
+	assert_eq(RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json").size(), 0, "troop page commands may use them")
+	var ce := {"id": "probe", "trigger": "none", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_can_act", "index": 0}, "then": [], "else": []}]}
+	assert_eq(RPGValidator.structure("common_events", {"schema_version": 1, "common_events": [ce]}, reg, "common_events.json").size(), 0, "so may common events")
+	# On a map they only ever evaluate false: warned, not an error.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}
+	var probs := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_eq(probs.size(), 1, str(probs))
+	assert_eq(probs[0].severity, "warning")
+	# And they are not page conditions, even on a battle page.
+	var bad := _later_troop([{"id": "p", "conditions": [{"kind": "actor_can_act", "id": "hero"}], "commands": []}])
+	var p2 := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json")
+	assert_eq(p2.size(), 1, "a branch-only kind is not a page condition")
+	assert_eq(p2[0].severity, "error")

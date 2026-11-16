@@ -480,6 +480,44 @@ func test_atb_turn_counter_for_troop_pages() -> void:
 	assert_eq(every_turns.slice(0, 3), [1, 2, 3], "an 'every turn' page runs once per turn")
 
 
+func test_turn_end_pages_in_timed_battles() -> void:
+	var troop := {"id": "t", "can_escape": true, "members": [
+		{"enemy": "slime", "position": [100, 120]}, {"enemy": "bat", "position": [200, 120]}],
+		"pages": [
+			{"id": "ends", "conditions": [{"kind": "turn_end"}], "span": "every_check", "commands": []},
+			{"id": "first", "conditions": [{"kind": "turn_end"}], "span": "once_per_battle", "commands": []}]}
+	for sys in ["atb", "ctb"]:
+		var core := _core(["hero", "mira"], troop, sys, 8)
+		var end_turns := []
+		var first_turns := []
+		core.checkpoint.connect(func(kind: String):
+			for p in core.eligible_battle_pages(kind):
+				if p.id == "ends":
+					end_turns.append(core.turn)
+				else:
+					first_turns.append(core.turn))
+		core.begin_turn()
+		var guard := 0
+		var turns_seen := 0
+		while core.battle_over() == "" and core.turn <= 3 and guard < 2000:
+			guard += 1
+			var b := core.next_auto_ready()
+			if b == null:
+				var a := core.next_input_actor()
+				if a != null:
+					core.set_action(core.party.find(a), {"kind": "guard"})
+					continue
+				core.atb_advance_to_next()
+				continue
+			var r := core.act(b)
+			if r.turn_end:
+				turns_seen += 1
+				core.begin_turn()
+		assert_eq(end_turns.slice(0, 3), [1, 2, 3], "%s: a turn end page runs when each turn ends" % sys)
+		assert_eq(first_turns, [1], "%s: a once-per-battle turn end page runs only after the first turn" % sys)
+		assert_true(turns_seen >= 3, "%s: several turns pass (%d)" % [sys, turns_seen])
+
+
 func test_ctb_turn_order_is_shown_and_kept() -> void:
 	var core := _core(["hero", "mira"], "bats", "ctb", 21)
 	core.begin_turn()

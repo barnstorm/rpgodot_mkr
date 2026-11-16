@@ -13,6 +13,7 @@ const QUICK_EVENTS := "res://addons/rpg/core/rpg_quick_events.gd"
 const PLAYTEST_FILE := "user://rpg_playtest.json"
 const RPGMakerView := preload("res://addons/rpg/editor/rpg_maker_view.gd")
 const PopupPlace := preload("res://addons/rpg/editor/rpg_popup_place.gd")
+const NewProjectDialog := preload("res://addons/rpg/editor/project/rpg_new_project_dialog.gd")
 const GAME_SCENE := "res://addons/rpg/runtime/game.tscn"
 const TOOL_TABS := ["Event search", "Sound test", "Resources", "Extensions", "Deploy"]
 
@@ -392,7 +393,7 @@ func _menu_command(id: int) -> void:
 	match id:
 		M_NEW_PROJECT:
 			if data != null and FileAccess.file_exists(data.root.path_join("project.json")):
-				status.text = "This Godot project already has an RPG project in %s. Make a new Godot project and enable RPG Kit there to start another." % data.root
+				_new_project_dialog()
 			else:
 				_show_welcome(true)
 		M_SAVE: save_current()
@@ -421,6 +422,20 @@ func _menu_command(id: int) -> void:
 		M_TUTORIALS_WEB:
 			OS.shell_open("https://www.rpgmakerweb.com/tutorials")
 			status.text = "Opened rpgmakerweb.com's tutorials in your web browser."
+
+
+func _new_project_dialog() -> void:
+	var dlg := NewProjectDialog.new()
+	add_child(dlg)
+	dlg.project_created.connect(func(folder: String, open_editor: bool):
+		status.text = "Created %s. Open its project.godot to edit your new game." % folder
+		if open_editor:
+			var pid := OS.create_process(OS.get_executable_path(), PackedStringArray(["--editor", "--path", folder]))
+			if pid == -1:
+				status.text = "Created %s, but couldn't start Godot. Open its project.godot to edit your new game." % folder)
+	dlg.popup_centered()
+	dlg.name_edit.grab_focus()
+	dlg.name_edit.select_all()
 
 
 func set_layer_mode(i: int) -> void:
