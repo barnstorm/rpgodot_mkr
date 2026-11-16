@@ -2,13 +2,14 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 79 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 80 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
 | Command | ID | Fields |
 | --- | --- | --- |
 | **Input Number** | `input_number` | Store in, Digits |
+| **Select Item** | `select_item` | Store in, Which items |
 | **Show Balloon Icon** | `show_balloon` | Character, Balloon, Wait until done |
 | **Show Choices** | `show_choices` | Choices, Cursor starts on, When cancelled, On cancel |
 | **Show Scrolling Text** | `show_scrolling_text` | Text, Speed, No fast forward |

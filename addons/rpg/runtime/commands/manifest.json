@@ -11,6 +11,7 @@
 		"show_text.gd",
 		"show_choices.gd",
 		"input_number.gd",
+		"select_item.gd",
 		"show_scrolling_text.gd",
 		"show_balloon.gd",
 		"if.gd",

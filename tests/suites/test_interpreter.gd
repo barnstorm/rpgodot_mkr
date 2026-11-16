@@ -540,6 +540,69 @@ func test_self_switch_reset_modes() -> void:
 		{"type": "set_self_switch", "mode": "reset_event", "event": "blocker", "map": "house_inside"},
 	], {"kind": "api", "id": "rmode4"}, chest)
 	assert_true(r4.is_ok(), str(r4))
+
+
+# --- Select Item (#61) -------------------------------------------------------------------------
+
+func _grant_items() -> void:
+	env.rpg.data.db["items"]["by_id"] = {
+		"potion": {"id": "potion", "name": "Potion", "key_item": false},
+		"antidote": {"id": "antidote", "name": "Antidote", "key_item": false},
+		"house_key": {"id": "house_key", "name": "House Key", "key_item": true},
+	}
+	env.rpg.state.change_items("potion", "increase", 2)
+	env.rpg.state.change_items("antidote", "increase", 1)
+	env.rpg.state.change_items("house_key", "increase", 1)
+
+
+func test_select_item_stores_the_picked_id() -> void:
+	_grant_items()
+	var box = env.rpg.ui.message_box
+	# Key items only: the one entry is the house key.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "select_item", "variable": "hero_name", "category": "key"},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_variable("hero_name"), "house_key", "the picked id lands in the text variable")
+	assert_false(box.is_open(), "the picker closed")
+	# All items, auto pick index 1: the antidote.
+	box.auto_item = 1
+	await env.rpg.run_commands([{"type": "select_item", "variable": "hero_name", "category": "all"}])
+	assert_eq(env.rpg.state.get_variable("hero_name"), "antidote")
+	box.auto_item = 0
+	# Regular items hides the key item: index 0 is the potion.
+	await env.rpg.run_commands([{"type": "select_item", "variable": "hero_name", "category": "regular"}])
+	assert_eq(env.rpg.state.get_variable("hero_name"), "potion")
+	# A missing category field means key items (the descriptor default).
+	await env.rpg.run_commands([{"type": "select_item", "variable": "hero_name"}])
+	assert_eq(env.rpg.state.get_variable("hero_name"), "house_key")
+
+
+func test_select_item_cancel_and_type_rules() -> void:
+	_grant_items()
+	var box = env.rpg.ui.message_box
+	# Cancel stores "" in a text variable.
+	box.auto_item = -1
+	await env.rpg.run_commands([{"type": "select_item", "variable": "hero_name"}])
+	assert_eq(env.rpg.state.get_variable("hero_name"), "")
+	# Cancel stores 0 in an int variable.
+	await env.rpg.run_commands([{"type": "select_item", "variable": "counter"}])
+	assert_eq(env.rpg.state.get_variable("counter"), 0)
+	# Picking into a number variable refuses: item ids are names.
+	box.auto_item = 0
+	var r: RPGResult = await env.rpg.run_commands([{"type": "select_item", "variable": "counter"}])
+	assert_true(r.is_error(), str(r))
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "nothing stored")
+
+
+func test_select_item_empty_list_only_cancels() -> void:
+	# No items at all: the window opens, picking is impossible, cancel stores 0.
+	var box = env.rpg.ui.message_box
+	box.auto_item = -1
+	var r: RPGResult = await env.rpg.run_commands([{"type": "select_item", "variable": "ticks"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.state.get_variable("ticks"), 0)
+	box.auto_item = 0
 	assert_false(env.rpg.state.get_self_switch("house_inside", "blocker", "A"), "remote event reset")
 
 
