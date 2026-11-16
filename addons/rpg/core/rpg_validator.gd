@@ -1407,6 +1407,14 @@ static func full(data: RPGProjectData, registry: RPGCommandRegistry, files: Dict
 						out.append(problem("warning", path, str(ce.get("id", "")), "switch", "common_events/%d/switch" % i,
 							"Common event '%s' runs as %s but has no condition switch, so it always runs." % [ce.get("id", ""), ce.get("trigger")],
 							"Pick a condition switch."))
+	# VX Ace style rules: Set Vehicle Location cannot move the vehicle the party rides (it stays
+	# with the player, as in MV); the classic rules move the party with it (RM2000/2003).
+	if str(data.project.get("rules", "classic")) == "vx_ace":
+		for c in acc.commands:
+			if str(c.cmd.get("type", "")) == "set_vehicle_location":
+				out.append(problem("warning", c.file, c.record, "vehicle", c.path + "/vehicle",
+					"Set Vehicle Location cannot move the %s while the party rides it under these rules; it stays with the player." % str(c.cmd.get("vehicle", "boat")),
+					"The classic rules move the party with it; otherwise make the party get off first."))
 	out.append_array(database_values(files))
 	out.append_array(image_map_problems(files, data))
 	return out
