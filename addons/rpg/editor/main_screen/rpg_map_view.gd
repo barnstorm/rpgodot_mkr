@@ -820,7 +820,7 @@ static func default_page() -> Dictionary:
 		"conditions": [],
 		"graphic": null,
 		"movement": {"type": "fixed", "speed": 3, "frequency": 3},
-		"options": {"walk_anim": true, "step_anim": false, "direction_fix": false, "through": false},
+		"options": {"walk_anim": true, "step_anim": false, "direction_fix": false, "through": false, "forbid_overlap": false},
 		"priority": "same",
 		"trigger": "action_button",
 		"commands": [],

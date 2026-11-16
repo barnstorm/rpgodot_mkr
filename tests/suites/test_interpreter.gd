@@ -935,6 +935,93 @@ func test_movement_frequency_paces_the_beats() -> void:
 	assert_eq(held, 60, "frequency 1 paces the beats slowly")
 
 
+# --- Forbid Event Overlap (#64) ------------------------------------------------------------------
+
+## Restages an event's page 0 (its priority and options) and re-applies it in place.
+func _stage_page(ev: RPGEvent, priority: String, options: Dictionary) -> void:
+	ev.data["pages"][0]["priority"] = priority
+	ev.data["pages"][0]["options"] = options
+	ev.apply_page(0)
+
+
+## Places floor_plate, the fixture's below-priority event, somewhere out of the way.
+func _place_plate(at: Vector2i) -> RPGEvent:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "floor_plate", "position": [at.x, at.y]},
+	])
+	assert_true(r.is_ok(), str(r))
+	return env.game.map.get_event("floor_plate")
+
+
+func test_forbid_overlap_keeps_two_below_events_apart() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "the same-layer event blocks")
+	assert_false(mover.step(Vector2i.LEFT), "the step is refused")
+	assert_eq(mover.cell, Vector2i(7, 6), "the mover stays put")
+
+
+func test_below_events_share_a_cell_without_the_option() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {})
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "below events overlap by default")
+	assert_true(mover.step(Vector2i.LEFT), "the step is taken")
+	while mover.moving:
+		await frames(1)
+	assert_eq(mover.cell, Vector2i(6, 6), "both events end up on the same cell")
+	assert_eq(target.cell, Vector2i(6, 6))
+
+
+func test_walk_through_overrides_forbid_overlap() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true, "through": true})
+	assert_true(mover.through, "the page option applied")
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "through ignores the other event")
+
+
+func test_the_player_does_not_block_a_below_event_with_forbid_overlap() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	# The player starts on (12, 8).
+	var mover: RPGEvent = await _place_chest(Vector2i(11, 8))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.RIGHT), "", "only events block, not the player")
+
+
+func test_forbid_overlap_only_blocks_the_movers_own_layer() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	_stage_page(target, "above", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "an above event is another layer")
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "a below event is the mover's layer")
+	# Same-priority events have always blocked each other; the option changes nothing there.
+	_stage_page(mover, "same", {})
+	_stage_page(target, "same", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "same-priority events always block")
+
+
+func test_forbid_overlap_follows_the_active_page() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(7, 6))
+	_stage_page(ev, "below", {"forbid_overlap": true})
+	assert_true(ev.forbid_overlap, "page 0 carries the option")
+	_stage_page(ev, "below", {})
+	assert_false(ev.forbid_overlap, "a page without it clears the flag")
+	ev.apply_page(-1)
+	assert_false(ev.forbid_overlap, "no active page clears the flag")
+	_stage_page(ev, "below", {"forbid_overlap": true})
+	assert_true(ev.forbid_overlap, "the option applies again on the next page change")
+
+
 # --- Forced move routes (#71) -------------------------------------------------------------------
 
 func test_a_forced_route_takes_over_a_random_walk() -> void:

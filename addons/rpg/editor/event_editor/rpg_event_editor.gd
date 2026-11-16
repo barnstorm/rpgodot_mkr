@@ -45,6 +45,7 @@ const PAGE_FIELDS := [
 		{"key": "step_anim", "kind": "bool", "default": false, "label": "Stepping animation"},
 		{"key": "direction_fix", "kind": "bool", "default": false, "label": "Direction fix"},
 		{"key": "through", "kind": "bool", "default": false, "label": "Walk through"},
+		{"key": "forbid_overlap", "kind": "bool", "default": false, "label": "Forbid event overlap"},
 	]},
 	{"key": "priority", "kind": "choice", "options": ["below", "same", "above"], "option_labels": ["Below characters", "Same as characters", "Above characters"], "default": "same", "label": "Priority"},
 	{"key": "trigger", "kind": "choice", "options": ["action_button", "player_touch", "event_touch", "autorun", "parallel"], "option_labels": ["Action button", "Player touch", "Event touch", "Autorun", "Parallel"], "default": "action_button", "label": "Trigger"},

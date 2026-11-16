@@ -100,6 +100,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"options": {"type": "object", "properties": {
 				"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 				"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"},
+				"forbid_overlap": {"type": "boolean"},
 			}},
 			"priority": {"enum": ["below", "same", "above"]},
 			"trigger": {"enum": ["action_button", "player_touch", "event_touch", "autorun", "parallel"]},

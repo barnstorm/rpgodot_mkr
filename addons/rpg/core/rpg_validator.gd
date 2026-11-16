@@ -314,7 +314,7 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 	if not (opts is Dictionary):
 		out.append(problem("error", file, rec, "options", pp + "/options", "Options must be an object.", ""))
 	else:
-		for k in ["walk_anim", "step_anim", "direction_fix", "through"]:
+		for k in ["walk_anim", "step_anim", "direction_fix", "through", "forbid_overlap"]:
 			if opts.has(k) and typeof(opts[k]) != TYPE_BOOL:
 				out.append(problem("error", file, rec, "options", "%s/options/%s" % [pp, k], "Option '%s' must be true or false." % k, ""))
 	if not PAGE_PRIORITIES.has(str(pg.get("priority", "same"))):
