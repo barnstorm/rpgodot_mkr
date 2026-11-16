@@ -262,6 +262,17 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					"help": "Turn based is the 2000/VX Ace battle. ATB is 2003 / MZ Time Progress. CTB shows the coming turn order on screen."},
 				{"key": "atb_mode", "kind": "choice", "options": ["wait", "active"], "option_labels": ["Wait (time stops while choosing)", "Active (time keeps running)"], "default": "wait", "label": "ATB mode",
 					"show_if": {"key": "battle_system", "equals": "atb"}},
+				_obj("battle_start_odds", "Battle start chances", [
+					_i("initiative", "Initiative %", 0, 0, 100),
+					_i("back_attack", "Back attack %", 0, 0, 100),
+					_i("surround", "Surround %", 0, 0, 100),
+					_i("pincer", "Pincer %", 0, 0, 100),
+				]).merged({"help": "Chance of each RM2003 battle start on a random encounter; the chances add up and the rest are normal starts. All 0: the MV preemptive/surprise roll instead. A map's encounters can override these (Map Properties)."}),
+				{"key": "defeat_event", "kind": "ref", "ref": "common_event", "default": "", "label": "Defeat handler",
+					"help": "A common event that takes the place of Game Over when the party loses (2003): an inn, a 'you blacked out and crawled back' scene. Blank: Game Over as usual."},
+				{"key": "defeat_transfer", "kind": "location", "default": null, "label": "Defeat transfer",
+					"help": "Where the party is taken before the defeat handler runs. Blank: they stay where they fell."},
+				{"key": "defeat_facing", "kind": "facing", "default": "keep", "label": "Defeat facing"},
 			]
 	if type in ["switches", "variables"]:
 		return f

@@ -75,8 +75,14 @@ var battle_system := "turn"
 ## ATB only: "wait" (time stops while a command window is open) or "active". The core only
 ## records it; the scene decides when to call atb_advance().
 var atb_mode := "wait"
-## "normal", "preemptive" (the party gets the first move) or "surprise" (the enemies do).
+## "normal", "preemptive" (the party gets the first move) or "surprise" (the enemies do), or the
+## RPG Maker 2003 battle starts (#39): "initiative" and "surround" (party gauges full, enemies
+## empty), "back_attack" and "pincer" (enemy gauges full, party empty; a pincer also blocks
+## escaping). The scene adds the formations: a back attack mirrors the enemies, a surround packs
+## them around the middle, a pincer splits them half and half.
 var advantage := "normal"
+## The 2003 battle starts, in the order their chances are rolled (encounter_condition).
+const START_CONDITIONS := ["initiative", "back_attack", "surround", "pincer"]
 ## Timed battles: RPGBattler -> gauge 0..1.
 var gauges := {}
 ## Timed battles: battlers whose gauge is full, in the order they filled.
@@ -182,6 +188,9 @@ func start() -> void:
 	for b in all_battlers():
 		rules.start_battle(b)
 	can_escape = bool(troop.get("can_escape", true))
+	# A pincer attack cannot be escaped (2003); Force Flee still ends the fight, by design.
+	if advantage == "pincer":
+		can_escape = false
 	turn = 0
 	escape_attempts = 0
 	phase = "idle"
@@ -250,7 +259,7 @@ func begin_turn() -> void:
 ## Party indices that need an action this turn.
 func inputs_needed() -> Array:
 	var out := []
-	if is_timed() or (turn == 1 and advantage == "surprise"):
+	if is_timed() or (turn == 1 and advantage in ["surprise", "back_attack", "pincer"]):
 		return out
 	for i in party.size():
 		var b: RPGBattler = party[i]
@@ -369,9 +378,11 @@ func attempt_escape() -> Dictionary:
 
 
 func _build_queue() -> void:
-	# A preemptive strike or a surprise attack: the other side does nothing on turn 1.
-	var enemies_act := not (turn == 1 and advantage == "preemptive")
-	var party_acts := not (turn == 1 and advantage == "surprise")
+	# A preemptive strike or a surprise attack: the other side does nothing on turn 1. The 2003
+	# starts join them: initiative / surround play like a preemptive strike, a back attack and a
+	# pincer like a surprise attack.
+	var enemies_act := not (turn == 1 and advantage in ["preemptive", "initiative", "surround"])
+	var party_acts := not (turn == 1 and advantage in ["surprise", "back_attack", "pincer"])
 	if enemies_act:
 		for e in enemies:
 			if e.is_active() and rules.can_act(e):
@@ -683,6 +694,20 @@ static func encounter_advantage(p_rules: RPGRuleSystem, party_battlers: Array, t
 	return "normal"
 
 
+## The 2003 battle starts (#39): "initiative", "back_attack", "surround", "pincer" or "normal"
+## for a roll in [0, 1) and the chances (0..1, in START_CONDITIONS order) a map or the System
+## sets. The chances share the one roll, each covering what came before it, so together they
+## cannot pass 100%. When they are all zero this returns "normal" and the caller falls back to
+## the preemptive / surprise roll (encounter_advantage).
+static func encounter_condition(odds: Dictionary, roll: float) -> String:
+	var used := 0.0
+	for k in START_CONDITIONS:
+		used += clampf(float(odds.get(k, 0)), 0.0, 1.0)
+		if roll < used:
+			return k
+	return "normal"
+
+
 ## {preemptive, surprise} chances (0..1) for encounter_advantage.
 static func encounter_rates(p_rules: RPGRuleSystem, party_battlers: Array, troop_rec: Dictionary) -> Dictionary:
 	var party_agi := _average_speed(p_rules, party_battlers.filter(func(b): return b is RPGBattler and b.is_alive()))
@@ -707,8 +732,9 @@ static func _average_speed(p_rules: RPGRuleSystem, list: Array) -> float:
 	return total / list.size()
 
 
-## Gauges at battle start: ATB_START plus a small random offset; a preemptive strike fills the
-## party's gauges (the enemies start empty), a surprise attack the enemies'.
+## Gauges at battle start: ATB_START plus a small random offset; a preemptive strike, initiative
+## or surround fills the party's gauges (the enemies start empty), a surprise attack, back attack
+## or pincer the enemies'.
 func _atb_setup() -> void:
 	var total := 0.0
 	var n := 0
@@ -721,9 +747,9 @@ func _atb_setup() -> void:
 	var filled := []
 	for b in all_battlers():
 		var g := ATB_START + rng.randf() * ATB_START_SPREAD
-		if advantage == "preemptive":
+		if advantage in ["preemptive", "initiative", "surround"]:
 			g = 1.0 if b.is_actor() else 0.0
-		elif advantage == "surprise":
+		elif advantage in ["surprise", "back_attack", "pincer"]:
 			g = 1.0 if b.is_enemy() else 0.0
 		gauges[b] = g if b.is_alive() else 0.0
 		if g >= 1.0 and b.is_active():

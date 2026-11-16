@@ -16,7 +16,7 @@ static func descriptor() -> Dictionary:
 			{"key": "can_lose", "kind": "bool", "default": false, "label": "Continue when lost"},
 			{"key": "scene", "kind": "resource", "res": "scene", "default": "", "label": "Battle scene (blank = default)"},
 			{"key": "background", "kind": "resource", "res": "backdrop", "default": "", "label": "Background (blank = map's)"},
-			{"key": "advantage", "kind": "choice", "options": ["normal", "preemptive", "surprise"], "option_labels": ["Normal", "Preemptive (party first)", "Surprise (enemies first)"], "default": "normal", "label": "Advantage"},
+			{"key": "advantage", "kind": "choice", "options": ["normal", "preemptive", "surprise", "initiative", "back_attack", "surround", "pincer"], "option_labels": ["Normal", "Preemptive (party first)", "Surprise (enemies first)", "Initiative (party gauges full, 2003)", "Back attack (enemy gauges full, mirrored, 2003)", "Surround (party gauges full, packed centre, 2003)", "Pincer (enemy gauges full, split, no escape, 2003)"], "default": "normal", "label": "Advantage"},
 			{"key": "result", "kind": "ref", "ref": "variable", "default": "", "label": "Store outcome in"},
 			{"key": "on_win", "kind": "commands", "default": [], "label": "If won"},
 			{"key": "on_escape", "kind": "commands", "default": [], "label": "If escaped", "show_if": {"key": "can_escape", "equals": true}},
@@ -41,6 +41,14 @@ func child_lists(args: Dictionary) -> Array:
 	if args.get("can_lose", false):
 		out.append({"label": "If lost", "key": "on_lose", "list": args.get("on_lose", [])})
 	return out
+
+
+## The System's defeat handler (#39): a common event (and optional transfer) that takes the place
+## of Game Over when the party loses. "" when the game has none, or it names no common event.
+static func defeat_event_id(ctx: RPGContext) -> String:
+	var sys: Variant = ctx.data.system if ctx.data != null else null
+	var id := str(sys.get("defeat_event", "")) if sys is Dictionary else ""
+	return id if id != "" and ctx.data.common_events.has(id) else ""
 
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
@@ -79,7 +87,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			bg = str(mb.get("image", ""))
 	var bargs := {"troop": troop, "can_escape": args.get("can_escape", true), "can_lose": args.get("can_lose", false), "background": bg}
 	var adv := str(args.get("advantage", "normal"))
-	if adv in ["preemptive", "surprise"]:
+	if adv in ["preemptive", "surprise"] + RPGBattleCore.START_CONDITIONS:
 		bargs["advantage"] = adv
 	# The map's music and background sound are saved with their positions and come back where
 	# they were after the battle (MV's saveBgmAndBgs / replayBgmAndBgs). The scene gets them as
@@ -105,7 +113,8 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	if ctx.rpg.has_method("check_levels"):
 		ctx.rpg.check_levels()
 	var lost: bool = r.status == "finished" and (str(res0.get("outcome", "")) if res0 is Dictionary else str(res0)) == "lose"
-	if lost and not bool(args.get("can_lose", false)):
+	var defeat_ev := defeat_event_id(ctx)
+	if lost and not bool(args.get("can_lose", false)) and defeat_ev == "":
 		# Game over follows: the defeat jingle plays on, and no map music comes back.
 		ctx.audio.stop_bgm()
 	elif ctx.audio.has_method("replay_bgm"):
@@ -138,6 +147,16 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		"lose":
 			if args.get("can_lose", false):
 				return await ctx.run_list(args.get("on_lose", []), "on_lose")
+			# The defeat handler (2003) takes the place of Game Over: the party is sent to the
+			# map the System names (if any), the common event runs (an inn, a "you blacked out
+			# and crawled back" scene), and the game goes on.
+			if defeat_ev != "":
+				var sys: Dictionary = ctx.data.system
+				var d_to: Variant = sys.get("defeat_transfer")
+				if d_to is Dictionary and str(d_to.get("map", "")) != "" and (d_to.get("position") is Array) and d_to.position.size() >= 2 and ctx.rpg.game != null:
+					await ctx.rpg.game.transfer(str(d_to.map), Vector2i(int(d_to.position[0]), int(d_to.position[1])), str(sys.get("defeat_facing", "keep")), "black", 0, ctx.interpreter)
+				var d_r: RPGResult = await ctx.run_list(ctx.data.common_events[defeat_ev].get("commands", []), "defeat")
+				return d_r if d_r.is_error() else RPGResult.ok()
 			if ctx.rpg.game != null:
 				ctx.rpg.game.game_over.call_deferred()
 			return RPGResult.flow_exit()
