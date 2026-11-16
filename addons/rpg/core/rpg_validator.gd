@@ -582,6 +582,24 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]}, {\"game_data\": {...}} or {\"self_variable\": {...}}.", ""))
 
 
+## A location is {map, position}: the map is an id or names a variable, the cell is two operands
+## (#16: Memorize / Recall Place). Parts that come from variables are dynamic and checked at
+## runtime instead.
+static func _location_structure(v: Variant, file: String, rec: String, path: String, out: Array) -> void:
+	if not (v is Dictionary) or not v.has("map") or not (v.get("position") is Array) or v.position.size() != 2:
+		out.append(problem("error", file, rec, "value", path, "A location must be {\"map\": id or {\"variable\": id}, \"position\": [x, y]}.", ""))
+		return
+	if typeof(v.map) == TYPE_STRING and str(v.map) != "":
+		# A fixed map id: checked against the project's maps in references().
+		pass
+	elif v.map is Dictionary and RPGIds.is_valid(v.map.get("variable")):
+		pass
+	else:
+		out.append(problem("error", file, rec, "map", path + "/map", "The map must be an ID or {\"variable\": id}.", ""))
+	for i in 2:
+		_operand_structure(v.position[i], file, rec, "%s/position/%d" % [path, i], out)
+
+
 ## Structure of a {game_data: {...}} operand: the kind must exist and its fields must be plausible.
 ## IDs inside game data name records; references() checks those separately.
 static func _game_data_structure(g: Dictionary, file: String, rec: String, path: String, out: Array) -> void:
@@ -671,6 +689,8 @@ static func command_structure(c: Dictionary, registry: RPGCommandRegistry, file 
 		match str(f.get("kind", "")):
 			"operand":
 				_operand_structure(c[k], file, rec, "%s/%s" % [path, k], out)
+			"location":
+				_location_structure(c[k], file, rec, "%s/%s" % [path, k], out)
 			"facing":
 				if not FACINGS.has(str(c[k])):
 					out.append(problem("error", file, rec, k, "%s/%s" % [path, k], "Unknown facing '%s'." % c[k], "Use down, left, right, up or keep."))
@@ -742,6 +762,18 @@ static func _add_ref(acc: Dictionary, ctx: Dictionary, kind: String, holder: Var
 		return
 	acc.refs.append({"kind": kind, "id": id, "file": ctx.file, "record": ctx.record, "field": field if field != "" else str(key),
 		"path": path, "holder": holder, "key": key, "access": access, "hidden": hidden or ctx.hidden, "map": ctx.map})
+
+
+## The variables an operand reads ({variable: id}, or {pointer: id} which reads the named
+## variable first), for used-by listings.
+static func _operand_refs(v: Variant, ctx: Dictionary, path: String, acc: Dictionary, field: String) -> void:
+	if not (v is Dictionary):
+		return
+	for k in ["variable", "pointer"]:
+		if str(v.get(k, "")) != "":
+			_add_ref(acc, ctx, "variable", v, k, "%s/%s" % [path, k], "read", false, field)
+	if v.get("self_variable") is Dictionary and str(v.self_variable.get("map", "")) != "":
+		_add_ref(acc, ctx, "map", v.self_variable, "map", path + "/self_variable/map", "read", false, field)
 
 
 static func _event_refs(ev: Dictionary, base: String, ctx: Dictionary, registry: RPGCommandRegistry, acc: Dictionary) -> void:
@@ -821,22 +853,25 @@ static func _field(f: Dictionary, siblings: Array, holder: Variant, key: Variant
 			_add_ref(acc, ctx, kind, holder, key, path, access, false, str(f.get("key", key)))
 		"location":
 			if v is Dictionary:
-				_add_ref(acc, ctx, "map", v, "map", path + "/map", "read", false, str(f.get("key", key)))
-				acc.locations.append({"map": str(v.get("map", "")), "position": v.get("position"), "file": ctx.file, "record": ctx.record, "path": path, "hidden": ctx.hidden})
+				# A fixed map id is checked against the project's maps; a variable-held one (#16)
+				# is dynamic - it reads the variable instead and is resolved at runtime.
+				if typeof(v.get("map")) == TYPE_STRING:
+					_add_ref(acc, ctx, "map", v, "map", path + "/map", "read", false, str(f.get("key", key)))
+				elif v.get("map") is Dictionary and str(v.map.get("variable", "")) != "":
+					_add_ref(acc, ctx, "variable", v.map, "variable", path + "/map/variable", "read", false, str(f.get("key", key)))
+				if v.get("position") is Array:
+					for i in v.position.size():
+						if v.position[i] is Dictionary:
+							_operand_refs(v.position[i], ctx, "%s/position/%d" % [path, i], acc, str(f.get("key", key)))
+				acc.locations.append({"map": v.get("map"), "position": v.get("position"), "file": ctx.file, "record": ctx.record, "path": path, "hidden": ctx.hidden})
 		"condition":
 			_cond_refs(v, path, ctx, acc)
 		"operand":
-			if v is Dictionary and v.has("variable"):
-				_add_ref(acc, ctx, "variable", v, "variable", path + "/variable", "read", false, str(f.get("key", key)))
-			elif v is Dictionary and v.has("pointer"):
-				_add_ref(acc, ctx, "variable", v, "pointer", path + "/pointer", "read", false, str(f.get("key", key)))
-			elif v is Dictionary and v.get("self_variable") is Dictionary and str(v.self_variable.get("map", "")) != "":
-				_add_ref(acc, ctx, "map", v.self_variable, "map", path + "/self_variable/map", "read", false, str(f.get("key", key)))
+			_operand_refs(v, ctx, path, acc, str(f.get("key", key)))
 		"operand_pair":
 			if v is Array:
 				for i in v.size():
-					if v[i] is Dictionary and v[i].has("variable"):
-						_add_ref(acc, ctx, "variable", v[i], "variable", "%s/%d/variable" % [path, i], "read", false, str(f.get("key", key)))
+					_operand_refs(v[i], ctx, "%s/%d" % [path, i], acc, str(f.get("key", key)))
 		"sound":
 			if v is Dictionary and typeof(v.get("file")) == TYPE_STRING and v.file != "":
 				acc.assets.append({"kind": str(f.get("res", "sound")), "also": f.get("res_also", []), "name": v.file, "file": ctx.file, "record": ctx.record, "path": path + "/file", "hidden": ctx.hidden})
@@ -1283,11 +1318,19 @@ static func _reference_problems(acc: Dictionary, reg: Dictionary, data: RPGProje
 			mp["ref_id"] = r.id
 			out.append(mp)
 	for l in acc.locations:
-		if l.hidden or not reg.map.has(l.map):
+		if l.hidden:
+			continue
+		# A map or cell held in variables is dynamic - it resolves at runtime, so there is
+		# nothing static to check (#16).
+		if not (l.map is String):
+			continue
+		if not reg.map.has(l.map):
 			continue
 		var pos: Variant = l.position
 		if not (pos is Array) or pos.size() != 2:
 			out.append(problem("error", l.file, l.record, "position", l.path, "The destination on map '%s' has no valid cell." % l.map, "Pick the cell again."))
+			continue
+		if typeof(pos[0]) not in [TYPE_INT, TYPE_FLOAT] or typeof(pos[1]) not in [TYPE_INT, TYPE_FLOAT]:
 			continue
 		var size := _map_size(reg, data, l.map)
 		var x := int(pos[0])

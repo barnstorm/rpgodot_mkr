@@ -37,6 +37,7 @@
 		"roll_check.gd",
 		"change_stat.gd",
 		"transfer_player.gd",
+		"memorize_place.gd",
 		"set_event_location.gd",
 		"move_route.gd",
 		"wait_for_movement.gd",

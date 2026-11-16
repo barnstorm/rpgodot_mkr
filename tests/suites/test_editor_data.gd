@@ -592,6 +592,151 @@ func test_form_builder_round_trips_every_descriptor() -> void:
 	await frames(1)
 
 
+## Control Switch target modes in the editor (#55): the fields of the chosen target validate,
+## the others stop mattering, and the summaries read back.
+func test_set_switch_target_modes() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var sw: RPGCommand = registry.get_command("set_switch")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(sw.desc.fields, data, registry)
+	form.command = sw
+	form.set_value({"type": "set_switch", "id": "door_unlocked", "value": "on"})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch [door_unlocked] = ON")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "door_unlocked")
+	form.set_field("to", "touched")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch door_unlocked..touched = ON")
+	form.set_field("target", "pointer")
+	form.set_field("pointer", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch [hero_name] = ON")
+	host.queue_free()
+	await frames(1)
+
+
+## Control Variable target modes in the editor (#54), and the operand picker's new game data
+## kinds and pointer source.
+func test_set_variable_target_modes_and_operand_kinds() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var vc: RPGCommand = registry.get_command("set_variable")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(vc.desc.fields, data, registry)
+	form.command = vc
+	form.set_value({"type": "set_variable", "id": "counter", "operation": "set", "value": 0})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable [counter] = 0")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "counter")
+	form.set_field("to", "ticks")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable counter..ticks = 0")
+	form.set_field("target", "pointer")
+	form.set_field("pointer", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable [hero_name] = 0")
+	# The operand editor keeps the new shapes through a set, and reads the same values back
+	# out of its controls (the mode buttons' item_selected is what editing fires).
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._operand_editor({"key": "v"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Number":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the operand mode picker is there")
+	for shape in [
+		{"pointer": "hero_name"},
+		{"game_data": {"kind": "map_id"}},
+		{"game_data": {"kind": "party_member", "slot": 1}},
+		{"game_data": {"kind": "last_used", "what": "item"}},
+		{"game_data": {"kind": "counter", "which": "saves"}},
+		{"game_data": {"kind": "enemy", "index": 0, "field": "hp"}},
+		{"game_data": {"kind": "actor", "id": "hero", "field": "weapon"}},
+	]:
+		ed.set.call(shape)
+		assert_eq(ed.get.call(), shape, "operand keeps %s" % str(shape))
+	ed.set.call({"game_data": {"kind": "character", "target": "player", "field": "direction"}})
+	mode_btn.item_selected.emit(3)
+	assert_eq(ed.get.call(), {"game_data": {"kind": "character", "target": "player", "field": "direction"}}, "the controls read back")
+	ed.set.call({"pointer": "hero_name"})
+	mode_btn.item_selected.emit(4)
+	assert_eq(ed.get.call(), {"pointer": "hero_name"}, "the pointer mode reads back")
+	host.queue_free()
+	await frames(1)
+
+
+## Locations from variables (#16): the location editor's fixed / from-variables modes, the
+## structure check on the new shape, and references() leaving dynamic destinations alone.
+func test_location_from_variables_editor_and_validator() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._location_editor({"key": "to"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Fixed place":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the fixed / variables mode picker is there")
+	assert_eq(mode_btn.selected, 0, "a fixed location starts in fixed mode")
+	# Both shapes survive a set/get round trip.
+	ed.set.call({"map": "town", "position": [3, 2]})
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]})
+	var warp := {"map": {"variable": "hero_name"}, "position": [{"variable": "counter"}, {"variable": "ticks"}]}
+	ed.set.call(warp)
+	assert_eq(mode_btn.selected, 1, "a variable location switches the mode")
+	assert_eq(ed.get.call(), warp)
+	# Switching modes keeps each side's controls, so nothing is lost going back and forth.
+	mode_btn.select(0)
+	mode_btn.item_selected.emit(0)
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]}, "the fixed controls kept their values")
+	mode_btn.select(1)
+	mode_btn.item_selected.emit(1)
+	assert_eq(ed.get.call(), warp, "the variable pickers kept their values")
+	host.queue_free()
+	await frames(1)
+	# The structure check accepts both shapes and rejects a map that is neither.
+	var out := []
+	RPGValidator._location_structure(warp, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": "town", "position": [3, 2]}, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": {"variable": "hero_name"}, "position": [{"pointer": "hero_name"}, 2]}, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._location_structure({"map": 5, "position": [1, 1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	RPGValidator._location_structure({"map": "town", "position": [1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 2, str(out))
+	# The summary names the variables, not raw dictionaries.
+	var vc: RPGCommand = registry.get_command("transfer_player")
+	assert_eq(vc.summary({"to": warp}), "Transfer Player: [hero_name] ([counter], [ticks])")
+	# references() checks a fixed map but leaves a variable-held destination to the runtime.
+	var ev := {
+		"id": "warper", "name": "Warper", "position": [2, 2], "notes": "",
+		"pages": [{"conditions": [], "graphic": null, "priority": "same", "trigger": "action_button",
+			"commands": [
+				{"type": "memorize_place", "map_variable": "hero_name", "x_variable": "counter", "y_variable": "ticks"},
+				{"type": "transfer_player", "to": warp, "fade": "none"},
+			]}],
+	}
+	var files := _events_files([ev])
+	var probs := RPGValidator.full(data, registry, files)
+	for p in probs:
+		assert_false(str(p.message).contains("does not exist") and str(p.path).contains("warper"), "dynamic destination is not a reference problem: %s" % p.message)
+		assert_false(str(p.message).contains("position"), "dynamic cells are not bounds-checked: %s" % p.message)
+
+
 # --------------------------------------------------------------------------------------------
 # Quick event dialog and command list editor
 # --------------------------------------------------------------------------------------------
