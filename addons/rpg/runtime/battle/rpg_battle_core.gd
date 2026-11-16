@@ -814,7 +814,16 @@ static func encounter_rates(p_rules: RPGRuleSystem, party_battlers: Array, troop
 					foes.append(e)
 	var troop_agi := _average_speed(p_rules, foes)
 	var quick := party_agi >= troop_agi
-	return {"preemptive": 0.05 if quick else 0.03, "surprise": 0.03 if quick else 0.05}
+	var preemptive := 0.05 if quick else 0.03
+	var surprise := 0.03 if quick else 0.05
+	# Party abilities (VX Ace / MV): Cancel Surprise removes the ambush chance, Raise Preemptive
+	# quadruples the first-strike one. Any party member's trait applies.
+	if p_rules != null:
+		if p_rules.party_has_trait(party_battlers, "cancel_surprise"):
+			surprise = 0.0
+		if p_rules.party_has_trait(party_battlers, "raise_preemptive"):
+			preemptive *= 4.0
+	return {"preemptive": preemptive, "surprise": surprise}
 
 
 static func _average_speed(p_rules: RPGRuleSystem, list: Array) -> float:
@@ -1543,6 +1552,14 @@ func rewards() -> Dictionary:
 	var exp_total := 0
 	var gold := 0
 	var items := []
+	# Party abilities (VX Ace / MV): Gold Double and Drop Item Double multiply the take. The
+	# traits of the members alive at the victory count.
+	var gold_rate := 1.0
+	var drop_rate := 1.0
+	if rules != null:
+		var living := party.filter(func(b): return b is RPGBattler and b.is_alive())
+		gold_rate = rules.party_trait_rate(living, "gold_double")
+		drop_rate = rules.party_trait_rate(living, "drop_double")
 	for e in enemies:
 		# Fled enemies (Force Flee) leave without rewards, like ones never revealed.
 		if not e.is_dead() or e.hidden or e.escaped:
@@ -1551,7 +1568,7 @@ func rewards() -> Dictionary:
 		exp_total += int(rec.get("exp", 0))
 		gold += int(rec.get("gold", 0))
 		for d in rec.get("drops", []):
-			if rng.chance_percent(float(d.get("chance", 100))):
+			if rng.chance_percent(clampf(float(d.get("chance", 100)) * drop_rate, 0.0, 100.0)):
 				var kind := str(d.get("kind", "item"))
 				var id := str(d.get("id", ""))
 				var merged := false
@@ -1561,7 +1578,7 @@ func rewards() -> Dictionary:
 						merged = true
 				if not merged:
 					items.append({"kind": kind, "id": id, "count": 1})
-	_rewards = {"exp": exp_total, "gold": gold, "items": items}
+	_rewards = {"exp": exp_total, "gold": int(gold * gold_rate), "items": items}
 	return _rewards
 
 

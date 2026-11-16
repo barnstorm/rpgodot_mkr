@@ -15,10 +15,11 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - Ace's damage formulas, variance and criticals; HIT, EVA and CRI checks.
 - Class parameter curves (level 1 value, level 99 value, a growth shape) with a graph in the Classes tab.
 - Features (the kit calls them **Traits**): Element Rate, State Rate, Ex-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen.
+- Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.
 - Actors can use a skill type (Magic, Special) only when their class or actor adds it with an *Add Skill Type* trait, as in Ace.
 - Regeneration and each state's damage apply on the map every 20 steps.
 
-Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Party Abilities, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
+Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 
 ## Switching
 
