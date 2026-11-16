@@ -756,6 +756,164 @@ func test_movement_frequency_paces_the_beats() -> void:
 	assert_eq(held, 60, "frequency 1 paces the beats slowly")
 
 
+# --- Forced move routes (#71) -------------------------------------------------------------------
+
+func test_a_forced_route_takes_over_a_random_walk() -> void:
+	# The issue's acceptance test: a random-walk NPC handed a 5-step route by another event
+	# makes exactly those 5 steps.
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.move_type = "random"
+	ev._move_wait = 0.5
+	var start := ev.cell
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": true,
+			"steps": [{"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_false(ev.is_route_forced(), "the forced route is over")
+	assert_eq(ev.cell, start + Vector2i(0, 5), "exactly the 5 forced steps; the random walk stayed paused")
+	# When the route ends, autonomous movement resumes.
+	var final_cell := ev.cell
+	ev._move_wait = 0.0
+	var resumed := await _await_step(ev)
+	assert_true(resumed != final_cell, "the random walk resumes when the forced route ends")
+
+
+func test_a_forced_route_pauses_approach_movement() -> void:
+	# Approach steps toward the player on every beat, so any leak of autonomous movement during
+	# the route would drift the cell and fail the exact-position checks.
+	var ev: RPGEvent = await _place_chest(Vector2i(16, 8))
+	ev.frequency = 5
+	ev.move_type = "approach"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, Vector2i(15, 8), "approach steps toward the player first")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_true(ev.is_route_forced(), "the forced route is running")
+	var at := ev.cell
+	for i in 5:
+		var c := await _await_step(ev)
+		at += Vector2i.DOWN
+		assert_eq(c, at, "forced step %d of 5 is exactly down" % (i + 1))
+	await frames(3)
+	assert_false(ev.is_route_forced(), "the forced route ended")
+	assert_eq(ev.cell, Vector2i(15, 13), "exactly the forced steps; approach never fired between them")
+
+
+func test_a_forced_route_keeps_the_custom_route_index() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.custom_route = {"steps": [{"step": "down"}, {"step": "down"}, {"step": "right"}, {"step": "right"}], "repeat": true}
+	ev.move_type = "custom"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, Vector2i(4, 4), "custom step 1 (down)")
+	var c2 := await _await_step(ev)
+	assert_eq(c2, Vector2i(4, 5), "custom step 2 (down)")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": true,
+			"steps": [{"step": "left"}, {"step": "left"}, {"step": "left"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	# The pass resumes where it was (a right step); a restart would step down again.
+	var before := ev.cell
+	var c3 := await _await_step(ev)
+	assert_eq(c3, before + Vector2i.RIGHT, "the custom route resumes at its index (right), not from the start (down)")
+
+
+func test_page_change_keeps_a_forced_route_under_classic_rules() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.move_type = "random"
+	ev._move_wait = 99.0
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "right"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	var after := await _await_step(ev)
+	assert_eq(after, Vector2i(5, 3), "the forced step played")
+	assert_true(ev.is_route_forced(), "the route is parked on its long wait")
+	env.rpg.set_self_switch("town", "chest", "A", true)
+	await frames(4)
+	assert_eq(ev.page_index, 1, "the chest changed page")
+	assert_true(ev.is_route_forced(), "classic rules keep a forced route across a page change")
+	ev.cancel_forced_route("test done")
+	await frames(2)
+
+
+func test_page_change_cancels_a_forced_route_under_vx_ace_rules() -> void:
+	env.rpg.data.project["rules"] = "vx_ace"
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.move_type = "random"
+	ev._move_wait = 99.0
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "right"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	var after := await _await_step(ev)
+	assert_eq(after, Vector2i(5, 3), "the forced step played")
+	env.rpg.set_self_switch("town", "chest", "A", true)
+	await frames(6)
+	assert_eq(ev.page_index, 1, "the chest changed page")
+	assert_false(ev.is_route_forced(), "VX Ace style rules cancel a forced route on a page change")
+	assert_eq(ev.cell, Vector2i(5, 3), "the cancelled route's remaining steps never play")
+
+
+func test_page_change_resets_a_custom_route_when_the_new_page_differs() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.custom_route = {"steps": [{"step": "down"}, {"wait": 2.0}, {"step": "right"}], "repeat": true}
+	ev.move_type = "custom"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, Vector2i(4, 4), "custom step 1 (down); the pass waits mid-route")
+	assert_true(ev._route_running, "the pass is in flight")
+	env.rpg.set_self_switch("town", "chest", "A", true)
+	await frames(4)
+	assert_eq(ev.page_index, 1, "the page changed to one without this route")
+	assert_false(ev._route_running, "the pass is cancelled, not left waiting out its timer")
+	assert_true(ev._custom_token == null, "the cancelled pass cleaned up after itself")
+	for i in 20:
+		await frames(1)
+	assert_eq(ev.cell, Vector2i(4, 4), "the rest of the old route never plays")
+
+
+func test_page_change_keeps_a_custom_route_index_when_the_route_is_the_same() -> void:
+	var route := {"steps": [{"step": "down"}, {"wait": 0.4}, {"step": "right"}], "repeat": true}
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.data["pages"].append({
+		"conditions": [{"kind": "self_switch", "id": "B"}],
+		"graphic": null,
+		"movement": {"type": "custom", "route": route, "speed": 3, "frequency": 5},
+		"options": {},
+		"priority": "same",
+		"trigger": "action_button",
+		"commands": [],
+	})
+	ev = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.custom_route = route
+	ev.move_type = "custom"
+	ev._move_wait = 0.0
+	var c1 := await _await_step(ev)
+	assert_eq(c1, Vector2i(4, 4), "custom step 1 (down); the pass waits mid-route")
+	env.rpg.set_self_switch("town", "chest", "B", true)
+	await frames(3)
+	assert_eq(ev.page_index, 2, "the same-route page is now active")
+	assert_true(ev._route_running, "the pass is still in flight (same route, index kept)")
+	# The wait elapses and the pass continues at its index: right, not down (a restart).
+	var c2 := await _await_step(ev)
+	assert_eq(c2, Vector2i(5, 4), "the custom route continued from its index")
+
+
 # --- Call Event (#60) ---------------------------------------------------------------------------
 
 func test_call_event_runs_a_page_with_the_called_event_as_this() -> void:
