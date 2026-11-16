@@ -79,7 +79,10 @@ const CONDITION_FIELDS := {
 	"button": [{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button held down"}],
 }
 ## Condition kinds offered only in Conditional Branch (they need a running event), not on pages.
-const BRANCH_ONLY_CONDITIONS := ["facing", "button"]
+const BRANCH_ONLY_CONDITIONS := ["facing", "button", "actor_can_act", "enemy_can_act", "enemy_is_target"]
+## Condition kinds offered only on battle pages, not in Conditional Branch (a branch never runs
+## at that moment, so they could only ever be false).
+const PAGE_ONLY_CONDITIONS := ["turn_end"]
 ## Command fields that name a character on the map ("player", "this" or an event ID) and get a
 ## dropdown instead of a text box: {command type: [field keys]}.
 const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"], "show_balloon": ["target"]}
@@ -89,6 +92,9 @@ const BATTLE_CONDITION_FIELDS := {
 	"actor_hp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
 	"turn_end": [],
+	"actor_can_act": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}],
+	"enemy_can_act": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
+	"enemy_is_target": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
 }
 
 var fields: Array = []

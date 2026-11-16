@@ -32,6 +32,10 @@ const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
 const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor"]
 const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "actor_hp", "switch", "turn_end"]
+## Battle kinds a Conditional Branch may use (RM2000/2003): the page checks RM2003 also offers in
+## branches, plus the branch-only can-act and is-target checks. Valid inside battle events and in
+## common events (which battle events call); on a map they are always false, so they warn.
+const BATTLE_BRANCH_KINDS := ["turn", "enemy_hp", "actor_hp", "actor_can_act", "enemy_can_act", "enemy_is_target"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 
 ## Singular reference kind -> database type.
@@ -173,7 +177,7 @@ static func structure(file_kind: String, data: Variant, registry: RPGCommandRegi
 					var base := "common_events/%d" % i
 					if not CE_TRIGGERS.has(str(ce.get("trigger", "none"))):
 						out.append(problem("error", file, rec, "trigger", base + "/trigger", "Common event '%s' has an unknown trigger '%s'." % [rec, ce.get("trigger")], "Use none, autorun or parallel."))
-					_commands_structure(ce.get("commands", []), registry, file, rec, base + "/commands", out)
+					_commands_structure(ce.get("commands", []), registry, file, rec, base + "/commands", out, "common")
 		"database":
 			if _id_list_structure(data, "records", "record", file, out) and db_type == "troops":
 				for i in data.records.size():
@@ -270,7 +274,7 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 		out.append(problem("error", file, rec, "conditions", pp + "/conditions", "Page conditions must be a list.", ""))
 	else:
 		for k in conds.size():
-			_condition_structure(conds[k], file, rec, "%s/conditions/%d" % [pp, k], out, false)
+			_condition_structure(conds[k], file, rec, "%s/conditions/%d" % [pp, k], out)
 	var g: Variant = pg.get("graphic", null)
 	if g != null and not (g is Dictionary):
 		out.append(problem("error", file, rec, "graphic", pp + "/graphic", "The page graphic must be an object or null.", "Pick a graphic again in the page settings."))
@@ -297,7 +301,7 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 		out.append(problem("error", file, rec, "priority", pp + "/priority", "Unknown priority '%s'." % pg.get("priority"), "Use below, same or above."))
 	if not PAGE_TRIGGERS.has(str(pg.get("trigger", "action_button"))):
 		out.append(problem("error", file, rec, "trigger", pp + "/trigger", "Unknown trigger '%s'." % pg.get("trigger"), "Use action_button, player_touch, event_touch, autorun or parallel."))
-	_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+	_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out, "branch")
 	_battle_only_outside(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
 	_enemy_targets_outside(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
 
@@ -389,24 +393,36 @@ static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file:
 		if not SPANS.has(str(pg.get("span", "once_per_battle"))):
 			out.append(problem("error", file, rec, "span", pp + "/span", "Unknown span '%s'." % pg.get("span"), "Use once_per_battle, once_per_turn or every_check."))
 		for k in pg.get("conditions", []).size():
-			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, true)
-		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out)
+			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, "battle_page")
+		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out, "battle")
 		_enemy_appear_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 		_enemy_target_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 
 
-static func _condition_structure(c: Variant, file: String, rec: String, path: String, out: Array, battle: bool) -> void:
+## `where` the condition sits: "map" (a map event page condition), "branch" (Conditional Branch
+## on a map), "common" (a command in a common event), "battle_page" (a troop page condition) or
+## "battle" (a command in a troop page). Conditional Branch may use the battle branch kinds in
+## battle events and common events; on a map they only ever evaluate false, so they warn.
+static func _condition_structure(c: Variant, file: String, rec: String, path: String, out: Array, where := "map") -> void:
 	if not (c is Dictionary):
 		out.append(problem("error", file, rec, "condition", path, "A condition must be an object with a \"kind\".", ""))
 		return
 	var kind := str(c.get("kind", ""))
-	var kinds: Array = BATTLE_CONDITION_KINDS if battle else CONDITION_KINDS
+	var kinds: Array = BATTLE_CONDITION_KINDS if where == "battle_page" else CONDITION_KINDS
+	if ["branch", "common", "battle"].has(where):
+		kinds = kinds + BATTLE_BRANCH_KINDS
 	# Kinds an enabled extension declares (manifest "conditions") are checked by the extension.
+	var battle_ctx := where == "battle_page" or where == "battle"
 	var ext_kind: Variant = RPGCommandRegistry.declared_condition_kinds.get(kind)
-	if ext_kind is Dictionary and (not battle or bool(ext_kind.get("battle", false))):
+	if ext_kind is Dictionary and (not battle_ctx or bool(ext_kind.get("battle", false))):
 		return
 	if not kinds.has(kind):
 		out.append(problem("error", file, rec, "condition", path + "/kind", "Unknown condition kind '%s'." % kind, "Use one of: %s." % ", ".join(PackedStringArray(kinds))))
+		return
+	if BATTLE_BRANCH_KINDS.has(kind) and where == "branch":
+		out.append(problem("warning", file, rec, "condition", path + "/kind",
+			"Condition '%s' only works in a battle; anywhere else it is false." % kind,
+			"Move it to an enemy group's battle events, or to a common event called from one."))
 		return
 	match kind:
 		"self_switch":
@@ -435,12 +451,16 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 			var vid := str(c.get("id", c.get("vehicle", "")))
 			if not VEHICLE_IDS.has(vid):
 				out.append(problem("error", file, rec, "condition", path + "/id", "Unknown vehicle '%s'." % vid, "Use boat, ship, airship or none."))
+		"enemy_can_act", "enemy_is_target":
+			var eidx: Variant = c.get("index", 0)
+			if typeof(eidx) != TYPE_INT or int(eidx) < 0:
+				out.append(problem("error", file, rec, "condition", path + "/index", "The enemy number must be 0 or more (enemy #1 is 0).", "Pick the enemy by its number on the battle picture, counted from 0."))
 		"all", "any":
 			for i in c.get("conditions", []).size():
-				_condition_structure(c.conditions[i], file, rec, "%s/conditions/%d" % [path, i], out, battle)
+				_condition_structure(c.conditions[i], file, rec, "%s/conditions/%d" % [path, i], out, where)
 		"not":
-			_condition_structure(c.get("condition"), file, rec, path + "/condition", out, battle)
-	if kind in ["switch", "variable", "item", "actor"] and not RPGIds.is_valid(c.get("id")):
+			_condition_structure(c.get("condition"), file, rec, path + "/condition", out, where)
+	if kind in ["switch", "variable", "item", "actor", "actor_can_act"] and not RPGIds.is_valid(c.get("id")):
 		out.append(problem("error", file, rec, "condition", path + "/id", "This %s condition has no valid ID." % kind, "Pick a %s from the list." % kind))
 
 
@@ -459,7 +479,7 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"random\": [a, b]} or {\"game_data\": {...}}.", ""))
 
 
-static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array) -> void:
+static func _commands_structure(list: Variant, registry: RPGCommandRegistry, file: String, rec: String, path: String, out: Array, where := "branch") -> void:
 	if not (list is Array):
 		out.append(problem("error", file, rec, "commands", path, "Commands must be a list.", ""))
 		return
@@ -475,28 +495,28 @@ static func _commands_structure(list: Variant, registry: RPGCommandRegistry, fil
 		var cmd: RPGCommand = registry.get_command(c.type)
 		if cmd == null:
 			continue
-		_nested_structure(cmd.desc.get("fields", []), c, registry, file, rec, cp, out)
+		_nested_structure(cmd.desc.get("fields", []), c, registry, file, rec, cp, out, where)
 
 
-static func _nested_structure(fields: Array, holder: Dictionary, registry: RPGCommandRegistry, file: String, rec: String, cp: String, out: Array) -> void:
+static func _nested_structure(fields: Array, holder: Dictionary, registry: RPGCommandRegistry, file: String, rec: String, cp: String, out: Array, where := "branch") -> void:
 	for f in fields:
 		var k: String = f.get("key", "")
 		var v: Variant = holder.get(k)
 		match str(f.get("kind", "")):
 			"commands":
 				if v != null:
-					_commands_structure(v, registry, file, rec, cp + "/" + k, out)
+					_commands_structure(v, registry, file, rec, cp + "/" + k, out, where)
 			"list":
 				if v is Array:
 					for j in v.size():
 						if v[j] is Dictionary:
-							_nested_structure(f.get("item_fields", []), v[j], registry, file, rec, "%s/%s/%d" % [cp, k, j], out)
+							_nested_structure(f.get("item_fields", []), v[j], registry, file, rec, "%s/%s/%d" % [cp, k, j], out, where)
 			"object":
 				if v is Dictionary:
-					_nested_structure(f.get("fields", []), v, registry, file, rec, cp + "/" + k, out)
+					_nested_structure(f.get("fields", []), v, registry, file, rec, cp + "/" + k, out, where)
 			"condition":
 				if v != null:
-					_condition_structure(v, file, rec, cp + "/" + k, out, false)
+					_condition_structure(v, file, rec, cp + "/" + k, out, where)
 
 
 ## Checks one command's own fields against its descriptor (not its nested lists).

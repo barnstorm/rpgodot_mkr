@@ -70,6 +70,8 @@ An enemy group's **Battle events** run *during* its battles: a boss that taunts 
 
 Each battle event page has **Conditions** (turn number, *turn end*, an enemy's HP, an actor's HP, a switch), a **Span** (*once per battle*, *once per turn*, or *every check*), a priority, and **Commands**. All the usual commands work: messages, switches, Change HP / SP, Change State, music, and so on. Conditions combine with AND: a page runs only when all of them hold. *Turn end* is true only at the moment a turn ends (under ATB / CTB, when every battler has had one turn), so a page with that condition runs its commands after each turn — poison damage, regrowth, a boss gathering power.
 
+In battle events (and common events they call), **Conditional Branch** gains RM2000/2003's battle checks alongside its usual ones: the turn, an enemy's HP and an actor's HP, plus *Actor can act* (present and not held back by a state), *Enemy can act*, and *Enemy is the target* — true when the action that just ran targeted that enemy alone. They are false with a warning anywhere else.
+
 **Enemy Appear** (in the *Scenes* category) brings in a member marked *Appears later*. Its picture fades in and "*Slime B appears!*" shows. Pick the enemy by its number in the group (the number on the battle picture), or *Every hidden enemy*. From then on it fights and can be targeted like the others.
 
 The party commands reach the other side too: **Change HP / SP**, **Change State** and **Recover All** take an enemy target (*Enemy #* by its number in the group, or *Entire troop*). A change that defeats an enemy collapses it, counts it as defeated and gives its rewards; Change State respects the state's resist rates unless *Ignore resist rates* is on, and the display refreshes by itself.
