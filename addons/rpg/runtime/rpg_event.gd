@@ -144,9 +144,14 @@ func is_running() -> bool:
 	return _running_ticket != null and not _running_ticket.done
 
 
-## Action button: accepted only if this page is eligible at that moment and uses action_button.
-func trigger_action() -> bool:
-	if page_index < 0 or trigger != "action_button" or best_page() != page_index:
+## Action button: accepted only if this page is eligible at that moment and its trigger takes the
+## OK button — Action Button pages anywhere, and for the cell in front (or across a counter) also
+## Player Touch and Event Touch, as in RPG Maker: facing a touch-triggered door and pressing OK
+## starts it. Underfoot, only Action Button pages answer (the caller decides which cell).
+func trigger_action(front := false) -> bool:
+	if page_index < 0 or best_page() != page_index:
+		return false
+	if trigger != "action_button" and not (front and (trigger == "player_touch" or trigger == "event_touch")):
 		return false
 	if page.get("commands", []).is_empty():
 		return false

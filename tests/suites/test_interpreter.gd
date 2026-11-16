@@ -74,6 +74,62 @@ func test_touch_trigger_fires_once_per_step() -> void:
 	assert_eq(env.rpg.get_variable("counter"), 2, "a new step onto the plate fires again")
 
 
+# --- Action button starts touch events (#51) -----------------------------------------------------
+
+## Stages the floor plate (a player_touch event) at a cell with a chosen trigger and priority.
+func _stage_plate(at: Vector2i, trig: String, priority := "same") -> RPGEvent:
+	var plate: RPGEvent = env.game.map.get_event("floor_plate")
+	plate.data["pages"][0]["trigger"] = trig
+	plate.data["pages"][0]["priority"] = priority
+	plate.apply_page(0)
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "floor_plate", "position": [at.x, at.y]},
+	])
+	assert_true(r.is_ok(), str(r))
+	return plate
+
+
+func test_action_button_starts_a_player_touch_event_in_front() -> void:
+	# VX Ace/MV/MZ: pressing OK at a same-priority touch-triggered event starts it, so a
+	# touch-triggered door can't be walked past by standing still.
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(6, 8))
+	p.force_turn("up")
+	var plate: RPGEvent = await _stage_plate(Vector2i(6, 7), "player_touch")
+	assert_true(p.check_action(), "OK starts a same-priority player_touch event in front")
+	assert_eq(plate.last_trigger, "action button")
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 1, "the plate's commands ran")
+
+
+func test_action_button_starts_an_event_touch_event_across_a_counter() -> void:
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(6, 8))
+	p.force_turn("up")
+	var plate: RPGEvent = await _stage_plate(Vector2i(6, 6), "event_touch")
+	var mv := CountersMovement.new(env.game.map)
+	mv.counters.append(Vector2i(6, 7))
+	env.game.map.movement = mv
+	assert_true(p.check_action(), "OK starts a touch event behind a counter")
+	assert_eq(plate.last_trigger, "action button")
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 1, "the plate's commands ran")
+
+
+func test_underfoot_touch_events_do_not_start_from_the_action_button() -> void:
+	# Only Action Button pages answer OK on the player's own cell (below/above priority).
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(3, 3))  # onto the plate as authored: below priority, player_touch
+	p.force_turn("up")
+	assert_false(p.check_action(), "a below-priority touch event underfoot does not take OK")
+	var plate: RPGEvent = await _stage_plate(Vector2i(3, 3), "player_touch", "above")
+	assert_false(p.check_action(), "nor an above-priority one")
+	plate = await _stage_plate(Vector2i(3, 3), "action_button", "above")
+	assert_true(p.check_action(), "an action_button page underfoot does")
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 1, "the plate's commands ran")
+
+
 func test_autorun_runs_until_it_stops_itself() -> void:
 	env.rpg.set_switch("autorun_on", true)
 	assert_true(await env.settle())
@@ -1230,3 +1286,15 @@ func test_self_variable_in_message_text() -> void:
 			assert_false(c.text.contains("\\E"), "no raw code left")
 	assert_eq(labels, 1)
 	box.force_close()
+
+
+## A movement controller with a few counter cells added — counters live in tile data the test
+## fixtures don't paint, so the counter path needs them injected for a test.
+class CountersMovement extends RPGMovement:
+	var counters: Array[Vector2i] = []
+
+	func flags(cell: Vector2i) -> int:
+		var f := super.flags(cell)
+		if counters.has(cell):
+			f |= FLAG_COUNTER
+		return f
