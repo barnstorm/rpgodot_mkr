@@ -19,7 +19,11 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 	defs["cell"] = {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}
 	defs["location"] = {
 		"type": "object", "required": ["map", "position"],
-		"properties": {"map": {"$ref": "#/$defs/id"}, "position": {"$ref": "#/$defs/cell"}},
+		"properties": {
+			# The map is an id, or a variable holding one (#16: Memorize / Recall Place).
+			"map": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "object", "required": ["variable"], "properties": {"variable": {"$ref": "#/$defs/id"}}}]},
+			"position": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/operand"}},
+		},
 	}
 	defs["operand"] = {"oneOf": [
 		{"type": "number"},

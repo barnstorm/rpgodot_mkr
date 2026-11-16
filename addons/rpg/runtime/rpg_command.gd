@@ -123,5 +123,5 @@ static func describe_operand(v: Variant) -> String:
 static func describe_location(v: Variant) -> String:
 	if v is Dictionary and v.has("map"):
 		var p: Array = v.get("position", [0, 0])
-		return "%s (%s, %s)" % [v.map, p[0], p[1]]
+		return "%s (%s, %s)" % [describe_operand(v.map), describe_operand(p[0]), describe_operand(p[1])]
 	return str(v)

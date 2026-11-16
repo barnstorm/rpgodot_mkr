@@ -586,6 +586,67 @@ func test_set_variable_target_modes_and_operand_kinds() -> void:
 	await frames(1)
 
 
+## Locations from variables (#16): the location editor's fixed / from-variables modes, the
+## structure check on the new shape, and references() leaving dynamic destinations alone.
+func test_location_from_variables_editor_and_validator() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._location_editor({"key": "to"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Fixed place":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the fixed / variables mode picker is there")
+	assert_eq(mode_btn.selected, 0, "a fixed location starts in fixed mode")
+	# Both shapes survive a set/get round trip.
+	ed.set.call({"map": "town", "position": [3, 2]})
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]})
+	var warp := {"map": {"variable": "hero_name"}, "position": [{"variable": "counter"}, {"variable": "ticks"}]}
+	ed.set.call(warp)
+	assert_eq(mode_btn.selected, 1, "a variable location switches the mode")
+	assert_eq(ed.get.call(), warp)
+	# Switching modes keeps each side's controls, so nothing is lost going back and forth.
+	mode_btn.select(0)
+	mode_btn.item_selected.emit(0)
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]}, "the fixed controls kept their values")
+	mode_btn.select(1)
+	mode_btn.item_selected.emit(1)
+	assert_eq(ed.get.call(), warp, "the variable pickers kept their values")
+	host.queue_free()
+	await frames(1)
+	# The structure check accepts both shapes and rejects a map that is neither.
+	var out := []
+	RPGValidator._location_structure(warp, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": "town", "position": [3, 2]}, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": {"variable": "hero_name"}, "position": [{"pointer": "hero_name"}, 2]}, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._location_structure({"map": 5, "position": [1, 1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	RPGValidator._location_structure({"map": "town", "position": [1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 2, str(out))
+	# The summary names the variables, not raw dictionaries.
+	var vc: RPGCommand = registry.get_command("transfer_player")
+	assert_eq(vc.summary({"to": warp}), "Transfer Player: [hero_name] ([counter], [ticks])")
+	# references() checks a fixed map but leaves a variable-held destination to the runtime.
+	var ev := {
+		"id": "warper", "name": "Warper", "position": [2, 2], "notes": "",
+		"pages": [{"conditions": [], "graphic": null, "priority": "same", "trigger": "action_button",
+			"commands": [
+				{"type": "memorize_place", "map_variable": "hero_name", "x_variable": "counter", "y_variable": "ticks"},
+				{"type": "transfer_player", "to": warp, "fade": "none"},
+			]}],
+	}
+	var files := _events_files([ev])
+	var probs := RPGValidator.full(data, registry, files)
+	for p in probs:
+		assert_false(str(p.message).contains("does not exist") and str(p.path).contains("warper"), "dynamic destination is not a reference problem: %s" % p.message)
+		assert_false(str(p.message).contains("position"), "dynamic cells are not bounds-checked: %s" % p.message)
+
+
 # --------------------------------------------------------------------------------------------
 # Quick event dialog and command list editor
 # --------------------------------------------------------------------------------------------

@@ -21,14 +21,16 @@ func summary(args: Dictionary) -> String:
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var kind := str(args.get("vehicle", "boat"))
 	var to: Variant = args.get("to")
-	if not (to is Dictionary) or not to.has("map") or not (to.get("position") is Array):
+	if not (to is Dictionary) or not to.has("map") or not (to.get("position") is Array) or to.position.size() < 2:
 		return RPGResult.error("Set Vehicle Location: location must be {map, position}.")
-	if not ctx.data.maps.has(str(to.map)):
-		return RPGResult.error("Set Vehicle Location: map '%s' does not exist." % to.map)
+	# The map and the cell can come from variables (#16); plain values pass through unchanged.
+	var map_id := str(ctx.operand(to.map))
+	if not ctx.data.maps.has(map_id):
+		return RPGResult.error("Set Vehicle Location: map '%s' does not exist." % map_id)
 	if ctx.state.riding == kind:
 		return RPGResult.error("Set Vehicle Location: the player is riding the %s; get off first." % kind)
 	var facing := str(args.get("facing", "left"))
-	load("res://addons/rpg/runtime/rpg_vehicles.gd").park(ctx.state, kind, str(to.map), Vector2i(int(to.position[0]), int(to.position[1])), "left" if facing == "keep" else facing)
+	load("res://addons/rpg/runtime/rpg_vehicles.gd").park(ctx.state, kind, map_id, Vector2i(int(ctx.operand(to.position[0])), int(ctx.operand(to.position[1]))), "left" if facing == "keep" else facing)
 	var m: Node = ctx.map
 	if m != null and m.has_method("refresh_vehicles"):
 		m.refresh_vehicles()

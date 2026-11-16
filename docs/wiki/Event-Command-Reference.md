@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 79 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 80 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -73,6 +73,7 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Transparency** | `change_transparency` | Player is transparent |
 | **Change Vehicle Graphic** | `change_vehicle_graphic` | Vehicle, Graphic, Music while riding (blank = keep) |
 | **Get On/Off Vehicle** | `get_on_off_vehicle` |  |
+| **Memorize Place** | `memorize_place` | Store map in, Store x in, Store y in |
 | **Scroll Map** | `scroll_map` | Direction, Tiles, Speed, Wait until done |
 | **Set Event Location** | `set_event_location` | Event, Mode, Cell [x, y], Swap with event, Facing |
 | **Set Move Route** | `move_route` | Character, Route, Repeat, Skip if blocked, Wait until done |

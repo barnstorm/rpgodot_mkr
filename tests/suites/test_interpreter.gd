@@ -378,6 +378,57 @@ func test_game_data_character_map_party_and_counters() -> void:
 	assert_eq(str(st.game_data({"kind": "last_used", "field": "item"})), "potion", "last used is saved")
 
 
+## Locations read from variables (#16): Memorize Place stores where the player stands, Transfer
+## Player and Set Vehicle Location accept {variable} maps and operand cells, and a bad runtime
+## destination is an error that names the map.
+func test_locations_from_variables_and_memorize_place() -> void:
+	for v in ["warp_map", "warp_x", "warp_y"]:
+		env.rpg.data.variables[v] = {"id": v, "label": v.capitalize(), "type": "int" if v != "warp_map" else "string"}
+		env.rpg.data.state_defs["variables"].append({"id": v, "label": v.capitalize(), "type": "int" if v != "warp_map" else "string"})
+	# Memorize where the player starts.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "memorize_place", "map_variable": "warp_map", "x_variable": "warp_x", "y_variable": "warp_y"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(str(env.rpg.get_variable("warp_map")), "town", "the map id is memorized")
+	assert_eq(int(env.rpg.get_variable("warp_x")), 12, "the x is memorized")
+	assert_eq(int(env.rpg.get_variable("warp_y")), 8, "the y is memorized")
+	# A variable-held map and operand cells send the player there and back again.
+	r = await env.rpg.run_commands([
+		{"type": "transfer_player", "to": {"map": "town", "position": [3, 2]}}])
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	r = await env.rpg.run_commands([
+		{"type": "memorize_place", "map_variable": "warp_map", "x_variable": "warp_x", "y_variable": "warp_y"},
+		{"type": "transfer_player", "to": {"map": "town", "position": [0, 5]}},
+		{"type": "transfer_player", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}, "fade": "none"}])
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	assert_eq(env.game.player.cell, Vector2i(3, 2), "recall returns to the memorized cell")
+	# A map variable naming no map is a runtime error that names it.
+	env.rpg.state.set_variable("warp_map", "nowhere")
+	r = await env.rpg.run_commands([
+		{"type": "transfer_player", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}, "fade": "none"}])
+	assert_false(r.is_ok(), "a transfer to no map fails")
+	assert_true(r.message.contains("nowhere"), r.message)
+	# Set Vehicle Location accepts the same shape (and checks the resolved map).
+	env.rpg.state.set_variable("warp_map", "town")
+	r = await env.rpg.run_commands([
+		{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}}])
+	assert_true(r.is_ok(), str(r))
+	env.rpg.state.set_variable("warp_map", "nowhere")
+	r = await env.rpg.run_commands([
+		{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": {"variable": "warp_map"}, "position": [1, 1]}}])
+	assert_false(r.is_ok(), "parking on no map fails")
+	assert_true(r.message.contains("nowhere"), r.message)
+	# Set Event Location's cells were already operands; a variable cell still places the event.
+	env.rpg.state.set_variable("warp_x", 4)
+	env.rpg.state.set_variable("warp_y", 2)
+	r = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "chest", "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.game.map.get_event("chest").cell, Vector2i(4, 2))
+
+
 func test_blocked_movement_is_deterministic() -> void:
 	var p: RPGPlayer = env.game.player
 	p.place(Vector2i(12, 8))

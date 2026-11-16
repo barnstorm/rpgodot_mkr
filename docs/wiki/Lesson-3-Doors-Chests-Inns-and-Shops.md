@@ -77,6 +77,8 @@ Quick events only write ordinary events. Everything they do, you can build with 
 
 **Transfer Player** has one more setting: *If occupied, use the nearest free cell within…* tiles, so a transfer never puts the player inside another character.
 
+A destination can also come from **variables**: pick *From variables* and choose which variables hold the map, x and y. **Memorize Place** (category *movement*) fills those three variables with where the player stands now — pair it with a Transfer Player that reads them for a return portal, a "warp to last save point" item, or a dream sequence that brings the player back. At runtime a variable destination naming no map is an event error that says which map it tried.
+
 ## Try it yourself
 
 - Lock the house: make the door's first page say "It's locked." and give it a second page with an *Item* condition (the party holds a key) that opens it. The sample game does exactly this with the elder's house key.
