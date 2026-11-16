@@ -86,6 +86,7 @@
 		"change_battle_back.gd",
 		"enemy_appear.gd",
 		"force_flee.gd",
+		"transform_enemy.gd",
 		"abort_battle.gd",
 		"get_location_info.gd",
 		"stop_sound.gd",

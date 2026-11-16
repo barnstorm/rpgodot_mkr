@@ -354,6 +354,7 @@ static func _enemy_appear_checks(tr: Dictionary, list: Variant, registry: RPGCom
 
 ## The party commands' enemy target in a troop's battle events (Change HP/SP, Change State,
 ## Recover All), and Force Flee's enemy number: the enemy number must be a member of the group.
+## Transform Enemy takes an enemy number too, but no target selector, so it skips that gate.
 static func _enemy_target_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
 	if registry == null or not (list is Array):
 		return
@@ -362,9 +363,10 @@ static func _enemy_target_checks(tr: Dictionary, list: Variant, registry: RPGCom
 	if not (members is Array):
 		return
 	registry.walk(list, func(c: Dictionary, p: String) -> void:
-		if not ["change_hp_mp", "change_state", "recover_all", "force_flee"].has(str(c.get("type", ""))):
+		var ctype := str(c.get("type", ""))
+		if not ["change_hp_mp", "change_state", "recover_all", "force_flee", "transform_enemy"].has(ctype):
 			return
-		if str(c.get("target", "party")) != "enemy":
+		if ctype != "transform_enemy" and str(c.get("target", "party")) != "enemy":
 			return
 		var n := int(c.get("enemy_index", 1)) if typeof(c.get("enemy_index", 1)) in [TYPE_INT, TYPE_FLOAT] else 0
 		if n < 1 or n > members.size():

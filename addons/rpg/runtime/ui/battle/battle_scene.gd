@@ -471,6 +471,7 @@ func _rebuild_enemy_sprite(old_b: RPGBattler, new_b: RPGBattler) -> void:
 		field.add_child(spr)
 	enemy_nodes[new_b] = spr
 	_place_battler_nodes()
+	_refresh_order_strip()
 	_refresh_status()
 
 
@@ -961,6 +962,22 @@ func enemy_flee(target: String, member_index := -1) -> Array:
 	_refresh_order_strip()
 	_refresh_status()
 	return fled
+
+
+## Transform Enemy (event command): the member at `member_index` (0-based) becomes the enemy
+## record `enemy_id` — HP and states follow `hp_mode` / `clear_states` (see
+## RPGBattleCore.transform_enemy). The sprite is rebuilt in place by the core's
+## enemy_transformed signal; "*%1 transformed!*" shows. Returns the new battler, or null when
+## the member or the record does not exist.
+func enemy_transform(member_index: int, enemy_id: String, hp_mode := "keep", clear_states := false) -> RPGBattler:
+	if core == null:
+		return null
+	var nb: RPGBattler = core.transform_enemy(member_index, enemy_id, hp_mode, clear_states)
+	if nb == null:
+		return null
+	await say(rules().term("transform", [nb.name]), 0.45)
+	log_win.visible = false
+	return nb
 
 
 func _collapse(b: RPGBattler) -> void:
