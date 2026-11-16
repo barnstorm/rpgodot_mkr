@@ -675,27 +675,36 @@ func _check_encounter() -> void:
 	if encounter_count > 0:
 		return
 	reset_encounter()
-	var region: int = map.region_at(cell)
+	var g: Dictionary = pick_encounter_group(map.props, map.region_at(cell), rpg.rng)
+	if g.is_empty():
+		return
+	# Preemptive strike or surprise attack (RPGBattleCore.encounter_advantage: MV's 5% / 3%).
+	var adv := "normal"
+	if rpg.rules is RPGRuleSystem:
+		adv = RPGBattleCore.encounter_advantage(rpg.rules, rpg.state.party_battlers(), rpg.data.record("troops", str(g.troop)), _randf_range(0.0, 1.0))
+	rpg.scheduler.request_main("encounter", [{"type": "battle", "troop": g.troop, "can_escape": true, "can_lose": false, "advantage": adv}], {"kind": "map_event", "map": map.map_id, "event": "(encounter)"}, null)
+
+
+## The group a random encounter rolls from a map's `encounters.groups`: groups whose region list
+## is empty or holds the player's region, then a weighted roll (weight 0 never wins). Shared with
+## Battle Processing's "random encounter" source (#38). {} when the map has no group there.
+static func pick_encounter_group(props: Dictionary, region: int, rng: Variant) -> Dictionary:
 	var pool := []
-	for g in groups:
+	for g in props.get("encounters", {}).get("groups", []):
 		var regions: Array = g.get("regions", [])
 		if regions.is_empty() or regions.has(region):
 			pool.append(g)
 	if pool.is_empty():
-		return
+		return {}
 	var total := 0
 	for g in pool:
 		total += int(g.get("weight", 1))
-	var roll := _rand(maxi(total, 1))
+	var roll: int = rng.randi_range(0, maxi(total, 1) - 1) if rng != null else randi() % maxi(total, 1)
 	for g in pool:
 		roll -= int(g.get("weight", 1))
 		if roll < 0:
-			# Preemptive strike or surprise attack (RPGBattleCore.encounter_advantage: MV's 5% / 3%).
-			var adv := "normal"
-			if rpg.rules is RPGRuleSystem:
-				adv = RPGBattleCore.encounter_advantage(rpg.rules, rpg.state.party_battlers(), rpg.data.record("troops", str(g.troop)), _randf_range(0.0, 1.0))
-			rpg.scheduler.request_main("encounter", [{"type": "battle", "troop": g.troop, "can_escape": true, "can_lose": false, "advantage": adv}], {"kind": "map_event", "map": map.map_id, "event": "(encounter)"}, null)
-			return
+			return g
+	return {}
 
 
 func reset_encounter() -> void:

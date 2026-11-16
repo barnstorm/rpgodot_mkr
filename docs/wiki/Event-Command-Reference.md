@@ -124,7 +124,7 @@ There are 87 built-in commands. The *ID* is the command's `type` in the event JS
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Battle Processing** | `battle` | Enemy group, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage, Store outcome in, If won, If escaped, If lost |
+| **Battle Processing** | `battle` | Enemy group source (Enemy group / Enemy group named by a variable / Random encounter on this map), Enemy group, Variable, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage, Store outcome in, If won, If escaped, If lost |
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
 | **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |

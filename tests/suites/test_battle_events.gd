@@ -345,6 +345,59 @@ func test_conditional_branch_battle_checks_in_events() -> void:
 	assert_true(env.rpg.state.errors.size() > 0, "the misuse was reported")
 
 
+# --- troop sources (#38) ------------------------------------------------------------------------------
+
+
+## Runs a battle command to its end and reports the scene, the group it fought and the result.
+## Commands that stop with an error before a scene opens report it without asserting here.
+func _fight(cmd: Dictionary) -> Dictionary:
+	var out := {"r": null, "scene": null, "troop_id": ""}
+	var run := func(): out.r = await env.rpg.run_commands([cmd], {"kind": "api", "id": "t"})
+	run.call()
+	await _wait_until(func(): return env.rpg.ui.scene_stack.size() > 0 or out.r != null)
+	if env.rpg.ui.scene_stack.size() > 0:
+		out.scene = env.rpg.ui.scene_stack[-1]
+		out.troop_id = str(out.scene.core.troop.get("id", ""))
+		out.scene.auto = true
+		env.rpg.ui.auto_advance = true
+		var end := Time.get_ticks_msec() + 20000
+		while out.r == null and Time.get_ticks_msec() < end:
+			if is_instance_valid(out.scene) and out.scene.phase != "":
+				if out.scene.phase == "party":
+					out.scene.cmd_list.select(0)
+				out.scene.handle_action("ok")
+			await tree.process_frame
+	return out
+
+
+## The group can be named by a variable, or come from the same roll a random encounter on the
+## map would make. Both stop with a named error when they name no group.
+func test_battle_troop_from_variable_and_encounter_roll() -> void:
+	_sample_env()
+	_add_troop(_later_troop())
+	env.rpg.data.variables["battle_group"] = {"id": "battle_group", "label": "Battle group", "type": "string"}
+	env.rpg.data.state_defs["variables"].append({"id": "battle_group", "label": "Battle group", "type": "string"})
+	await env.start_on("town", Vector2i(14, 12), "up")
+	# Named by a variable.
+	env.rpg.state.set_variable("battle_group", "later")
+	var r1: Dictionary = await _fight({"type": "battle", "troop_source": "variable", "variable": "battle_group", "can_escape": false, "can_lose": true})
+	assert_eq(r1.troop_id, "later", "the variable named the group")
+	assert_true(r1.r != null and r1.r.is_ok(), "the battle runs: %s" % [r1.r])
+	env.rpg.state.set_variable("battle_group", "ghost")
+	var r2: Dictionary = await _fight({"type": "battle", "troop_source": "variable", "variable": "battle_group"})
+	assert_true(r2.r != null and r2.r.is_error() and str(r2.r.message).contains("ghost"), "a missing group is a named error: %s" % [r2.r])
+	# The random encounter's roll: the map's groups, region-filtered, weight-rolled (weight 0
+	# never wins, so "slimes" is certain).
+	env.game.map.props["encounters"] = {"steps": 30, "groups": [{"troop": "bats", "weight": 0}, {"troop": "slimes", "weight": 3}]}
+	var r3: Dictionary = await _fight({"type": "battle", "troop_source": "encounter", "can_escape": false, "can_lose": true})
+	assert_eq(r3.troop_id, "slimes", "the encounter roll picked from the map's list")
+	assert_true(r3.r != null and r3.r.is_ok(), "the battle runs: %s" % [r3.r])
+	# No group for this region: a named error, not a silent no-op.
+	env.game.map.props["encounters"] = {"steps": 30, "groups": [{"troop": "bats", "weight": 1, "regions": [7]}]}
+	var r4: Dictionary = await _fight({"type": "battle", "troop_source": "encounter"})
+	assert_true(r4.r != null and r4.r.is_error() and str(r4.r.message).contains("no encounter group"), "a map without groups here is a named error: %s" % [r4.r])
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 

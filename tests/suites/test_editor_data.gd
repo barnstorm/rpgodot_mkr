@@ -737,6 +737,55 @@ func test_location_from_variables_editor_and_validator() -> void:
 		assert_false(str(p.message).contains("position"), "dynamic cells are not bounds-checked: %s" % p.message)
 
 
+## Battle Processing's group sources (#38): picked here, named by a variable, or the map's own
+## encounter roll. The editor switches fields, and the validator warns where it cannot check.
+func test_battle_troop_sources_editor_and_validator() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var vc: RPGCommand = registry.get_command("battle")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(vc.desc.fields, data, registry)
+	form.command = vc
+	# A picked group is the default; old events without a source are still one.
+	form.set_value({"type": "battle", "troop": "slimes"})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: slimes")
+	# Named by a variable.
+	form.set_field("troop_source", "variable")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("variable", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: group V[hero_name]")
+	# The map's encounter roll needs no group at all.
+	form.set_field("troop_source", "encounter")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: random encounter")
+	host.queue_free()
+	await frames(1)
+	# The validator warns about a variable group (it is checked when the battle starts) instead
+	# of erroring, asks nothing of the roll, and still requires a picked group.
+	var warns := RPGValidator.command_structure({"type": "battle", "troop_source": "variable", "variable": "hero_name"}, registry, "f", "r", "p")
+	assert_eq(warns.size(), 1, str(warns))
+	assert_eq(warns[0].severity, "warning")
+	assert_true(str(warns[0].message).contains("hero_name"), str(warns))
+	assert_eq(RPGValidator.command_structure({"type": "battle", "troop_source": "encounter"}, registry, "f", "r", "p"), [], "the roll is only checked at runtime")
+	var errs := RPGValidator.command_structure({"type": "battle"}, registry, "f", "r", "p")
+	assert_true(errs.any(func(p): return p.severity == "error" and str(p.message).contains("required")), str(errs))
+	# And through a whole project: the variable must exist, the warning rides along, no error.
+	var ev := {
+		"id": "bossy", "name": "Bossy", "position": [2, 2], "notes": "",
+		"pages": [{"conditions": [], "graphic": null, "priority": "same", "trigger": "action_button",
+			"commands": [{"type": "battle", "troop_source": "variable", "variable": "hero_name", "can_escape": false}]}],
+	}
+	var probs := RPGValidator.full(data, registry, _events_files([ev]))
+	var w := probs.filter(func(p): return str(p.message).contains("only checked when the battle starts"))
+	assert_eq(w.size(), 1, str(probs))
+	assert_eq(w[0].severity, "warning")
+	assert_false(probs.any(func(p): return p.severity == "error" and str(p.path).contains("bossy")), "a variable group is no error: %s" % str(probs.filter(func(p): return p.severity == "error")))
+
+
 # --------------------------------------------------------------------------------------------
 # Quick event dialog and command list editor
 # --------------------------------------------------------------------------------------------
