@@ -4,7 +4,9 @@ An **event** is anything on the map that does something: a villager who talks, a
 
 ## 1. Event mode
 
-Press **Event** on the toolbar (or F6). The grid appears, and every event on the map shows as a small box. The list on the right, *Events on this map*, shows each event's name, ID and position; click one to jump to it.
+Press **Event** on the toolbar (or F6). The grid appears, and every event on the map shows as a small box. The list on the right, *Events on this map*, shows each event's name, ID and position, numbered `#1`, `#2`, … in **run order**; click one to jump to it.
+
+Run order is the order the game runs the map's events in, top to bottom — the order they were created, like RPG Maker's event numbers. It decides which of two parallel events writes a shared variable first in a frame, which autorun starts first, and which of several triggered events goes first. New events join at the bottom of the list; select one and press **Move up** or **Move down** to change when it runs.
 
 ![Event mode](images/editor_event_mode.png)
 

@@ -235,6 +235,46 @@ func test_autorun_that_never_stops_is_reported() -> void:
 	assert_eq(env.rpg._autorun_repeats, 0, "the chain counter resets once the player has control")
 
 
+# --- run order (#73) ---------------------------------------------------------------------------------
+
+
+## Events run in the events file's order (creation order), not alphabetical ID order (#73).
+func test_events_run_in_file_order_not_alphabetical() -> void:
+	assert_eq(env.game.map.event_order, ["town_house_door", "floor_plate", "autorun_evt", "parallel_evt", "chest", "zz_runs_first", "aa_runs_second"], "run order is the events file's order")
+
+
+## Two parallels writing one variable in the same frame: the one later in the file wins (#73).
+func test_two_parallels_writing_one_variable_give_the_file_order_result() -> void:
+	env.rpg.set_switch("order_on", true)
+	for i in 10:
+		await frames(1)
+	# zz_runs_first comes before aa_runs_second in the events file (the reverse of alphabetical),
+	# so aa_runs_second writes last in each pass.
+	assert_eq(env.rpg.get_variable("order_var"), 2, "the file-order-last parallel writes last")
+	env.rpg.set_switch("order_on", false)
+
+
+## Autorun common events are picked in common_events.json's order, likewise (#73).
+func test_autorun_common_events_run_in_file_order() -> void:
+	# "touched" gates nothing in the fixture, so the map's order-test parallels stay out of this.
+	env.rpg.data.common_events["zz_ce"] = {"id": "zz_ce", "name": "ZZ", "trigger": "autorun", "switch": "touched", "commands": [
+		{"type": "set_variable", "id": "order_var", "operation": "set", "value": 1},
+		{"type": "set_switch", "id": "touched", "value": "off"}
+	]}
+	env.rpg.data.common_events["aa_ce"] = {"id": "aa_ce", "name": "AA", "trigger": "autorun", "switch": "touched", "commands": [
+		{"type": "set_variable", "id": "order_var", "operation": "set", "value": 2},
+		{"type": "set_switch", "id": "touched", "value": "off"}
+	]}
+	env.rpg.set_switch("touched", true)
+	for i in 60:
+		await frames(1)
+		if env.rpg.get_variable("order_var") != 0:
+			break
+	assert_eq(env.rpg.get_variable("order_var"), 1, "zz_ce is first in the file, so it runs (alphabetically aa_ce would)")
+	env.rpg.data.common_events.erase("zz_ce")
+	env.rpg.data.common_events.erase("aa_ce")
+
+
 func test_event_debug_info_explains_pages() -> void:
 	var door: Node = null
 	for ev in env.game.map.characters():

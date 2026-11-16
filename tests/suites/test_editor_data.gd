@@ -342,7 +342,7 @@ func test_validator_finds_broken_references() -> void:
 	assert_false(p1.is_empty(), "broken transfer destination\n" + msgs)
 	assert_eq(p1.get("severity"), "error")
 	assert_eq(p1.get("record"), "broken")
-	assert_eq(p1.get("path"), "events/5/pages/0/commands/0/to")
+	assert_eq(p1.get("path"), "events/7/pages/0/commands/0/to")
 	assert_true(str(p1.get("fix_hint", "")) != "", "has a fix hint")
 	assert_false(find.call("Map 'nowhere' does not exist").is_empty(), "unknown map")
 	assert_false(find.call("Switch 'no_such_switch' does not exist").is_empty(), "unknown switch in condition")

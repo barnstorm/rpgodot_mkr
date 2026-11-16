@@ -249,7 +249,8 @@ func start(p_rpg: Node) -> void:
 		events_root.add_child(ev)
 		events[ev.event_id] = ev
 		event_order.append(ev.event_id)
-	event_order.sort()
+	# The events file's order is the run order (#73): creation order, like RPG Maker's event IDs,
+	# deciding page refresh, parallel start, autorun choice and multi-event triggers.
 	refresh_vehicles()
 	started = true
 	refresh_pages()

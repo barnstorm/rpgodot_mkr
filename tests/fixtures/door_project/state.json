@@ -5,7 +5,8 @@
 		{"id": "autorun_on", "label": "Autorun on", "folder": "", "description": ""},
 		{"id": "parallel_on", "label": "Parallel on", "folder": "", "description": ""},
 		{"id": "clock_on", "label": "Clock on", "folder": "", "description": ""},
-		{"id": "touched", "label": "Touched", "folder": "", "description": ""}
+		{"id": "touched", "label": "Touched", "folder": "", "description": ""},
+		{"id": "order_on", "label": "Order test on", "folder": "", "description": ""}
 	],
 	"variables": [
 		{"id": "counter", "type": "int", "default": 0, "label": "Counter"},
@@ -13,6 +14,7 @@
 		{"id": "flag", "type": "bool", "default": false, "label": "Flag"},
 		{"id": "hero_name", "type": "string", "default": "Alex", "label": "Hero name"},
 		{"id": "ticks", "type": "int", "default": 0, "label": "Parallel ticks"},
-		{"id": "scene_result", "type": "string", "default": "", "label": "Scene result"}
+		{"id": "scene_result", "type": "string", "default": "", "label": "Scene result"},
+		{"id": "order_var", "type": "int", "default": 0, "label": "Run-order test"}
 	]
 }
