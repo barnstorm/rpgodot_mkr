@@ -52,9 +52,10 @@ static func apply_defaults(d: Dictionary, args: Dictionary) -> Dictionary:
 ## Structural checks against the descriptor. Returns an Array of {severity, field, message}.
 func validate(args: Dictionary) -> Array:
 	var problems := []
-	for f in desc.get("fields", []):
+	var fields: Array = desc.get("fields", [])
+	for f in fields:
 		var k: String = f.get("key", "")
-		if not _visible(f, args):
+		if not _visible(f, args, fields):
 			continue
 		var has := args.has(k) and args[k] != null
 		if f.get("required", false) and not has:
@@ -90,11 +91,20 @@ func validate(args: Dictionary) -> Array:
 	return problems
 
 
-static func _visible(f: Dictionary, args: Dictionary) -> bool:
+## Whether a field shows for these args. A show_if key the args do not carry falls back to that
+## field's descriptor default, so commands saved before a gated field existed still check the
+## branch the default picks (same as with_defaults).
+static func _visible(f: Dictionary, args: Dictionary, fields: Array = []) -> bool:
 	if not f.has("show_if"):
 		return true
 	var cond: Dictionary = f.show_if
-	var actual: Variant = args.get(cond.get("key", ""))
+	var gate := str(cond.get("key", ""))
+	var actual: Variant = args.get(gate)
+	if not args.has(gate):
+		for s in fields:
+			if s is Dictionary and str(s.get("key", "")) == gate and s.has("default"):
+				actual = s.default
+				break
 	if cond.has("equals"):
 		if cond.equals is Array:
 			return cond.equals.has(actual)

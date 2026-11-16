@@ -67,7 +67,7 @@ const FIX_HINT := {
 	"common_event": "Create the common event in Database > Common events, or pick another one.",
 }
 ## Command fields that write the referenced switch/variable (everything else reads).
-const SETTER_FIELDS := {"set_switch": ["id"], "set_variable": ["id", "from", "to"], "input_number": ["variable"]}
+const SETTER_FIELDS := {"set_switch": ["id", "from", "to"], "set_variable": ["id", "from", "to"], "input_number": ["variable"]}
 const SETTER_KEYS := ["result", "roll_into"]
 ## Commands whose free-form strings may mention IDs (renames warn instead of rewriting).
 const SCRIPT_COMMANDS := ["call_method", "emit_signal", "run_scene"]
@@ -616,9 +616,10 @@ static func command_structure(c: Dictionary, registry: RPGCommandRegistry, file 
 		return out
 	for p in cmd.validate(c):
 		out.append(problem(p.get("severity", "error"), file, rec, str(p.get("field", "")), "%s/%s" % [path, p.get("field", "")], "%s: %s" % [cmd.desc.get("label", type), p.message], "Double-click the line to edit it."))
-	for f in cmd.desc.get("fields", []):
+	var cmd_fields: Array = cmd.desc.get("fields", [])
+	for f in cmd_fields:
 		var k: String = f.get("key", "")
-		if not c.has(k) or c[k] == null or not RPGCommand._visible(f, c):
+		if not c.has(k) or c[k] == null or not RPGCommand._visible(f, c, cmd_fields):
 			continue
 		match str(f.get("kind", "")):
 			"operand":
@@ -748,7 +749,7 @@ static func _fields(fields: Array, holder: Dictionary, path: String, ctx: Dictio
 		if k == "" or not holder.has(k):
 			continue
 		var sub := ctx
-		if not RPGCommand._visible(f, holder) and not ctx.hidden:
+		if not RPGCommand._visible(f, holder, fields) and not ctx.hidden:
 			sub = ctx.duplicate()
 			sub.hidden = true
 		_field(f, fields, holder, k, path + "/" + k, sub, registry, acc)

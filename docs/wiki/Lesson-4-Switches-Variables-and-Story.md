@@ -74,7 +74,7 @@ Page 1's condition makes the trees useless before the quest begins; page 2 makes
 - **Counter** — saves, battles, victories, defeats or escapes so far.
 - **Enemy** — one enemy's HP or other stat during a battle (battle events read these live).
 
-The target can be one variable, a **range** of them (every declared variable between the two ends, in the order they were declared; random values re-roll for each one), or **indirect**: a variable whose *value is the id* of the variable to change. The value can be indirect the same way (**Pointer** mode reads the variable whose id another variable holds).
+The target can be one variable, a **range** of them (every declared variable between the two ends, in the order they were declared; random values re-roll for each one), or **indirect**: a variable whose *value is the id* of the variable to change. The value can be indirect the same way (**Pointer** mode reads the variable whose id another variable holds). **Control Switch** has the same target modes: a range turns every declared switch between its two ends ON or OFF (or flips them) at once, and the indirect target reads the switch's id from a variable.
 
 ## 4. Conditional Branch: the farmer checks
 
