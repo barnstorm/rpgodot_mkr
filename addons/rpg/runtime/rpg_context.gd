@@ -125,12 +125,29 @@ func wait_seconds(seconds: float) -> bool:
 	if seconds <= 0.0:
 		await tree.process_frame
 		return not token.is_cancelled
+	if interpreter != null and interpreter.suspends_with_map:
+		return await _wait_seconds_suspended(seconds)
 	interpreter.set_waiting(true)
 	var timer := tree.create_timer(seconds, false)
 	var w := RPGWaiter.any([timer.timeout, token.cancelled])
 	var r: Array = await w.done
 	interpreter.set_waiting(false)
 	return r[0] == 0 and not token.is_cancelled
+
+
+## A parallel's wait only advances while the map runs: a menu-type screen or battle suspends it,
+## and the remaining time picks up where it left off when the screen closes (RPG Maker's map
+## scene). Frame-accumulated so no time passes while suspended.
+func _wait_seconds_suspended(seconds: float) -> bool:
+	interpreter.set_waiting(true)
+	var left := seconds
+	while left > 0.0 and not token.is_cancelled:
+		await tree.process_frame
+		if rpg.scheduler.map_suspended():
+			continue
+		left -= tree.get_root().get_process_delta_time()
+	interpreter.set_waiting(false)
+	return not token.is_cancelled
 
 
 ## Waits for a signal. Returns {ok: bool, value}.
@@ -145,10 +162,15 @@ func wait_signal(sig: Signal) -> Dictionary:
 
 
 func wait_frames(n: int) -> bool:
-	for i in n:
+	var left := n
+	while left > 0:
 		if token.is_cancelled:
 			return false
 		await tree.process_frame
+		# A parallel's frames do not pass while the map is suspended (menu, battle...).
+		if interpreter != null and interpreter.suspends_with_map and rpg.scheduler.map_suspended():
+			continue
+		left -= 1
 	return not token.is_cancelled
 
 

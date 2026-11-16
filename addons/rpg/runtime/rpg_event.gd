@@ -208,6 +208,9 @@ func _process(delta: float) -> void:
 		return
 	if _locked_facing != "" and not is_running():
 		_locked_facing = ""
+	# A menu-type screen or battle suspends the map: wandering NPCs sleep until it closes.
+	if map.rpg.scheduler.map_suspended():
+		return
 	_autonomous(delta)
 
 
