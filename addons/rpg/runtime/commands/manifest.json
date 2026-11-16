@@ -23,6 +23,8 @@
 		"exit_event.gd",
 		"comment.gd",
 		"erase_event.gd",
+		"spawn_event.gd",
+		"despawn_event.gd",
 		"set_switch.gd",
 		"set_variable.gd",
 		"set_self_switch.gd",

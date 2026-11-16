@@ -244,16 +244,61 @@ func start(p_rpg: Node) -> void:
 	events.clear()
 	event_order.clear()
 	for ev_data in rpg.data.map_events(map_id):
-		var ev := RPGEvent.new()
-		ev.setup(self, ev_data)
-		events_root.add_child(ev)
-		events[ev.event_id] = ev
-		event_order.append(ev.event_id)
+		_create_event(ev_data)
 	# The events file's order is the run order (#73): creation order, like RPG Maker's event IDs,
 	# deciding page refresh, parallel start, autorun choice and multi-event triggers.
+	# Runtime-spawned copies (#66) come back on top of the placed ones, wherever they were.
+	for ev_data in rpg.state.spawned_events.get(map_id, []):
+		_create_event(ev_data)
 	refresh_vehicles()
 	started = true
 	refresh_pages()
+
+
+func _create_event(ev_data: Dictionary) -> RPGEvent:
+	var ev := RPGEvent.new()
+	ev.setup(self, ev_data)
+	events_root.add_child(ev)
+	events[ev.event_id] = ev
+	event_order.append(ev.event_id)
+	return ev
+
+
+## Spawns a copy of a template event at runtime (#66): the copy behaves like a placed event
+## (pages, triggers, self switches) and is recorded in the state, so it survives map changes and
+## saves. Its ID is the template's with a running number (slime, slime_2, ...).
+func spawn_event(template: Dictionary, cell: Vector2i) -> RPGEvent:
+	var data := template.duplicate(true)
+	data["id"] = RPGIds.unique(str(data.get("id", "event")), events, [])
+	data["position"] = [cell.x, cell.y]
+	var ev := _create_event(data)
+	if not rpg.state.spawned_events.has(map_id):
+		rpg.state.spawned_events[map_id] = []
+	rpg.state.spawned_events[map_id].append(data.duplicate(true))
+	ev.refresh()
+	return ev
+
+
+## Removes an event from the map (#66). A spawned copy is forgotten for good; a placed one is only
+## gone until the map is loaded again (like Erase Event, but at once). The event the main
+## interpreter is running right now is hidden instead of freed, so its commands finish.
+func despawn_event(event_id: String) -> bool:
+	var ev: RPGEvent = events.get(event_id)
+	if ev == null:
+		return false
+	var record: Array = rpg.state.spawned_events.get(map_id, [])
+	for i in record.size():
+		if record[i] is Dictionary and str(record[i].get("id", "")) == event_id:
+			record.remove_at(i)
+			break
+	events.erase(event_id)
+	event_order.erase(event_id)
+	rpg.scheduler.stop_parallel(ev.parallel_key(), "despawned")
+	if rpg.scheduler.main_ticket != null and rpg.scheduler.main_ticket.event == ev:
+		ev.erase_event()
+		return true
+	ev.queue_free()
+	return true
 
 
 ## How many times the map is magnified on screen: the project's tile size over the tileset's
