@@ -396,6 +396,37 @@ func test_battle_page_variable_condition_through_the_reader() -> void:
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), [], "no fish yet")
 	st.set_variable("fish_caught", 3)
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), ["fish"], "3 fish >= 3 through the game state")
+func test_conditional_branch_battle_checks() -> void:
+	# A bat (quick: it acts before a level-1 hero) and a hidden slime: the hero's attack is the
+	# turn's last action, and the hidden member can never act.
+	var troop := {"id": "t", "members": [
+		{"enemy": "bat", "position": [100, 120]},
+		{"enemy": "slime", "hidden": true, "position": [200, 120]}], "pages": []}
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero", 1)], troop, rules, RPGRandom.new(5))
+	core.start()
+	core.begin_turn()
+	assert_true(core.branch_check("actor_can_act", {"id": "hero"}), "the hero can act")
+	assert_false(core.branch_check("actor_can_act", {"id": "mira"}), "an actor outside the battle cannot")
+	assert_true(core.branch_check("enemy_can_act", {"index": 0}), "the bat can act")
+	assert_false(core.branch_check("enemy_can_act", {"index": 1}), "the hidden member cannot")
+	assert_false(core.branch_check("enemy_is_target", {"index": 0}), "no action has run yet")
+	assert_true(core.set_action(0, {"kind": "attack", "target": 0}))
+	var r := core.next_action()
+	while not r.is_empty():
+		r = core.next_action()
+	assert_true(core.branch_check("enemy_is_target", {"index": 0}), "the hero's attack was the last action")
+	assert_false(core.branch_check("enemy_is_target", {"index": 1}), "not the hidden one")
+	core.end_turn()
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "guard"}))
+	r = core.next_action()
+	while not r.is_empty():
+		r = core.next_action()
+	assert_false(core.branch_check("enemy_is_target", {"index": 0}), "an enemy attacked the hero: no enemy is the target")
+	core.enemies[0].set_resource("hp", 0)
+	assert_false(core.branch_check("enemy_can_act", {"index": 0}), "a defeated enemy cannot act")
+	rules.add_state(core.party[0], "sleep")
+	assert_false(core.branch_check("actor_can_act", {"id": "hero"}), "a sleeping actor cannot act")
 
 
 func test_sample_goblin_page() -> void:

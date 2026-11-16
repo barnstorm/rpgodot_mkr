@@ -306,6 +306,45 @@ func test_troop_page_variable_condition_runs_mid_battle() -> void:
 	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
 
 
+# --- Conditional Branch battle checks (#50) ------------------------------------------------------------
+
+
+## Runs one Conditional Branch in the running battle; returns true (then) or false (else).
+func _branch(cond: Dictionary) -> bool:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "if", "condition": cond, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 0}]}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "the branch ran: %s" % str(r))
+	return int(env.rpg.state.get_variable("fish_caught")) == 1
+
+
+func test_conditional_branch_battle_checks_in_events() -> void:
+	_sample_env()
+	# A troop page runs an `if` with a page-style check: branches read the running battle too.
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 100}, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": []}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_eq(int(env.rpg.state.get_variable("fish_caught")), 1, "the page's if read the enemy's HP")
+	assert_true(await _branch({"kind": "actor_can_act", "id": "hero"}), "the hero can act")
+	assert_true(await _branch({"kind": "enemy_can_act", "index": 0}), "so can the first slime")
+	assert_true(await _branch({"kind": "turn", "n": 1}), "and it is turn 1")
+	assert_false(await _branch({"kind": "actor_can_act", "id": "mira"}), "an actor outside the battle cannot act")
+	assert_false(await _branch({"kind": "enemy_can_act", "index": 1}), "nor can the hidden member")
+	assert_false(await _branch({"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 50}), "the slime is above half HP")
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "no action has run, nothing is the target")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+	# Outside a battle the checks are quietly false (with a warning logged), not an error.
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "outside a battle the check is false")
+	assert_true(env.rpg.state.errors.size() > 0, "the misuse was reported")
+
+
 # --- the validator -----------------------------------------------------------------------------------
 
 
@@ -385,3 +424,27 @@ func test_validator_checks_enemy_action_conditions() -> void:
 	assert_true(msgs.any(func(m): return m.contains("no valid state")), str(msgs))
 	assert_true(msgs.any(func(m): return m.contains("no valid variable")), str(msgs))
 	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+
+
+func test_validator_battle_branch_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	# Inside a battle event (or a common event) the battle checks are fine.
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "if", "condition": {"kind": "actor_can_act", "id": "hero"}, "then": [], "else": [
+			{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}])
+	assert_eq(RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json").size(), 0, "troop page commands may use them")
+	var ce := {"id": "probe", "trigger": "none", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_can_act", "index": 0}, "then": [], "else": []}]}
+	assert_eq(RPGValidator.structure("common_events", {"schema_version": 1, "common_events": [ce]}, reg, "common_events.json").size(), 0, "so may common events")
+	# On a map they only ever evaluate false: warned, not an error.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}
+	var probs := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_eq(probs.size(), 1, str(probs))
+	assert_eq(probs[0].severity, "warning")
+	# And they are not page conditions, even on a battle page.
+	var bad := _later_troop([{"id": "p", "conditions": [{"kind": "actor_can_act", "id": "hero"}], "commands": []}])
+	var p2 := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json")
+	assert_eq(p2.size(), 1, "a branch-only kind is not a page condition")
+	assert_eq(p2[0].severity, "error")
