@@ -230,6 +230,50 @@ func test_typed_variables() -> void:
 	assert_false(st.set_switch("not_a_switch", true), "unknown switch refused")
 
 
+## Control Switch target modes (#55): a range follows the project's switch order, a pointer reads
+## the switch id from a variable, and a range still asks for one page refresh.
+func test_set_switch_range_and_pointer_targets() -> void:
+	for s in ["puzzle_a", "puzzle_b", "puzzle_c"]:
+		env.rpg.data.switches[s] = {"id": s, "label": s.capitalize()}
+		env.rpg.data.state_defs["switches"].append({"id": s, "label": s.capitalize()})
+	var changes := [0]
+	env.rpg.state.changed.connect(func(): changes[0] += 1)
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "puzzle_a", "to": "puzzle_c", "value": "on"}])
+	assert_true(r.is_ok(), str(r))
+	for s in ["puzzle_a", "puzzle_b", "puzzle_c"]:
+		assert_true(env.rpg.get_switch(s), "%s is on" % s)
+	assert_false(env.rpg.get_switch("door_unlocked"), "switches before the range keep their value")
+	assert_eq(changes[0], 3, "one change per switch")
+	assert_true(env.rpg._refresh_pending, "the changes collapse into one pending page refresh")
+	# Toggle flips each switch on its own.
+	r = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "puzzle_a", "to": "puzzle_b", "value": "toggle"}])
+	assert_true(r.is_ok(), str(r))
+	assert_false(env.rpg.get_switch("puzzle_a"), "was on, now off")
+	assert_false(env.rpg.get_switch("puzzle_b"), "was on, now off")
+	# A reversed range touches nothing.
+	r = await env.rpg.run_commands([
+		{"type": "set_switch", "target": "range", "from": "puzzle_c", "to": "puzzle_a", "value": "off"}])
+	assert_false(r.is_ok(), "a reversed range is an error")
+	assert_true(env.rpg.get_switch("puzzle_c"), "still on")
+	# The pointer mode flips whichever switch the variable names.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": "puzzle_b"},
+		{"type": "set_switch", "target": "pointer", "variable": "hero_name", "value": "on"}])
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.rpg.get_switch("puzzle_b"), "the switch the variable named is on")
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "hero_name", "operation": "set", "value": ""},
+		{"type": "set_switch", "target": "pointer", "variable": "hero_name", "value": "on"}])
+	assert_false(r.is_ok(), "a pointer with no switch id is an error")
+	assert_true(r.message.contains("holds no switch id"), r.message)
+	# A single switch still works without a target field (existing projects).
+	r = await env.rpg.run_commands([{"type": "set_switch", "id": "door_unlocked", "value": "on"}])
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.rpg.get_switch("door_unlocked"))
+
+
 func test_blocked_movement_is_deterministic() -> void:
 	var p: RPGPlayer = env.game.player
 	p.place(Vector2i(12, 8))

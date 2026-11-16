@@ -502,6 +502,34 @@ func test_form_builder_round_trips_every_descriptor() -> void:
 	await frames(1)
 
 
+## Control Switch target modes in the editor (#55): the fields of the chosen target validate,
+## the others stop mattering, and the summaries read back.
+func test_set_switch_target_modes() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var sw: RPGCommand = registry.get_command("set_switch")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(sw.desc.fields, data, registry)
+	form.command = sw
+	form.set_value({"type": "set_switch", "id": "door_unlocked", "value": "on"})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch [door_unlocked] = ON")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "door_unlocked")
+	form.set_field("to", "touched")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switches [door_unlocked] .. [touched] = ON")
+	form.set_field("target", "pointer")
+	form.set_field("variable", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch V[hero_name] = ON")
+	host.queue_free()
+	await frames(1)
+
+
 # --------------------------------------------------------------------------------------------
 # Quick event dialog and command list editor
 # --------------------------------------------------------------------------------------------

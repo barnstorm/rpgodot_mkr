@@ -158,6 +158,17 @@ func set_switch(id: String, value: bool) -> bool:
 	return true
 
 
+## Switch ids in the order state.json declares them: a Control Switch range target runs over
+## this order, as switch numbers do in RPG Maker (#55).
+func switch_order() -> Array:
+	var ids: Array = []
+	if data == null:
+		return ids
+	for s in data.state_defs.get("switches", []):
+		ids.append(str(s.get("id", "")))
+	return ids
+
+
 # --- variables --------------------------------------------------------------------
 
 func variable_type(id: String) -> String:

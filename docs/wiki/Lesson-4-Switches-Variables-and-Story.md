@@ -67,6 +67,8 @@ Page 1's condition makes the trees useless before the quest begins; page 2 makes
 
 **Control Variable** can *set*, *add*, *subtract*, *multiply*, *divide* or take the remainder (*mod*). The value can be a **number**, another **variable**, a **random** number between two values, or **game data**: how many of an item the party holds, gold, steps, play time, party size, an actor's level, EXP or stats.
 
+**Control Switch** can set more than one switch at a time: *One switch*, a *Range* (every switch from one to another, in the order the project declares them — a puzzle's reset button), or the switch *named by a variable*: store a switch id in a variable first, and the command flips whichever switch it names then. *ON / OFF / Toggle* applies to each switch on its own, and pages re-check once after the whole range is set.
+
 ## 4. Conditional Branch: the farmer checks
 
 Go back to the farmer's page 2 and replace its line:
