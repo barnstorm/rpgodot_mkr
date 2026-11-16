@@ -532,6 +532,13 @@ func test_route_step_schema_covers_the_new_step_kinds() -> void:
 	assert_eq(props.call.properties.args, {"type": "array"})
 
 
+func test_show_text_schema_covers_the_message_style_fields() -> void:
+	# Both style choices are keep/on/off, where keep reads the System setting (#62).
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].cmd_show_text.properties
+	assert_eq(props.avoid_player.enum, ["keep", "on", "off"], "avoid_player choice")
+	assert_eq(props.events_continue.enum, ["keep", "on", "off"], "events_continue choice")
+
+
 # --------------------------------------------------------------------------------------------
 # Form builder
 # --------------------------------------------------------------------------------------------

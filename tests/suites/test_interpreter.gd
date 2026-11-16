@@ -1644,6 +1644,145 @@ func test_an_overlay_scene_can_opt_out_of_the_pause() -> void:
 	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel kept running under the overlay")
 
 
+# --- Show Text message style (#62) ----------------------------------------------------------------
+
+## Opens a message in the background (auto_advance off) and holds it open until the test calls
+## box._finish_text().
+func _hold_message(extra: Dictionary = {}) -> void:
+	var p := {"type": "show_text", "text": "held"}
+	p.merge(extra)
+	env.rpg.run_commands([p])
+
+
+func test_avoid_player_swaps_a_top_or_bottom_box_away_from_the_player() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	# The player starts low on the screen (row 8 of 15, y≈128 of 240): a top box stays put...
+	_hold_message({"position": "top", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "player low: a top box stays")
+	box._finish_text()
+	# ...and a bottom box flips to the top.
+	_hold_message({"position": "bottom", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "player low: a bottom box flips to the top")
+	box._finish_text()
+	# The player walks up (row 3, y≈48): now a top box flips down and a bottom box stays.
+	env.game.player.place(Vector2i(12, 3))
+	await frames(1)
+	_hold_message({"position": "top", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "player high: a top box flips to the bottom")
+	box._finish_text()
+	_hold_message({"position": "bottom", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "player high: a bottom box stays")
+	box._finish_text()
+	# A middle box never moves, and without avoid_player nothing flips.
+	_hold_message({"position": "middle", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 82, "a middle box stays in the middle")
+	box._finish_text()
+	_hold_message({"position": "top"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "without avoid_player a top box stays while the player is high")
+	box._finish_text()
+
+
+func test_avoid_player_can_come_from_the_system_settings() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.game.player.place(Vector2i(12, 3))
+	await frames(1)
+	env.rpg.data.system["message_avoid_player"] = true
+	_hold_message({"position": "top"})  # "keep" (the default) reads the System setting
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "keep + System on: the top box flips to the bottom")
+	box._finish_text()
+	_hold_message({"position": "top", "avoid_player": "off"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "a message's off wins over the System default")
+	box._finish_text()
+
+
+func test_a_message_pauses_parallels_and_wandering_npcs_by_default() -> void:
+	# RM2000/2003 default: "Allow events to continue" off, so the map sleeps behind the pages.
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	var ev := await _place_chest(Vector2i(4, 3))
+	ev.move_type = "vertical"
+	ev.frequency = 5
+	ev._move_wait = 0.0
+	await _await_step(ev)
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "the map is suspended while the message shows")
+	var frozen: int = env.rpg.state.get_variable("ticks")
+	await frames(3)  # an in-flight NPC step finishes before its cell is pinned
+	var parked := ev.cell
+	await env.tree.create_timer(0.3).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), frozen, "the parallel slept during the message")
+	assert_eq(ev.cell, parked, "the wandering NPC did not move during the message")
+	box._finish_text()
+	await env.tree.create_timer(0.3).timeout
+	assert_false(env.rpg.scheduler.map_suspended(), "the map resumed when the message closed")
+	assert_true(env.rpg.state.get_variable("ticks") > frozen, "the parallel resumed")
+	var moved := await _await_step(ev)
+	assert_true(moved != parked, "the NPC resumed walking")
+
+
+func test_events_continue_keeps_everything_running_during_the_message() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	var ev := await _place_chest(Vector2i(4, 3))
+	ev.move_type = "vertical"
+	ev.frequency = 5
+	ev._move_wait = 0.0
+	await _await_step(ev)
+	_hold_message({"events_continue": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_false(env.rpg.scheduler.map_suspended(), "events_continue on: the map is not suspended")
+	var during: int = env.rpg.state.get_variable("ticks")
+	await env.tree.create_timer(0.2).timeout
+	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel ticked during the message")
+	var before := ev.cell
+	var moved := await _await_step(ev)
+	assert_true(moved != before, "the NPC kept walking during the message")
+	box._finish_text()
+
+
+func test_events_continue_can_come_from_the_system_settings() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.data.system["message_events_continue"] = true
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_false(env.rpg.scheduler.map_suspended(), "keep + System on: events continue")
+	box._finish_text()
+	_hold_message({"events_continue": "off"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "a message's off wins over the System default")
+	box._finish_text()
+
+
+func test_choices_do_not_hold_the_pause() -> void:
+	# The pause covers only the text pages: choices never hold one, so the map runs while the
+	# player picks (RM2000/2003 pauses for neither, MV/MZ for none of it).
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "the text pages hold the pause")
+	box._finish_text()
+	box.open_choices(["yes", "no"])
+	assert_false(env.rpg.scheduler.map_suspended(), "choices do not hold the pause")
+	box.force_close()
+
+
 # --- Parallel common events: switch off and map change (#78) -------------------------------------
 
 
