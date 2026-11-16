@@ -25,7 +25,8 @@ Monsters fight in **enemy groups** (RPG Maker's *troops*). On **Enemy groups**, 
 2. **Autoname** names the group after its members (*Wolf x2*).
 3. **Can escape**: whether the party can run.
 4. **Appears later** on a member keeps it out of the battle at the start. A battle event brings it in with **Enemy Appear** (section 5).
-5. **Battle test** on this tab starts this fight at once in a game window (save first). *Game > Battle test…* on the RPG tab lets you choose the group, the party and their levels.
+5. **Appear %** on a member gives it a chance to miss the fight (RPG Maker's random appearance), so an ambush varies from fight to fight. One that misses behaves exactly like *Appears later* — **Enemy Appear** can still bring it in — and at least one member always fights.
+6. **Battle test** on this tab starts this fight at once in a game window (save first). *Game > Battle test…* on the RPG tab lets you choose the group, the party and their levels.
 
 ## 3. Random encounters
 

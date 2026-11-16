@@ -669,6 +669,42 @@ func test_encounter_advantage_rolls() -> void:
 	assert_true(done.has("r"), "the battle ends")
 
 
+## RM2003 random appearance (#41): a member below its Appear % misses the fight but behaves like
+## "Appears later", at least one member always fights, and the same seed rolls the same fight.
+func test_troop_members_appear_at_random() -> void:
+	var t := {"id": "rollers", "name": "Rollers", "members": [
+		{"enemy": "slime", "position": [120, 150]},
+		{"enemy": "bat", "position": [200, 150], "appear_chance": 0}]}
+	var core := _core(["hero"], t, "turn", 1)
+	assert_eq(core.enemies.size(), 2, "both members are built")
+	assert_false(core.enemies[0].hidden, "a member without a chance always fights")
+	assert_true(core.enemies[1].hidden, "a 0% member misses the fight")
+	assert_eq(core.active_enemies().size(), 1, "the fight itself has one enemy")
+	# A member that missed its roll is reachable by Enemy Appear, like a hidden one.
+	assert_eq(core.appear(1).size(), 1, "Enemy Appear brings the missing member in")
+	assert_false(core.enemies[1].hidden, "and it fights from then on")
+	# When every rollable member misses, the first one that missed is brought back.
+	var zeros := {"id": "zeros", "name": "Zeros", "members": [
+		{"enemy": "slime", "position": [120, 150], "appear_chance": 0},
+		{"enemy": "bat", "position": [200, 150], "appear_chance": 0}]}
+	var z := _core(["hero"], zeros, "turn", 1)
+	assert_false(z.enemies[0].hidden, "at least one member always fights")
+	assert_true(z.enemies[1].hidden, "the other still missed")
+	# A chance roll repeats with the same seed.
+	var flaky := {"id": "flaky", "name": "Flaky", "members": [
+		{"enemy": "slime", "position": [120, 150]},
+		{"enemy": "slime", "position": [200, 150], "appear_chance": 50}]}
+	var a := _core(["hero"], flaky, "turn", 7)
+	var b := _core(["hero"], flaky, "turn", 7)
+	assert_eq([a.enemies[0].hidden, a.enemies[1].hidden], [b.enemies[0].hidden, b.enemies[1].hidden], "seeded rolls repeat")
+	# Members hidden on purpose are not "rescued" by the at-least-one rule.
+	var ambush := {"id": "ambush", "name": "Ambush", "members": [
+		{"enemy": "slime", "position": [120, 150], "hidden": true},
+		{"enemy": "slime", "position": [200, 150], "hidden": true}]}
+	var c := _core(["hero"], ambush, "turn", 1)
+	assert_true(c.enemies[0].hidden and c.enemies[1].hidden, "an all-hidden troop stays hidden")
+
+
 func test_atb_pass_turn_to_the_next_actor() -> void:
 	var core := _core(["hero", "mira"], "slimes", "atb", 6, "preemptive")
 	var hero: RPGBattler = core.party[0]

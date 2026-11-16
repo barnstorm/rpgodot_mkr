@@ -352,6 +352,8 @@ func _update_info() -> void:
 		var m: Variant = members[selected]
 		var c := _center(selected)
 		var later := " (appears later)" if m is Dictionary and bool(m.get("hidden", false)) else ""
+		if later == "" and m is Dictionary and float(m.get("appear_chance", 100)) < 100.0:
+			later = " (%d%% chance)" % int(clampf(float(m.appear_chance), 0.0, 100.0))
 		_info.text = "#%d %s at %d, %d%s. Drag to move, arrow keys nudge, Delete removes." % [selected + 1, str(_enemy(selected).get("name", m.get("enemy", "?") if m is Dictionary else "?")), int(c.x), int(c.y), later]
 	else:
 		_info.text = "Click an enemy to select it, drag to move it. Positions are the enemy's centre on the 320x240 battle screen."
@@ -399,6 +401,8 @@ func _draw_canvas() -> void:
 		var m: Variant = members[i]
 		if m is Dictionary and bool(m.get("hidden", false)):
 			tag += " (later)"
+		elif m is Dictionary and float(m.get("appear_chance", 100)) < 100.0:
+			tag += " (%d%%)" % int(clampf(float(m.appear_chance), 0.0, 100.0))
 		var p := Vector2(r.position.x * SCALE + 2, (r.position.y + r.size.y) * SCALE + 13)
 		canvas.draw_string_outline(font, p, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.8))
 		canvas.draw_string(font, p, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 0.9, 0.2) if i == selected else Color.WHITE)

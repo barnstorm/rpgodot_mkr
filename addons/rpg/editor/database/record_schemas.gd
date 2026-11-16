@@ -140,7 +140,9 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					_ref("enemy", "enemy", "Enemy"),
 					{"key": "position", "kind": "point", "default": [160, 120], "min": 0, "max": 9999, "label": "Position (pixels)",
 						"help": "The enemy's centre on the 320x240 battle screen. Drag it in the picture above."},
-					_b("hidden", "Appears later", false)]},
+					_b("hidden", "Appears later", false),
+					_i("appear_chance", "Appear %", 100, 0, 100).merged({"show_if": {"key": "hidden", "equals": false},
+						"help": "The chance this enemy is in the fight when it starts (RPG Maker's random appearance). One that misses its roll can still be brought in with Enemy Appear, and at least one member always fights."})]},
 				{"key": "pages", "kind": "list", "default": [], "label": "Battle events", "item_fields": [
 					_t("id", "Page ID"), _t("name", "Name"),
 					{"key": "conditions", "kind": "list", "item_kind": "condition", "battle": true, "default": [], "label": "Conditions"},
