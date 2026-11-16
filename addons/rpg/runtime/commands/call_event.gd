@@ -2,8 +2,8 @@
 extends RPGCommand
 ## Runs a map event's page inline (RPG2000/2003 Call Event): a switchboard event can hold shared
 ## logic that many events call. While the page runs it is "this event", so its self switches and
-## self variables are the called event's. Recursion is allowed up to the interpreter's depth
-## limit. For common events use Call Common Event.
+## self variables are the called event's. Nested calls (Call Event, Call Common Event) are capped
+## at the interpreter's depth limit. For common events use Call Common Event.
 
 
 static func descriptor() -> Dictionary:
