@@ -44,7 +44,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
 | Set Event Location; events return to their editor positions when the map loads | The same. A move by Set Event Location or a move route lasts for the visit, a transfer inside the map moves nothing, and a game saved on the map loads with the events where they stood. **Keep** on Set Event Location (not in RPG Maker) makes the event return to that place instead. Older versions of the kit kept every Set Event Location for good |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |
-| Label, Jump to Label | The same (*flow* category) |
+| Label, Jump to Label | The same (*flow* category). A jump reaches a label anywhere in the event, inside a Conditional Branch, a Loop or a choice too; with several labels of one name the nearest wins (RPG Maker takes the first from the top) |
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
 | Change Transparency, Change Map Name Display, Change Tileset, Change Parallax, Change Battle Back | The same commands |
 | Change Battle BGM, Change Victory ME, Stop SE, Change Window Skin, Get Location Info | The same commands |

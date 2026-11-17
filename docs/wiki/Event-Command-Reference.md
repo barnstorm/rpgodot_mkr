@@ -49,7 +49,7 @@ records how long the wait took, in tenths of a second.
 | **Despawn Event** | `despawn_event` | Event (an ID, this, or a variable holding an ID) |
 | **Erase Event** | `erase_event` |  |
 | **Exit Event Processing** | `exit_event` |  |
-| **Jump to Label** | `jump_to_label` | Label name |
+| **Jump to Label** | `jump_to_label` | Label name. The label can be anywhere in the same event page or common event, inside a branch, a loop or a choice too |
 | **Label** | `label` | Label name |
 | **Loop** | `loop` | Repeat |
 | **Spawn Event** | `spawn_event` | Template event, Template map, Cell, Store its ID in |

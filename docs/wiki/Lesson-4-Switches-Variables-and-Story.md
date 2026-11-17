@@ -122,7 +122,7 @@ On the editor side, **Tools > Event search** finds every event that uses a switc
 ## Try it yourself
 
 - Use a **Loop** with **Break Loop** to ask "How many apples will you sell? (Input Number)" until the answer is valid.
-- Use **Label** and **Jump to Label** to repeat a shop keeper's question.
+- Use **Label** and **Jump to Label** to repeat a shop keeper's question. The label can sit anywhere in the event, inside a branch, a loop or a choice too: the jump runs the rest of that branch and goes on after it, and a loop it lands in keeps looping until **Break Loop**.
 - Add a choice to the farmer that only appears while the party has a *Golden apple* (Show Choices' *Shown only while switch is ON*, with a switch you set when the golden apple is found).
 - Make a chest that pays out more every time: a self variable `times_opened`, then *Change Gold +* with the value `10 multiply times_opened`… or invent your own reward.
 

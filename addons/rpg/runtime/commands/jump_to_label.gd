@@ -1,7 +1,9 @@
 @tool
 extends RPGCommand
-## RPG Maker's "Jump to Label": continues after the Label with this name in the same event
-## (searching outwards from the current branch or loop).
+## RPG Maker's "Jump to Label": continues after the Label with this name in the same event.
+## The label can be anywhere in the event, inside a branch, a loop or a choice too: the nearest
+## one wins (the jump's own list, the blocks inside it, then outwards). RPGInterpreter.run_list
+## places the jump.
 
 
 static func descriptor() -> Dictionary:
