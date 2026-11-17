@@ -1390,7 +1390,7 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> Dictionary:
 	var res := {"hit": false, "evaded": false, "damage": 0, "recovered": 0, "resource": life_resource(),
 		"critical": false, "element_rate": 1.0, "added_states": [], "removed_states": [], "resisted_states": [],
-		"knocked_out": false, "revived": false, "changes": {}, "lines": [], "text": "", "error": ""}
+		"knocked_out": false, "revived": false, "escape": false, "changes": {}, "lines": [], "text": "", "error": ""}
 	var u := resolve_action(user, action)
 	if u.is_empty():
 		res.error = "unknown action %s" % str(action)
@@ -1426,8 +1426,9 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		_change(target, d.resource, int(d.value))
 	# Effects (RPG Maker's item/skill effects). recover / damage: `percent` of the maximum plus a
 	# flat `amount`; add_state / remove_state: `chance` % (default 100); grow: a permanent stat
-	# increase (`id` = stat, `amount`); learn_skill: `id` = skill; common_event: run once after the
-	# action by the caller (common_events()).
+	# increase (`id` = stat, `amount`); learn_skill: `id` = skill; gain_tp: flat TP on the target;
+	# escape: the target leaves the battle (the core carries it out); common_event: run once
+	# after the action by the caller (common_events()).
 	for e in u.effects:
 		if not (e is Dictionary):
 			continue
@@ -1469,6 +1470,14 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 					if not res.has("learned"):
 						res["learned"] = []
 					res.learned.append(sk)
+			"gain_tp":
+				# Flat TP on the target (VX Ace / MV); rules without a TP resource ignore it.
+				if not target.is_dead() and _res_order.has("tp"):
+					_change(target, "tp", int(_num(e.get("amount"), 0.0)))
+			"escape":
+				# The Special Effect: Escape is carried out by the battle core (whoever it hits
+				# leaves the fight), not here — the core owns the field and the result.
+				res.escape = true
 	# States that end when hit (sleep).
 	var life_lost: int = before.get(life_resource(), 0) - target.get_resource(life_resource())
 	if life_lost > 0:

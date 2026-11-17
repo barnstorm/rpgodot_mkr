@@ -220,7 +220,7 @@ The first command runs every suite; the second runs a single suite. You can also
 godot --headless --path . --script res://tests/run_tests.gd -- --suite=interpreter
 ```
 
-There are 538 tests in 30 suites:
+There are 638 tests in 34 suites:
 
 | Suite | What it covers |
 | --- | --- |
@@ -228,7 +228,7 @@ There are 538 tests in 30 suites:
 | `save` | Save and load, migration, refusing to save during an event |
 | `import` | 2000/2003 ChipSet decoding and autotile patterns against fixtures; RPG Maker folder import findings from the real RTPs (water row, palette transparency, JPG, XP/VX/MV window skins, skipped folders, game over, tileset ids) |
 | `formula`, `rules` | Safe formulas and the Classic and OSR rule systems |
-| `battle_core` | Turn order, AI, rewards and battle events |
+| `battle_core` | Turn order, AI, rewards and battle events; the Escape effect on a party member (lone escaper ends the fight) and on an enemy (leaves with no rewards) |
 | `battle_styles` | Front and side view, turn / ATB / CTB: defaults, side-view placement, the battler graphic chain (MV sheet, 2003 BattleCharSet, walk sprite), motions, ATB fill order, wait and active time, the turn counter for troop pages, preemptive and surprise (encounter rolls, Battle Processing), escape, passing the turn, spacing and mixed-source heights, auto battles in every combination |
 | `party_abilities` | VX Ace / MV party abilities, a trait any member carries for the whole party: Encounter Half and Encounter None on the map, Cancel Surprise and Raise Preemptive in the encounter roll, Gold Double and Drop Item Double in the rewards |
 | `extension_hooks` | Extension hooks: entry scripts and game signals, settings, save sections, menu and options entries, text codes, condition kinds, custom fields, map overlay layers and character attachments |
@@ -244,7 +244,7 @@ There are 538 tests in 30 suites:
 | `runtime_regressions` | Edge cases from a runtime review: a parallel event that transfers the player, failed transfers and loads, fades after a reset, self switches after a fading transfer, Erase Event across saves, pictures and BGS after a load |
 | `commands_maker` | The RPG Maker commands added for the tutorials: Show Animation, Change Actor Graphic / Name / Level / EXP / Skills / Equipment / Class, transparency, battle music, tileset, parallax, battle background, Get Location Info, Stop SE, window skin |
 | `vehicles` | Boat, ship and airship: boarding, water rules, landing, riding through save and load |
-| `rules_vx_ace` | The VX Ace style rules: stat curves, damage formulas, HIT/EVA/CRI, TP, Features |
+| `rules_vx_ace` | The VX Ace style rules: stat curves, damage formulas, HIT/EVA/CRI, TP, Features, the Gain TP effect |
 | `states_walking` | States while walking: removal after N steps (not in a vehicle), slip damage and regeneration every 20 steps, 2000-style changes every N steps, the 1 HP floor and game over with Knockout by slip damage, damage floors, step counters through save and load, the Database fields and checks |
 | `database_ui` | Database forms: vehicles, conditions, operand modes, tile picker, class curves, Autoname, a project with no rpg folder, maker view release; editor-QA fixes: reload after Create, Ctrl+S, per-tab problem checks, type dropdowns, rename blocking, plain starting values, currency hint, title image and start facing |
 | `event_editor` | Editor-QA fixes in the event editor and quick events: starter sounds in VX/MV projects, steady form layout, uncommitted new events, 1-based JSON lines, readable event search, dialogs stepping aside for map picks, the character frame preview, new Conditional Branch kinds (with runtime support) |

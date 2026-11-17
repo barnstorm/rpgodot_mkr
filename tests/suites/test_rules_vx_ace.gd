@@ -212,6 +212,26 @@ func test_tp() -> void:
 	assert_eq(bruno.get_resource("tp"), 70, "Preserve TP")
 
 
+## The Gain TP effect (VX Ace / MV, #43): flat TP on the target, capped at the maximum.
+func test_gain_tp_effect() -> void:
+	db.add("items", {"id": "tonic", "name": "Tonic", "scope": "one_ally",
+		"effects": [{"kind": "gain_tp", "amount": 30}]})
+	var eric := rules.new_actor_battler("eric")
+	var r := rules.use_item(eric, eric, "tonic")
+	assert_eq(eric.get_resource("tp"), 30, "the effect adds flat TP")
+	assert_true(RPGRuleSystem.had_effect(r))
+	rules.use_item(eric, eric, "tonic")
+	assert_eq(eric.get_resource("tp"), 60)
+	db.add("items", {"id": "big_tonic", "name": "Big Tonic", "scope": "one_ally",
+		"effects": [{"kind": "gain_tp", "amount": 100}]})
+	rules.use_item(eric, eric, "big_tonic")
+	assert_eq(eric.get_resource("tp"), 100, "capped at the maximum")
+	var dead := rules.new_actor_battler("eric")
+	dead.set_resource("hp", 0)
+	rules.use_item(eric, dead, "tonic")
+	assert_eq(dead.get_resource("tp"), 0, "the dead gain nothing")
+
+
 func test_regen() -> void:
 	var eric := rules.new_actor_battler("eric")
 	rules.add_state(eric, "regen")

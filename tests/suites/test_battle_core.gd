@@ -142,6 +142,53 @@ func test_items_use_consumer() -> void:
 	assert_eq(stock.potion, 0)
 
 
+## The Escape effect (VX Ace / MV, #43): a smoke bomb — the user leaves the battle, and a
+## lone party that escapes ends the fight as an escape (not a win, no rewards).
+func test_escape_effect_on_a_lone_party_ends_the_battle() -> void:
+	db.add("items", {"id": "smoke_bomb", "name": "Smoke Bomb", "scope": "user",
+		"effects": [{"kind": "escape"}]})
+	var core := _core(["hero"], "slimes", 5)
+	core.item_consumer = func(id): return true
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "item", "item": "smoke_bomb", "target": 0}))
+	var fled: Array = []
+	var r := core.next_action()
+	while not r.is_empty():
+		if not r.get("fled", []).is_empty():
+			fled = r.fled
+		r = core.next_action()
+	core.end_turn()
+	assert_eq(fled, [core.party[0]], "the hero left the field")
+	assert_true(core.party[0].escaped)
+	assert_eq(core.battle_over(), "escape", "a lone escaper ends the fight as an escape")
+
+
+## The same effect aimed at an enemy makes just that enemy leave — no rewards for it, and
+## the fight continues until the rest of the troop is dealt with.
+func test_escape_effect_on_an_enemy_leaves_it_without_rewards() -> void:
+	db.add("skills", {"id": "banish", "name": "Banish", "scope": "one_enemy",
+		"hit_type": "certain", "formula": "0", "variance": 0,
+		"effects": [{"kind": "escape"}]})
+	var core := _core(["hero"], "slimes", 5)
+	core.party[0].skills.append("banish")
+	core.begin_turn()
+	assert_true(core.set_action(0, {"kind": "skill", "skill": "banish", "target": 0}))
+	var fled: Array = []
+	var r := core.next_action()
+	while not r.is_empty():
+		if not r.get("fled", []).is_empty():
+			fled = r.fled
+		r = core.next_action()
+	core.end_turn()
+	assert_eq(fled, [core.enemies[0]], "the first slime was banished")
+	assert_true(core.enemies[0].escaped)
+	assert_eq(core.battle_over(), "", "the fight goes on while the second slime stands")
+	assert_eq(_auto_battle(core)[0], "win")
+	var rw := core.rewards()
+	assert_eq(rw.exp, 6, "only the slime that fell counts")
+	assert_eq(rw.gold, 8)
+
+
 func test_turn_order_and_checkpoints() -> void:
 	var core := _core(["hero"], "bats", 11)
 	var seen := []

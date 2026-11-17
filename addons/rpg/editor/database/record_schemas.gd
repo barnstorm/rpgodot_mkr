@@ -14,8 +14,8 @@ const HIT_TYPES := ["certain", "physical", "magical"]
 const RESTRICTIONS := ["none", "cannot_act", "attack_enemy", "attack_anyone", "attack_ally"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 ## Effect kinds (RPGRuleSystem.apply_action) and their labels.
-const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "common_event"]
-const EFFECT_LABELS := ["Recover", "Damage", "Add State", "Remove State", "Grow (raise a stat)", "Learn Skill", "Common Event"]
+const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "gain_tp", "escape", "common_event"]
+const EFFECT_LABELS := ["Recover", "Damage", "Add State", "Remove State", "Grow (raise a stat)", "Learn Skill", "Gain TP", "Special Effect: Escape", "Common Event"]
 ## Built-in battle effects (RPGBattleEffects.BUILTIN) an animation field may name.
 const BUILTIN_ANIMATIONS := ["hit", "slash", "fire", "ice", "thunder", "heal"]
 ## Tileset asset profiles and their labels.
@@ -646,8 +646,9 @@ static func _enemy_condition_fields() -> Array:
 
 ## Effects of skills and items (RPGRuleSystem.apply_action), each kind with its own fields:
 ## Recover / Damage: resource, % of its maximum and a flat amount; Add / Remove State: the state
-## and a chance %; Grow: a stat and how much; Learn Skill: the skill; Common Event: the common
-## event (run after the item or skill is used).
+## and a chance %; Grow: a stat and how much; Learn Skill: the skill; Gain TP: flat TP (rules
+## with a TP resource); Special Effect: Escape: the target leaves the battle; Common Event: the
+## common event (run after the item or skill is used).
 static func _effects(resources: Array = [], stats: Array = []) -> Dictionary:
 	var res_ids := _ids(resources)
 	var res_labels := _labels(resources)
@@ -663,6 +664,7 @@ static func _effects(resources: Array = [], stats: Array = []) -> Dictionary:
 			"show_if": {"key": "kind", "equals": ["recover", "damage"]}},
 		{"key": "amount", "kind": "variant", "by": "kind", "default": 0, "label": "Amount", "cases": {
 			"recover": amounts, "damage": amounts,
+			"gain_tp": {"kind": "int", "default": 0, "min": 0, "max": 100, "label": "TP"},
 			"grow": {"kind": "int", "default": 1, "min": -9999, "max": 9999, "label": "Raise by"}}},
 		{"key": "chance", "kind": "int", "default": 100, "min": 0, "max": 100, "label": "Chance %",
 			"show_if": {"key": "kind", "equals": ["add_state", "remove_state"]}},

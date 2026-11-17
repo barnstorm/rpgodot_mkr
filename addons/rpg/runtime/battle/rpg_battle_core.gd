@@ -745,6 +745,23 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			res.lines.append_array(r.lines)
 	if wrapped:
 		rules.damage_filter = Callable()
+	# The Escape effect (VX Ace / MV): whoever it hits leaves the battle — an actor can escape
+	# alone, and the fight ends as an escape when the whole party has gone. An enemy target just
+	# leaves (no rewards), like the 2003 flee.
+	var fled: Array = []
+	for fe in res.effects:
+		var tb: RPGBattler = fe.get("target", null)
+		if tb is RPGBattler and tb.is_active() and bool(fe.get("result", {}).get("escape", false)):
+			tb.escaped = true
+			tb.action = {}
+			_charged.erase(tb)
+			fled.append(tb)
+	if not fled.is_empty():
+		res["fled"] = fled
+		for tb in fled:
+			res.lines.append(rules.term("flee", [tb.name]))
+		_prune_ready()
+		battle_over()
 	# Self-Destruct (2003): the monster trades its life for the damage — it collapses once the
 	# blast has landed.
 	if kind == "self_destruct" and b.is_active():
@@ -1484,6 +1501,9 @@ func battle_over() -> String:
 		return _result
 	if party.is_empty() or party.all(func(a): return a.is_dead()):
 		_result = "lose"
+	elif active_party().is_empty() and party.any(func(a): return a.escaped):
+		# The Escape effect emptied the party's side one member at a time.
+		_result = "escape"
 	elif active_enemies().is_empty() and enemies.any(func(e): return not e.hidden):
 		_result = "win"
 	elif enemies.is_empty():

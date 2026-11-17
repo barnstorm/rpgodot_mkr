@@ -981,17 +981,8 @@ func enemy_flee(target: String, member_index := -1) -> Array:
 		return []
 	var fled: Array = core.force_flee(target, member_index)
 	for e in fled:
-		if not e.is_enemy():
-			continue
-		var s: TextureRect = enemy_nodes.get(e)
-		if s == null:
-			continue
-		if auto or not is_inside_tree():
-			s.visible = false
-		else:
-			var t := s.create_tween()
-			t.tween_property(s, "modulate:a", 0.0, 0.25)
-			t.tween_callback(func(): s.visible = false)
+		if e.is_enemy():
+			_fade_enemy_out(e)
 	_place_battler_nodes()
 	_refresh_order_strip()
 	_refresh_status()
@@ -1530,14 +1521,27 @@ func show_action(r: Dictionary) -> void:
 		await _step(user, false)
 	# An enemy that ran (the 2003 basic action) fades out like Force Flee.
 	if user.is_enemy() and user.escaped and enemy_nodes.has(user):
-		var fs: TextureRect = enemy_nodes[user]
-		if auto or not is_inside_tree():
-			fs.visible = false
-		else:
-			var t := fs.create_tween()
-			t.tween_property(fs, "modulate:a", 0.0, 0.25)
-			t.tween_callback(func(): fs.visible = false)
+		_fade_enemy_out(user)
+	# The Escape effect (VX Ace / MV): a target that left the battle fades out too; escaped
+	# actors disappear from the stage with the next motion refresh.
+	for fe in r.get("effects", []):
+		var tb: RPGBattler = fe.get("target", null)
+		if tb is RPGBattler and tb != user and tb.escaped and enemy_nodes.has(tb):
+			_fade_enemy_out(tb)
+	_refresh_actor_motions()
 	_refresh_status()
+
+
+func _fade_enemy_out(b: RPGBattler) -> void:
+	var fs: TextureRect = enemy_nodes.get(b)
+	if fs == null:
+		return
+	if auto or not is_inside_tree():
+		fs.visible = false
+	else:
+		var t := fs.create_tween()
+		t.tween_property(fs, "modulate:a", 0.0, 0.25)
+		t.tween_callback(func(): fs.visible = false)
 
 
 ## Side view: the party turns and runs off to the right.
