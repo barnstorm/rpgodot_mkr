@@ -64,6 +64,28 @@ func before_each() -> void:
 	db.add("skills", {"id": "hit100", "name": "Hit 100", "formula": "100", "hit_type": "certain", "variance": 0})
 	db.add("skills", {"id": "charge", "name": "Charge", "formula": "1", "hit_type": "certain", "variance": 0, "tp_gain": 10})
 	db.add("skills", {"id": "tp_burst", "name": "Burst", "formula": "1", "hit_type": "certain", "cost": {"tp": 20}})
+	# Buffs/debuffs (#42): luck extremes for the debuff luck factor, a debuff-immune golem,
+	# and skills/items that only buff.
+	db.add("classes", {"id": "oracle", "name": "Oracle",
+		"growth": {"mhp": 300, "mmp": 50, "atk": 10, "def": 10, "mat": 10, "mdf": 10, "agi": 10, "luk": 1000}})
+	db.add("actors", {"id": "seer", "name": "Seer", "class": "oracle", "equips": {}})
+	db.add("enemies", {"id": "titan", "name": "Titan",
+		"stats": {"mhp": 5000, "mmp": 0, "atk": 40, "def": 40, "mat": 10, "mdf": 10, "agi": 5, "luk": 1100}})
+	db.add("enemies", {"id": "golem", "name": "Golem",
+		"stats": {"mhp": 800, "mmp": 0, "atk": 20, "def": 30, "mat": 10, "mdf": 10, "agi": 5, "luk": 10},
+		"traits": [{"kind": "debuff_rate", "id": "atk", "value": 0}]})
+	db.add("skills", {"id": "warcry", "name": "War Cry", "hit_type": "certain", "variance": 0,
+		"scope": "one_ally", "effects": [{"kind": "add_buff", "id": "atk", "turns": 4}]})
+	db.add("skills", {"id": "weaken", "name": "Weaken", "hit_type": "certain", "variance": 0,
+		"scope": "one_enemy", "effects": [{"kind": "add_debuff", "id": "atk", "turns": 3}]})
+	db.add("skills", {"id": "weak_curse", "name": "Weak Curse", "hit_type": "certain", "variance": 0,
+		"scope": "one_enemy", "effects": [{"kind": "add_debuff", "id": "atk", "turns": 3, "chance": 60}]})
+	db.add("skills", {"id": "bolster", "name": "Bolster", "hit_type": "certain", "variance": 0,
+		"scope": "one_ally", "effects": [{"kind": "remove_debuff", "id": "atk"}]})
+	db.add("skills", {"id": "dispel", "name": "Dispel", "hit_type": "certain", "variance": 0,
+		"scope": "one_enemy", "effects": [{"kind": "remove_buff", "id": "atk"}]})
+	db.add("items", {"id": "buff_tonic", "name": "Buff Tonic", "hit_type": "certain",
+		"effects": [{"kind": "add_buff", "id": "def", "turns": 5}]})
 	rules = RPGRuleSystem.load_rules("vx_ace", db)
 	rules.rng = RPGRandom.new(4242)
 
@@ -309,3 +331,110 @@ func test_exp_curve() -> void:
 	var ups := rules.gain_exp(eric, 170)
 	assert_eq(eric.level, 3)
 	assert_eq(ups[0].gains.mhp, 46, "linear curve step 4550 / 98")
+
+
+func test_buffs_scale_stats_and_cap() -> void:
+	var eric := rules.new_actor_battler("eric", 50)
+	var base := rules.stat_block(eric)
+	assert_eq(rules.buff_level(eric, "atk"), 0, "no buff yet")
+	# +1 is +25% and +2 is +50% (rules.json "step"), rounded once at the end as MV does; the
+	# level caps at two. def's {base, per_level} curve is exact at level 50 (108).
+	assert_true(rules.add_buff(eric, "atk"))
+	assert_true(rules.add_buff(eric, "atk"))
+	assert_true(rules.add_buff(eric, "atk"), "a third add stays at the cap")
+	assert_eq(rules.buff_level(eric, "atk"), 2)
+	assert_true(rules.add_debuff(eric, "def"))
+	assert_true(rules.add_debuff(eric, "def"))
+	assert_eq(rules.stat_block(eric).def, roundi(base.def * 0.5))
+	assert_true(rules.add_buff(eric, "def"))
+	assert_eq(rules.buff_level(eric, "def"), -1, "one buff level cancels one debuff level")
+	assert_eq(rules.stat_block(eric).def, roundi(base.def * 0.75))
+	assert_true(rules.remove_buff(eric, "def"))
+	assert_eq(rules.stat_block(eric).def, base.def, "remove erases the level in one step")
+	# An mhp buff raises the HP ceiling (the resource max reads the buffed stat).
+	assert_eq(rules.max_resource(eric, "hp"), base.mhp)
+	rules.add_buff(eric, "mhp")
+	assert_eq(rules.max_resource(eric, "hp"), roundi(base.mhp * 1.25))
+	# Only the rules' buffable stats take buffs, and the dead refuse them.
+	assert_false(rules.buffable("hp"), "resources are not stats")
+	assert_false(rules.add_buff(eric, "hp"))
+	rules.add_state(eric, "knockout")
+	assert_false(rules.add_buff(eric, "agi"), "the dead cannot be buffed")
+
+
+func test_buff_turns_refresh_and_expiry() -> void:
+	var eric := rules.new_actor_battler("eric", 50)
+	# Turns refresh to the longer of old and new while the level stays a buff (MV's
+	# overwriteBuffTurns), but a debuff keeps its own clock while a buff walks it back.
+	rules.add_buff(eric, "atk", 2)
+	rules.add_buff(eric, "atk", 5)
+	assert_eq(int(eric.buffs.atk.turns), 5, "the longer window wins")
+	rules.add_debuff(eric, "def", 4)
+	rules.add_debuff(eric, "def", 4)
+	rules.add_buff(eric, "def", 9)
+	assert_eq(rules.buff_level(eric, "def"), -1, "-2 walked back to -1")
+	assert_eq(int(eric.buffs.def.turns), 4, "the debuff keeps its own clock")
+	# A buff step that lands on 0 erases the entry outright.
+	rules.add_buff(eric, "def", 9)
+	assert_eq(rules.buff_level(eric, "def"), 0)
+	assert_false(eric.buffs.has("def"), "level 0 is no entry")
+	# The clock ticks at turn end and wears off with a "returned to normal" line.
+	var scout := rules.new_actor_battler("eric", 50)
+	rules.add_buff(scout, "agi", 2)
+	var out := rules.tick_states(scout, "turn_end")
+	assert_eq(out.removed_buffs, [], "one turn still stands")
+	assert_eq(int(scout.buffs.agi.turns), 1)
+	out = rules.tick_states(scout, "turn_end")
+	assert_eq(out.removed_buffs, ["agi"], "wears off when the clock runs out")
+	assert_eq(out.lines, ["Eric's Agility returned to normal!"], str(out.lines))
+	assert_eq(rules.buff_level(scout, "agi"), 0)
+	# The action_end pass leaves buffs alone; -1 never counts down; death and battle end clear.
+	rules.add_buff(scout, "agi", 3)
+	scout.buffs.agi.turns = -1
+	rules.tick_states(scout, "turn_end")
+	assert_eq(rules.buff_level(scout, "agi"), 1, "until-removed stays")
+	rules.add_state(scout, "knockout")
+	assert_true(scout.buffs.is_empty(), "death clears buffs")
+	var bruno := rules.new_actor_battler("bruno")
+	rules.add_debuff(bruno, "atk", 5)
+	rules.end_battle(bruno)
+	assert_true(bruno.buffs.is_empty(), "battle end clears debuffs")
+
+
+func test_buff_effects_apply_and_resist() -> void:
+	var eric := rules.new_actor_battler("eric", 50)
+	var slime := rules.new_enemy_battler("slime")
+	var seer := rules.new_actor_battler("seer")
+	var titan := rules.new_enemy_battler("titan")
+	var golem := rules.new_enemy_battler("golem")
+	# Add Buff lands, reports itself, and counts as having had an effect.
+	var r := rules.apply_action(eric, eric, {"kind": "skill", "skill": "warcry"})
+	assert_eq(r.added_buffs, ["atk"])
+	assert_eq(rules.buff_level(eric, "atk"), 1)
+	assert_true(r.lines.has("Eric's Attack was raised!"), str(r.lines))
+	assert_true(RPGRuleSystem.had_effect(r))
+	# The debuff chance rolls against Debuff Rate traits: 0% on a stat is immunity.
+	r = rules.apply_action(eric, golem, {"kind": "skill", "skill": "weaken"})
+	assert_eq(r.added_debuffs, [], "the golem's Attack cannot be debuffed")
+	assert_false(RPGRuleSystem.had_effect(r), "a resisted debuff alone did nothing")
+	# ...and against MV's luck factor max(1 + (user luck - target luck) / 1000, 0): a 1080-point
+	# gap floors it at zero, while a lucky user pushes a 60% debuff over certainty.
+	r = rules.apply_action(eric, titan, {"kind": "skill", "skill": "weaken"})
+	assert_eq(r.added_debuffs, [], "a 1080-luck gap floors the chance at zero")
+	r = rules.apply_action(seer, slime, {"kind": "skill", "skill": "weak_curse"})
+	assert_eq(r.added_debuffs, ["atk"], "a lucky user lands the 60% debuff")
+	assert_true(r.lines.has("Slime's Attack was lowered!"), str(r.lines))
+	# Remove Buff erases a buff; Remove Debuff only works on a debuff.
+	r = rules.apply_action(eric, eric, {"kind": "skill", "skill": "dispel"})
+	assert_eq(r.removed_buffs, ["atk"], "Remove Buff clears the buff")
+	assert_eq(rules.buff_level(eric, "atk"), 0)
+	r = rules.apply_action(eric, slime, {"kind": "skill", "skill": "dispel"})
+	assert_eq(r.removed_buffs, [], "Remove Buff does not touch a debuff")
+	r = rules.apply_action(eric, slime, {"kind": "skill", "skill": "bolster"})
+	assert_eq(r.removed_buffs, ["atk"], "Remove Debuff clears it")
+	# A buff-only item counts as having had an effect (the menu consumes it then).
+	var bruno := rules.new_actor_battler("bruno")
+	r = rules.apply_action(bruno, bruno, {"kind": "item", "item": "buff_tonic"})
+	assert_eq(r.added_buffs, ["def"])
+	assert_eq(rules.buff_level(bruno, "def"), 1)
+	assert_true(RPGRuleSystem.had_effect(r))

@@ -51,6 +51,9 @@ const DEFAULT_TERMS := {
 	"level_up": "%1 is now level %2!",
 	"learned": "%1 learned %2!",
 	"stat_up": "%1's %2 went up by %3!",
+	"buff_up": "%1's %2 was raised!",
+	"buff_down": "%1's %2 was lowered!",
+	"buff_back": "%1's %2 returned to normal!",
 	"slip": "%1 takes %2 damage from %3!",
 	"nothing": "Nothing happened.",
 }
@@ -430,6 +433,11 @@ func stat_block(b: RPGBattler) -> Dictionary:
 		for t in rate_traits:
 			if str(t.get("id", "")) == sid:
 				value *= float(t.get("value", 100)) / 100.0
+		# Buffs/debuffs (#42): each level steps the stat by the rules' percent, as MV's
+		# paramBuffRate (level * 0.25 + 1), after stat rate traits and before the clamp.
+		var blv := buff_level(b, sid)
+		if blv != 0:
+			value *= 1.0 + blv * float(buffs_config().get("step", 25)) / 100.0
 		value = clampf(value, float(def.get("min", -1.0e9)), float(def.get("max", 1.0e9)))
 		out[sid] = value if def.get("type", "int") == "float" else roundi(value)
 	return out
@@ -775,6 +783,7 @@ func add_state(b: RPGBattler, state_id: String) -> bool:
 		b.states.clear()
 		b.resources[life_resource()] = 0
 		b.guarding = false
+		b.buffs.clear()
 	b.add_state(state_id, _roll_state_turns(rec))
 	return true
 
@@ -800,6 +809,77 @@ func remove_state(b: RPGBattler, state_id: String) -> bool:
 	if state_id == death_state():
 		b.resources[life_resource()] = maxi(1, int(b.resources.get(life_resource(), 0)))
 	return true
+
+
+# --------------------------------------------------------------------------------------------
+# Buffs and debuffs (#42)
+# --------------------------------------------------------------------------------------------
+
+## rules.json "buffs": {"params": buffable stats, "step": percent per level, "max_levels": the
+## +/- cap, "luck_stat": the stat of the debuff luck factor}. A rule system without it (Classic,
+## whose halve/double stat changes are states) has no buffs — the config is the hook, and buff
+## effects on it do nothing.
+func buffs_config() -> Dictionary:
+	var c: Variant = definition.get("buffs")
+	return c if c is Dictionary else {}
+
+
+func buffable(stat: String) -> bool:
+	return buffs_config().get("params", []).has(stat)
+
+
+## The buff level of `stat`: +1/+2 buffed, -1/-2 debuffed, 0 none (or not a buffable stat).
+func buff_level(b: RPGBattler, stat: String) -> int:
+	if not buffable(stat):
+		return 0
+	return int(b.buffs.get(stat, {}).get("level", 0))
+
+
+func _buff_turns(b: RPGBattler, stat: String) -> int:
+	return int(b.buffs.get(stat, {}).get("turns", 0))
+
+
+## One buff level up (or one debuff level cancelled), capped at the rules' max. As MV's addBuff:
+## the turns refresh to the longer of old and new only while the level is still a buff, so +1 over
+## a -2 debuff just softens it to -1 without touching its turns. No-op when dead or not buffable.
+func add_buff(b: RPGBattler, stat: String, turns := 5) -> bool:
+	if not buffable(stat) or not b.is_alive():
+		return false
+	var lv := mini(buff_level(b, stat) + 1, maxi(1, int(buffs_config().get("max_levels", 2))))
+	if lv == 0:
+		b.buffs.erase(stat)
+	else:
+		b.buffs[stat] = {"level": lv, "turns": maxi(_buff_turns(b, stat), turns) if lv > 0 else _buff_turns(b, stat)}
+	return true
+
+
+## One debuff level down, capped at -max, otherwise as add_buff. Returns true when applied.
+func add_debuff(b: RPGBattler, stat: String, turns := 5) -> bool:
+	if not buffable(stat) or not b.is_alive():
+		return false
+	var lv := maxi(buff_level(b, stat) - 1, -maxi(1, int(buffs_config().get("max_levels", 2))))
+	if lv == 0:
+		b.buffs.erase(stat)
+	else:
+		b.buffs[stat] = {"level": lv, "turns": maxi(_buff_turns(b, stat), turns) if lv < 0 else _buff_turns(b, stat)}
+	return true
+
+
+## Clears the stat's buff or debuff entirely — MV's removeBuff erases the level, it does not step
+## down. Returns true when there was one.
+func remove_buff(b: RPGBattler, stat: String) -> bool:
+	return b.buffs.erase(stat)
+
+
+## MV's lukEffectRate, the luck factor of the debuff chance: max(1 + (user's luck - target's
+## luck) / 1000, 0). 1.0 when the rules have no luck stat.
+func _luck_factor(user: RPGBattler, target: RPGBattler) -> float:
+	var stat := str(buffs_config().get("luck_stat", "luk"))
+	if not _stat_defs.has(stat):
+		return 1.0
+	var a := float(user.snapshot().get(stat, 0))
+	var t := float(target.snapshot().get(stat, 0))
+	return maxf(1.0 + (a - t) * 0.001, 0.0)
 
 
 func _state_name(state_id: String) -> String:
@@ -828,7 +908,7 @@ func can_act(b: RPGBattler) -> bool:
 ## only "action end" states count down, as MV's Action End timing).
 ## Returns {damage, removed_states, lines, knocked_out}.
 func tick_states(b: RPGBattler, timing := "turn_end") -> Dictionary:
-	var out := {"damage": 0, "removed_states": [], "lines": [], "knocked_out": false}
+	var out := {"damage": 0, "removed_states": [], "removed_buffs": [], "lines": [], "knocked_out": false}
 	if b.is_dead():
 		return out
 	if timing == "turn_end":
@@ -874,6 +954,17 @@ func tick_states(b: RPGBattler, timing := "turn_end") -> Dictionary:
 				remove_state(b, s.id)
 				out.removed_states.append(s.id)
 				out.lines.append(_state_message(rec, "removed", b.name, s.id))
+	# Buffs/debuffs count down at the end of the battle turn (MV's updateBuffTurns; the action_end
+	# pass leaves them alone) and wear off with a "returned to normal" line. -1 never counts down.
+	if timing == "turn_end":
+		for stat in b.buffs.keys().duplicate():
+			var buff: Dictionary = b.buffs[stat]
+			if int(buff.get("turns", 0)) > 0:
+				buff.turns -= 1
+				if int(buff.turns) <= 0:
+					b.buffs.erase(stat)
+					out.removed_buffs.append(stat)
+					out.lines.append(term("buff_back", [b.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
 	return out
 
 
@@ -883,6 +974,7 @@ func end_battle(b: RPGBattler) -> void:
 	for s in b.states.duplicate():
 		if _rec("states", s.id).get("remove_at_battle_end", false):
 			b.remove_state(s.id)
+	b.buffs.clear()
 	b.guarding = false
 	b.action = {}
 	_reset_resources(b, "battle_end")
@@ -1324,6 +1416,7 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> Dictionary:
 	var res := {"hit": false, "evaded": false, "damage": 0, "recovered": 0, "resource": life_resource(),
 		"critical": false, "element_rate": 1.0, "added_states": [], "removed_states": [], "resisted_states": [],
+		"added_buffs": [], "added_debuffs": [], "removed_buffs": [],
 		"knocked_out": false, "revived": false, "changes": {}, "lines": [], "text": "", "error": ""}
 	var u := resolve_action(user, action)
 	if u.is_empty():
@@ -1359,9 +1452,11 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 	elif d.type == "recover" and not (target.is_dead() and d.resource == life_resource()):
 		_change(target, d.resource, int(d.value))
 	# Effects (RPG Maker's item/skill effects). recover / damage: `percent` of the maximum plus a
-	# flat `amount`; add_state / remove_state: `chance` % (default 100); grow: a permanent stat
-	# increase (`id` = stat, `amount`); learn_skill: `id` = skill; common_event: run once after the
-	# action by the caller (common_events()).
+	# flat `amount`; add_state / remove_state: `chance` % (default 100); add_buff / add_debuff /
+	# remove_buff / remove_debuff: `id` = stat, `turns` for the adds (a debuff rolls its chance
+	# against the Debuff Rate traits and the luck factor); grow: a permanent stat increase
+	# (`id` = stat, `amount`); learn_skill: `id` = skill; common_event: run once after the action
+	# by the caller (common_events()).
 	for e in u.effects:
 		if not (e is Dictionary):
 			continue
@@ -1403,6 +1498,26 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 					if not res.has("learned"):
 						res["learned"] = []
 					res.learned.append(sk)
+			"add_buff":
+				var bstat := str(e.get("id", ""))
+				if add_buff(target, bstat, maxi(1, int(_num(e.get("turns"), 5.0)))):
+					res.added_buffs.append(bstat)
+			"add_debuff":
+				var dstat := str(e.get("id", ""))
+				# MV's itemEffectAddDebuff: the debuff chance is the effect chance times the
+				# target's Debuff Rate traits times the luck factor (a luckier user lands more).
+				var dchance := _num(e.get("chance"), 100.0) * trait_rate(target, "debuff_rate", dstat) * _luck_factor(user, target)
+				if rng.chance_percent(dchance):
+					if add_debuff(target, dstat, maxi(1, int(_num(e.get("turns"), 5.0)))):
+						res.added_debuffs.append(dstat)
+			"remove_buff":
+				var rstat := str(e.get("id", ""))
+				if buff_level(target, rstat) > 0 and remove_buff(target, rstat):
+					res.removed_buffs.append(rstat)
+			"remove_debuff":
+				var xstat := str(e.get("id", ""))
+				if buff_level(target, xstat) < 0 and remove_buff(target, xstat):
+					res.removed_buffs.append(xstat)
 	# States that end when hit (sleep).
 	var life_lost: int = before.get(life_resource(), 0) - target.get_resource(life_resource())
 	if life_lost > 0:
@@ -1458,10 +1573,10 @@ func common_events(user: RPGBattler, action: Dictionary) -> Array:
 	return out
 
 
-## True when an apply_action() result changed something (resources, states, a stat from Grow,
-## a skill from Learn Skill): the menu uses an item only then.
+## True when an apply_action() result changed something (resources, states, buffs, a stat from
+## Grow, a skill from Learn Skill): the menu uses an item only then.
 static func had_effect(r: Dictionary) -> bool:
-	for k in ["changes", "added_states", "removed_states", "grown", "learned"]:
+	for k in ["changes", "added_states", "removed_states", "added_buffs", "added_debuffs", "removed_buffs", "grown", "learned"]:
 		var v: Variant = r.get(k)
 		if (v is Dictionary or v is Array) and not v.is_empty():
 			return true
@@ -1500,6 +1615,12 @@ func _describe(_user: RPGBattler, target: RPGBattler, _u: Dictionary, d: Diction
 		res.lines.append(term("stat_up", [target.name, str(_stat_defs.get(stat, {}).get("label", stat)), grown[stat]]))
 	for sk in res.get("learned", []):
 		res.lines.append(term("learned", [target.name, str(_rec("skills", sk).get("name", sk))]))
+	for stat in res.get("added_buffs", []):
+		res.lines.append(term("buff_up", [target.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
+	for stat in res.get("added_debuffs", []):
+		res.lines.append(term("buff_down", [target.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
+	for stat in res.get("removed_buffs", []):
+		res.lines.append(term("buff_back", [target.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
 	if res.lines.is_empty():
 		res.lines.append(term("nothing"))
 

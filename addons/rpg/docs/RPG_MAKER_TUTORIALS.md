@@ -62,7 +62,7 @@ Switch with *Database > Rule system…*. The switch shows a preview and makes a 
 
 With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace.
 
-Not covered yet: buffs and debuffs; Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags; Party Abilities; Fix Equip; and Attack State. Action Times+ repeats the same action.
+Not covered yet: Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags; Party Abilities; Fix Equip; and Attack State. Action Times+ repeats the same action.
 
 ## Things still different
 

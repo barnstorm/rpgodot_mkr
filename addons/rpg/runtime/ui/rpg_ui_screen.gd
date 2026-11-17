@@ -610,7 +610,8 @@ func record_icon(rec: Dictionary) -> Texture2D:
 ## A battler's states at `pos` in `width`: each state's icon and name when they all fit, else the
 ## icons alone (a state without an icon keeps its name). A single state whose name does not fit
 ## beside its icon shows the name alone, so "Knocked out" stays readable in a narrow column.
-## With icons off (or no state has one) this is the plain names label, as before.
+## With icons off (or no state has one) this is the plain names label, as before. Buffs and
+## debuffs show as ▲/▼ markers per level after the states, as MV's buff icons.
 ## Returns the label or the row (empty for no states).
 func make_states(parent: Node, pos: Vector2, b: Object, width: float, font_size := SMALL, colour: Variant = null) -> Control:
 	var recs := []
@@ -619,13 +620,19 @@ func make_states(parent: Node, pos: Vector2, b: Object, width: float, font_size 
 	var icons := []
 	for rec in recs:
 		icons.append(record_icon(rec))
+	var marks := buff_marks(b)
 	if icons.all(func(t: Variant) -> bool: return t == null):
-		return make_label(parent, pos, state_names(b), font_size, colour, width)
+		var plain := state_names(b)
+		if marks != "":
+			plain = (plain + "  " if plain != "" else "") + marks
+		return make_label(parent, pos, plain, font_size, colour, width)
 	var sz := float(ListBox.ICON)
 	var names := recs.map(func(r: Dictionary) -> String: return str(r.get("name", r.id)))
 	var full := 0.0
 	for i in recs.size():
 		full += (sz + 1 if icons[i] != null else 0.0) + _text_w(names[i], font_size) + 4
+	if marks != "":
+		full += _text_w(marks, font_size) + 4
 	var with_names := full <= width
 	if recs.size() == 1 and not with_names:
 		return make_label(parent, pos, names[0], font_size, colour, width)
@@ -654,7 +661,26 @@ func make_states(parent: Node, pos: Vector2, b: Object, width: float, font_size 
 			if w > 6:
 				make_label(row, Vector2(x, 0), names[i], font_size, colour, w)
 			x += w + 2
+	if marks != "" and x < width:
+		make_label(row, Vector2(x, 0), marks, font_size, colour, width - x)
 	return row
+
+
+## The ▲/▼ markers of a battler's buffs and debuffs: one arrow per level, a group per buffed
+## stat (▲▲ = +2). "" when the rules have no buffs or the battler has none.
+func buff_marks(b: Object) -> String:
+	var bs: Variant = b.get("buffs") if b != null else null
+	if not (bs is Dictionary) or bs.is_empty():
+		return ""
+	var r := rules()
+	if r == null or not r.has_method("buff_level"):
+		return ""
+	var out := ""
+	for stat in bs:
+		var lv: int = int(r.buff_level(b, str(stat)))
+		if lv != 0:
+			out += ("▲" if lv > 0 else "▼").repeat(clampi(absi(lv), 1, 2)) + " "
+	return out.strip_edges()
 
 
 func _text_w(text: String, font_size: int) -> float:

@@ -17,8 +17,9 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - Features (the kit calls them **Traits**): Element Rate, State Rate, Ex-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen.
 - Actors can use a skill type (Magic, Special) only when their class or actor adds it with an *Add Skill Type* trait, as in Ace.
 - Regeneration and each state's damage apply on the map every 20 steps.
+- Buffs and debuffs: the *Add Buff* / *Add Debuff* / *Remove Buff* / *Remove Debuff* effects step a stat ±25% per level (two levels max), roll debuff chances against Debuff Rate traits and the user's luck, and wear off after their turns or at battle's end. Classic has none — its halve/double stat changes are states.
 
-Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Party Abilities, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
+Not covered yet: Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Party Abilities, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 
 ## Switching
 
@@ -53,4 +54,4 @@ A battle scene declares what it needs from the rule system (`const CAPABILITIES 
 
 ## Writing your own
 
-Copy a folder in `rpg/rules/`, rename it and its `id`, and edit `rules.json`. The keys are: `stats`, `resources`, `life_resource`, `death_state`, `levels`, `growth`, `exp_curve`, `traits`, `attack`, `hit_check`, `critical`, `damage`, `turn_order`, `escape`, `roll_check` and `capabilities`. The rule system contract is described in [docs/ARCHITECTURE.md](https://github.com/barnstorm/rpgodot_mkr/blob/main/docs/ARCHITECTURE.md#rule-system-contract-runtimerules). The **Roll Check** event command uses the rule system's `roll_check` (a skill check for tabletop-style games).
+Copy a folder in `rpg/rules/`, rename it and its `id`, and edit `rules.json`. The keys are: `stats`, `resources`, `life_resource`, `death_state`, `levels`, `growth`, `exp_curve`, `traits`, `buffs`, `attack`, `hit_check`, `critical`, `damage`, `turn_order`, `escape`, `roll_check` and `capabilities`. The rule system contract is described in [docs/ARCHITECTURE.md](https://github.com/barnstorm/rpgodot_mkr/blob/main/docs/ARCHITECTURE.md#rule-system-contract-runtimerules). The **Roll Check** event command uses the rule system's `roll_check` (a skill check for tabletop-style games). A `buffs` block (`params`, `step`, `max_levels`, `luck_stat`) turns the buff effects on; without one they do nothing.

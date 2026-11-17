@@ -16,6 +16,10 @@ const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 ## Effect kinds (RPGRuleSystem.apply_action) and their labels.
 const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "common_event"]
 const EFFECT_LABELS := ["Recover", "Damage", "Add State", "Remove State", "Grow (raise a stat)", "Learn Skill", "Common Event"]
+## Buff effect kinds, shown only when the rule system's rules.json has a "buffs" config (VX Ace/MV;
+## Classic's halve/double stat changes are states, so it has none).
+const BUFF_EFFECT_KINDS := ["add_buff", "add_debuff", "remove_buff", "remove_debuff"]
+const BUFF_EFFECT_LABELS := ["Add Buff", "Add Debuff", "Remove Buff", "Remove Debuff"]
 ## Built-in battle effects (RPGBattleEffects.BUILTIN) an animation field may name.
 const BUILTIN_ANIMATIONS := ["hit", "slash", "fire", "ice", "thunder", "heal"]
 ## Tileset asset profiles and their labels.
@@ -92,7 +96,7 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_i("hit", "Hit %", 100, 0, 100), _c("hit_type", "Hit type", HIT_TYPES, "certain"),
 				_i("variance", "Variance %", 15, 0, 100), _b("critical", "Can be critical", false),
 				_animation_field(), _t("message", "Message (%1 = user)"),
-				_effects(resources, stats),
+				_effects(resources, stats, rule_def),
 			]
 		"items":
 			f = [
@@ -100,7 +104,7 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_i("price", "Price", 0, 0, 9999999), _b("consumable", "Consumed when used", true), _b("key_item", "Key item", false),
 				_c("scope", "Target", SCOPES, "one_ally"), _c("occasion", "Usable", OCCASIONS, "always"),
 				_animation_field(),
-				_effects(resources, stats),
+				_effects(resources, stats, rule_def),
 			]
 		"weapons":
 			f = [
@@ -625,17 +629,35 @@ static func _enemy_condition_fields() -> Array:
 
 ## Effects of skills and items (RPGRuleSystem.apply_action), each kind with its own fields:
 ## Recover / Damage: resource, % of its maximum and a flat amount; Add / Remove State: the state
-## and a chance %; Grow: a stat and how much; Learn Skill: the skill; Common Event: the common
-## event (run after the item or skill is used).
-static func _effects(resources: Array = [], stats: Array = []) -> Dictionary:
+## and a chance %; Add Buff / Add Debuff: the stat and how many turns it lasts (a debuff rolls
+## its chance against the Debuff Rate traits and luck); Remove Buff / Remove Debuff: the stat;
+## Grow: a stat and how much; Learn Skill: the skill; Common Event: the common event (run after
+## the item or skill is used). Buff kinds appear only when the rule system has a "buffs" config.
+static func _effects(resources: Array = [], stats: Array = [], rule_def: Dictionary = {}) -> Dictionary:
 	var res_ids := _ids(resources)
 	var res_labels := _labels(resources)
 	if res_ids.is_empty():
 		res_ids = ["hp"]
 		res_labels = ["HP"]
+	var kinds := EFFECT_KINDS
+	var labels := EFFECT_LABELS
+	var id_cases := {
+		"add_state": {"kind": "ref", "ref": "state", "default": "", "label": "State"},
+		"remove_state": {"kind": "ref", "ref": "state", "default": "", "label": "State"},
+		"learn_skill": {"kind": "ref", "ref": "skill", "default": "", "label": "Skill"},
+		"common_event": {"kind": "ref", "ref": "common_event", "default": "", "label": "Common event",
+			"help": "Runs after the item or skill is used (in battle: after the action; from the menu: the menu closes first)."},
+		"grow": _of_field("stat", {}, stats)}
+	var chance_kinds := ["add_state", "remove_state"]
+	if rule_def.get("buffs") is Dictionary and not (rule_def.get("buffs") as Dictionary).is_empty():
+		kinds = EFFECT_KINDS + BUFF_EFFECT_KINDS
+		labels = EFFECT_LABELS + BUFF_EFFECT_LABELS
+		for k in BUFF_EFFECT_KINDS:
+			id_cases[k] = _of_field("stat", {}, stats)
+		chance_kinds.append("add_debuff")
 	var amounts := {"kind": "int", "default": 0, "min": 0, "max": 999999, "label": "Plus a flat amount"}
 	return {"key": "effects", "kind": "list", "default": [], "label": "Effects", "item_fields": [
-		{"key": "kind", "kind": "choice", "options": EFFECT_KINDS, "option_labels": EFFECT_LABELS, "default": "recover", "label": "Kind"},
+		{"key": "kind", "kind": "choice", "options": kinds, "option_labels": labels, "default": "recover", "label": "Kind"},
 		{"key": "resource", "kind": "choice", "options": res_ids, "option_labels": res_labels, "default": res_ids[0], "label": "Resource",
 			"show_if": {"key": "kind", "equals": ["recover", "damage"]}},
 		{"key": "percent", "kind": "int", "default": 0, "min": 0, "max": 100, "label": "% of maximum",
@@ -643,12 +665,8 @@ static func _effects(resources: Array = [], stats: Array = []) -> Dictionary:
 		{"key": "amount", "kind": "variant", "by": "kind", "default": 0, "label": "Amount", "cases": {
 			"recover": amounts, "damage": amounts,
 			"grow": {"kind": "int", "default": 1, "min": -9999, "max": 9999, "label": "Raise by"}}},
+		{"key": "turns", "kind": "int", "default": 5, "min": 1, "max": 99, "label": "Turns",
+			"show_if": {"key": "kind", "equals": ["add_buff", "add_debuff"]}},
 		{"key": "chance", "kind": "int", "default": 100, "min": 0, "max": 100, "label": "Chance %",
-			"show_if": {"key": "kind", "equals": ["add_state", "remove_state"]}},
-		{"key": "id", "kind": "variant", "by": "kind", "default": "", "label": "Of", "cases": {
-			"add_state": {"kind": "ref", "ref": "state", "default": "", "label": "State"},
-			"remove_state": {"kind": "ref", "ref": "state", "default": "", "label": "State"},
-			"learn_skill": {"kind": "ref", "ref": "skill", "default": "", "label": "Skill"},
-			"common_event": {"kind": "ref", "ref": "common_event", "default": "", "label": "Common event",
-				"help": "Runs after the item or skill is used (in battle: after the action; from the menu: the menu closes first)."},
-			"grow": _of_field("stat", {}, stats)}}]}
+			"show_if": {"key": "kind", "equals": chance_kinds}},
+		{"key": "id", "kind": "variant", "by": "kind", "default": "", "label": "Of", "cases": id_cases}]}

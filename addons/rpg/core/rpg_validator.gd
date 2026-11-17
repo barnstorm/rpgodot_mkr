@@ -76,7 +76,8 @@ const SETTER_KEYS := ["result", "roll_into"]
 ## Commands whose free-form strings may mention IDs (renames warn instead of rewriting).
 const SCRIPT_COMMANDS := ["call_method", "emit_signal", "run_scene"]
 ## Effect kind -> what its "id" names (RPGRuleSystem.apply_action).
-const EFFECT_REFS := {"add_state": "state", "remove_state": "state", "learn_skill": "skill", "common_event": "common_event", "grow": "stat"}
+const EFFECT_REFS := {"add_state": "state", "remove_state": "state", "learn_skill": "skill", "common_event": "common_event", "grow": "stat",
+	"add_buff": "stat", "add_debuff": "stat", "remove_buff": "stat", "remove_debuff": "stat"}
 ## Trait kind -> what its "id" names, for rule systems whose rules.json does not say ("id_ref").
 const TRAIT_REFS := {"element_rate": "element", "state_rate": "state", "state_resist": "state", "stat_rate": "stat",
 	"attack_element": "element", "attack_state": "state", "add_skill_type": "skill_type", "seal_skill_type": "skill_type",
