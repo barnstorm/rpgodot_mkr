@@ -142,7 +142,7 @@ static func describe_operand(v: Variant) -> String:
 	if v is Dictionary and v.get("game_data") is Dictionary:
 		var g: Dictionary = v.game_data
 		var bits := PackedStringArray([str(g.get("kind", ""))])
-		for k in ["id", "target", "index", "slot", "what", "which", "field"]:
+		for k in ["id", "target", "index", "slot", "what", "which", "timer", "field"]:
 			if str(g.get(k, "")) != "":
 				bits.append(str(g[k]))
 		return "(%s)" % " ".join(bits)

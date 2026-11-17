@@ -45,7 +45,7 @@ const STARTED_BY := ["action_button", "player_touch", "event_touch", "autorun", 
 ## Vehicle condition ids ("none" / "" = on foot).
 const VEHICLE_IDS := ["boat", "ship", "airship", "none", ""]
 ## Game data operand kinds (RPGGameState.game_data).
-const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
+const GAME_DATA_KINDS := ["item", "items", "weapon", "weapons", "armor", "armors", "armour", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy", "timer"]
 ## Game data "counter" values (RPGGameState.counters).
 const COUNTER_KINDS := ["saves", "battles", "victories", "defeats", "escapes"]
 ## Game data "last_used" values (RPGGameState.last_used).
@@ -690,7 +690,7 @@ static func _location_structure(v: Variant, file: String, rec: String, path: Str
 static func _game_data_structure(g: Dictionary, file: String, rec: String, path: String, out: Array) -> void:
 	var kind := str(g.get("kind", ""))
 	if not GAME_DATA_KINDS.has(kind):
-		out.append(problem("error", file, rec, "value", path + "/kind", "Unknown game data '%s'." % kind, "Use item, weapon, armor, gold, steps, play_time, party_size, actor, character, map_id, party_member, last_used, counter or enemy."))
+		out.append(problem("error", file, rec, "value", path + "/kind", "Unknown game data '%s'." % kind, "Use item, weapon, armor, gold, steps, play_time, party_size, actor, character, map_id, party_member, last_used, counter, enemy or timer."))
 		return
 	match kind:
 		"character":
@@ -708,6 +708,9 @@ static func _game_data_structure(g: Dictionary, file: String, rec: String, path:
 		"counter":
 			if not COUNTER_KINDS.has(str(g.get("which", "battles"))):
 				out.append(problem("error", file, rec, "value", path + "/which", "Unknown counter '%s'." % g.get("which", ""), "Use saves, battles, victories, defeats or escapes."))
+		"timer":
+			if not ["1", "2"].has(str(g.get("timer", "1"))):
+				out.append(problem("error", file, rec, "value", path + "/timer", "Unknown timer '%s'. There are two timers, 1 and 2." % g.get("timer", ""), ""))
 		"last_used":
 			if not LAST_USED_KINDS.has(str(g.get("what", "item"))):
 				out.append(problem("error", file, rec, "value", path + "/what", "Unknown last used '%s'." % g.get("what", ""), "Use item, skill, actor, target_actor or target_enemy."))

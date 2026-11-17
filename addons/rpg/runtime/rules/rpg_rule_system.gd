@@ -261,6 +261,14 @@ func turn_repeat() -> String:
 	return str(definition.get("turn_repeat", "from_start"))
 
 
+## How Control Variables divides whole numbers and takes their remainder (issue #160). "truncate"
+## (RM2000/2003, and the default): towards zero, the remainder with the variable's sign, so
+## -7 / 2 = -3 and -7 % 2 = -1. "floor" (VX Ace, Ruby's arithmetic): rounded down, the remainder
+## with the divisor's sign, so -7 / 2 = -4 and -7 % 2 = 1.
+func variable_division() -> String:
+	return str(definition.get("variable_division", "truncate"))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 
