@@ -128,7 +128,7 @@ Example: a poison swampland. Paint region 4 over the marsh on the RPG tab's Regi
 
 ## 6. Moving between maps in a cutscene
 
-**Transfer Player** with *Fade* set moves the player and fades on the way. To take other characters along, give them the same story switch as a page condition on the new map, or place them with **Set Event Location**.
+**Transfer Player** with *Fade* set moves the player and fades on the way. To take other characters along, give them the same story switch as a page condition on the new map, or place them with **Set Event Location**. An event moved by a command stays there for the visit: when the player leaves and comes back, the map is set up again and every event is at its editor position, as in RPG Maker (so "leave the room to reset the puzzle" works). Tick **Keep** on Set Event Location for a move that should last. A game saved on the map loads with the events where they stood.
 
 ## Try it yourself
 
