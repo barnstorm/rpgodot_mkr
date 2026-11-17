@@ -721,3 +721,51 @@ func test_142_a_blank_new_event_does_not_block_the_player() -> void:
 		ev.priority = "same"
 		assert_false(map.movement.can_move(map.player, Vector2i(12, 8), Vector2i.RIGHT), "the old default (same) blocked")
 	await env.destroy()
+
+
+## Every edit rebuilds the command list, and the rebuild puts the list back where the user had
+## scrolled it. The restore called a method Tree does not have, so each edit made in a scrolled
+## list logged a script error (the test runner fails a test on one). Tree kept its offset
+## through the rebuild all the same, so the error was the whole of the fault.
+func test_command_list_keeps_its_scroll_position_after_an_edit() -> void:
+	var cle := RPGCommandListEditor.new()
+	tree.root.add_child(cle)
+	cle.position = Vector2(20, 20)
+	cle.size = Vector2(420, 170)
+	cle.setup(data, registry, "town")
+	var cmds := []
+	for i in 40:
+		cmds.append({"type": "show_text", "text": "Line %d" % i})
+	cle.set_commands(cmds)
+	await frames(3)
+	var t: Tree = cle._tree
+	# Scroll to the end of the list, as a maker adding commands at the bottom does.
+	var rows := t.get_root().get_children()
+	t.scroll_to_item(rows[rows.size() - 1])
+	await frames(2)
+	var scrolled: float = t.get_scroll().y
+	assert_true(scrolled > 0.0, "the list is scrolled (%s)" % scrolled)
+	# A line near the top is the selected one: the rebuild selects it again, out of view.
+	rows[1].select(0)
+	await frames(2)
+	t.scroll_to_item(rows[rows.size() - 1])
+	await frames(2)
+	scrolled = t.get_scroll().y
+	cmds[5]["text"] = "Edited"
+	cle.rebuild()
+	await frames(3)
+	assert_eq(t.get_scroll().y, scrolled, "the list is where it was before the edit")
+	assert_eq(t.get_root().get_child(5).get_text(0).contains("Edited"), true, "and shows the edit")
+	# The restore itself finds the Tree's scroll bar and moves it.
+	assert_true(cle._v_scroll_bar() is VScrollBar, "the Tree's own scroll bar is found")
+	cle._restore_scroll(48.0)
+	assert_eq(t.get_scroll().y, 48.0, "the restore sets the offset")
+	# An unscrolled list stays at the top.
+	t.scroll_to_item(t.get_root().get_child(0))
+	await frames(2)
+	assert_eq(t.get_scroll().y, 0.0)
+	cle.rebuild()
+	await frames(3)
+	assert_eq(t.get_scroll().y, 0.0)
+	cle.queue_free()
+	await frames(1)
