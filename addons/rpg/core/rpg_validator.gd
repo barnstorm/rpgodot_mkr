@@ -1667,20 +1667,22 @@ static func type_lists(files: Dictionary) -> Dictionary:
 
 ## Why `item` (a weapon or armour record; `kind` "weapon" or "armor") cannot start in equipment
 ## slot `slot_id` of an actor of class `class_rec` ("" when it can). `slot` is the slot's Types
-## entry ({kind, armor_types}; may be empty). Same rules as the game's Equip screen: the slot
-## holds weapons or armour, an armour's own slot, the slot's armour types and the class's
-## "Can equip" types.
-static func equip_problem(slot_id: String, slot: Dictionary, kind: String, item: Dictionary, class_rec: Dictionary) -> String:
+## entry ({kind, armor_types}; may be empty). Same rules as the game's Equip screen
+## (RPGRuleSystem.can_equip): the slot holds weapons or armour, an armour's own slot, the slot's
+## armour types, and the types the class's "Can equip" lists or an Equip Weapon / Equip Armor
+## trait of the class or of `actor_rec` name. `class_default` is the rule system's
+## class_equip_default: what a class with no "equip" entry allows ("any" or "none").
+static func equip_problem(slot_id: String, slot: Dictionary, kind: String, item: Dictionary, class_rec: Dictionary,
+		actor_rec: Dictionary = {}, class_default := "any") -> String:
 	if item.is_empty():
 		return ""
 	var slot_kind := str(slot.get("kind", "weapon" if slot_id == "weapon" else "armor"))
-	var allowed: Variant = class_rec.get("equip")
 	var cls := str(class_rec.get("name", class_rec.get("id", "")))
 	if kind == "weapon" or slot_kind == "weapon":
 		if kind != "weapon":
 			return "the %s slot holds weapons." % slot_id
 		var wt := str(item.get("weapon_type", ""))
-		if allowed is Dictionary and not (allowed.get("weapon_types", []) as Array).has(wt):
+		if not _equip_type_ok(class_rec, actor_rec, "weapon", wt, class_default):
 			return "class %s cannot equip weapon type '%s' (Classes > Can equip)." % [cls, wt]
 		return ""
 	var rs := str(item.get("slot", ""))
@@ -1689,9 +1691,45 @@ static func equip_problem(slot_id: String, slot: Dictionary, kind: String, item:
 	var at := str(item.get("armor_type", ""))
 	if rs == "" and slot.get("armor_types") is Array and not slot.armor_types.is_empty() and not slot.armor_types.has(at):
 		return "the %s slot does not take armour type '%s'." % [slot_id, at]
-	if allowed is Dictionary and not (allowed.get("armor_types", []) as Array).has(at):
+	if not _equip_type_ok(class_rec, actor_rec, "armor", at, class_default):
 		return "class %s cannot equip armour type '%s' (Classes > Can equip)." % [cls, at]
 	return ""
+
+
+## RPGRuleSystem.equip_type_allowed() from the records alone (no states or worn equipment).
+static func _equip_type_ok(class_rec: Dictionary, actor_rec: Dictionary, kind: String, type_id: String, class_default: String) -> bool:
+	var trait_kind := "equip_weapon_type" if kind == "weapon" else "equip_armor_type"
+	for src in [actor_rec, class_rec]:
+		var list: Variant = src.get("traits")
+		if list is Array:
+			for t in list:
+				if t is Dictionary and str(t.get("kind", "")) == trait_kind and str(t.get("id", "")) == type_id:
+					return true
+	var allowed: Variant = class_rec.get("equip")
+	if not (allowed is Dictionary):
+		return class_default == "any"
+	var types: Variant = allowed.get("weapon_types" if kind == "weapon" else "armor_types")
+	return types is Array and (types as Array).has(type_id)
+
+
+static var _rule_setting_cache: Dictionary = {}
+
+
+## One top-level value of a rule system's rules.json (the project's copy first, then the shipped
+## one), `fallback` when the file or the key is missing.
+static func rule_setting(root: String, rules_name: String, key: String, fallback: Variant = null) -> Variant:
+	var cache_key := "%s|%s" % [root, rules_name]
+	if not _rule_setting_cache.has(cache_key):
+		var def := {}
+		for dir in [root.path_join("rules"), "res://rpg/rules", "res://addons/rpg/runtime/rules"]:
+			var p: String = dir.path_join(rules_name).path_join("rules.json")
+			if FileAccess.file_exists(p):
+				var r := RPGJson.parse_file(p)
+				if r.ok and r.data is Dictionary:
+					def = r.data
+				break
+		_rule_setting_cache[cache_key] = def
+	return _rule_setting_cache[cache_key].get(key, fallback)
 
 
 ## Values inside database records: damage formulas that do not compile, types or elements that
@@ -1713,6 +1751,11 @@ static func database_values(files: Dictionary) -> Array:
 		if e.get("kind", "") == "database" and e.get("data") is Dictionary:
 			by_type[str(e.get("db_type", ""))] = _by_id(e.data.get("records", []))
 	var slots: Dictionary = lists.get("equip_slots", {}).get("ids", {})
+	var class_default := "any"
+	for path in files:
+		var pe: Dictionary = files[path]
+		if str(pe.get("kind", "")) == "project" and pe.get("data") is Dictionary:
+			class_default = str(rule_setting(str(path).get_base_dir(), str(pe.data.get("rules", "classic")), "class_equip_default", "any"))
 	for path in files:
 		var e: Dictionary = files[path]
 		if e.get("kind", "") != "database" or not (e.get("data") is Dictionary):
@@ -1743,7 +1786,7 @@ static func database_values(files: Dictionary) -> Array:
 							var slot_entry: Dictionary = slots.get(str(slot), {})
 							var kind := "weapon" if str(slot_entry.get("kind", "weapon" if slot == "weapon" else "armor")) == "weapon" else "armor"
 							var item: Dictionary = by_type.get(DB_KIND[kind], {}).get(item_id, {})
-							var why := equip_problem(str(slot), slot_entry, kind, item, cls)
+							var why := equip_problem(str(slot), slot_entry, kind, item, cls, r, class_default)
 							if why != "":
 								out.append(problem("warning", path, rec, "equips", "%s/equips/%s" % [base, slot],
 									"Starting equipment '%s' in the %s slot: %s" % [item_id, slot, why], "Pick an item that fits the slot and the class."))

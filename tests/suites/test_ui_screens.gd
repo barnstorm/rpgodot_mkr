@@ -138,6 +138,41 @@ func test_game_over_closes() -> void:
 	assert_true(closed[0])
 
 
+## Issue #149: the shop's "can equip" marks are the rule system's can_equip, the check of the
+## Equip menu: class lists, Equip Weapon / Equip Armor traits and sealed slots all count.
+func test_149_shop_marks_agree_with_the_equip_menu() -> void:
+	sample_env()
+	var rpg: Node = env.rpg
+	rpg.state.add_actor("mira")
+	var shop: Node = await open("shop")
+	shop.start({"goods": [{"kind": "weapons", "id": "iron_sword", "price": 40}], "buy_only": true}, {"rpg": rpg})
+	await frames(1)
+	var hero: RPGBattler = rpg.state.actor("hero")
+	var mira: RPGBattler = rpg.state.actor("mira")
+	assert_eq(shop.equip_slot_for(hero, "weapons", "iron_sword"), "weapon", "the warrior's Can equip list has swords")
+	assert_true(shop.compare_equip(hero, "weapons", "iron_sword").can)
+	assert_eq(shop.equip_slot_for(mira, "weapons", "iron_sword"), "", "the mage's list has none")
+	assert_false(rpg.rules.can_equip(mira, "weapon", "iron_sword"), "the Equip menu says the same")
+	# An Equip Weapon trait on the actor: both say yes.
+	var rec: Dictionary = rpg.data.db["actors"].by_id["mira"]
+	var kept: Variant = rec.get("traits")
+	rec["traits"] = [{"kind": "equip_weapon_type", "id": "sword"}]
+	assert_true(rpg.rules.can_equip(mira, "weapon", "iron_sword"))
+	assert_eq(shop.equip_slot_for(mira, "weapons", "iron_sword"), "weapon", "the shop counts the trait too")
+	assert_true(shop.compare_equip(mira, "weapons", "iron_sword").can)
+	# A sealed slot: both say no.
+	rec["traits"] = [{"kind": "equip_weapon_type", "id": "sword"}, {"kind": "seal_equip", "id": "weapon"}]
+	assert_false(rpg.rules.can_equip(mira, "weapon", "iron_sword"))
+	assert_eq(shop.equip_slot_for(mira, "weapons", "iron_sword"), "", "a sealed slot takes nothing")
+	if kept == null:
+		rec.erase("traits")
+	else:
+		rec["traits"] = kept
+	# Armour goes to the slot that takes it, and an item is never equipment.
+	assert_eq(shop.equip_slot_for(hero, "armors", "wooden_shield"), "shield")
+	assert_eq(shop.equip_slot_for(hero, "items", "potion"), "")
+
+
 func test_shop_buy_and_sell() -> void:
 	sample_env()
 	var rpg: Node = env.rpg

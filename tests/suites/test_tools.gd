@@ -112,6 +112,14 @@ func test_rule_migration_preview_classic_to_osr() -> void:
 	var text := RPGRuleMigration.describe(ace)
 	assert_true(text.contains("Classes: Hit Rate 95%, Evasion Rate 5%, Critical Rate 4%"), text)
 	assert_true(text.contains("base values that their other traits"), text)
+	# Issue #149: classes with no "Can equip" entry are named, since the VX Ace rules let them
+	# equip only what traits allow.
+	assert_eq(ace.classes_without_equip, [], "every sample class has its lists")
+	data.db["classes"].records.append({"id": "drifter", "name": "Drifter"})
+	var ace2 := RPGRuleMigration.preview(data, "vx_ace")
+	assert_eq(ace2.classes_without_equip, ["drifter"])
+	assert_true(RPGRuleMigration.describe(ace2).contains("Equip Weapon / Equip Armor traits name, until you fill in their lists: drifter"))
+	data.db["classes"].records.pop_back()
 
 
 func test_rule_migration_apply_only_changes_project_rules() -> void:

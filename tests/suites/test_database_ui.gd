@@ -1439,6 +1439,11 @@ func test_d5_equipment_rules() -> void:
 	assert_eq(weapon.misfit("bronze_sword"), "")
 	actors._form.set_field("class", "mage")
 	assert_true(weapon.misfit("bronze_sword").contains("cannot equip"), "the class's Can equip counts")
+	# Issue #149: an Equip Weapon trait on the actor allows the type, as in the game.
+	actors.current_record()["traits"] = [{"kind": "equip_weapon_type", "id": "sword"}]
+	assert_eq(weapon.misfit("bronze_sword"), "", "the actor's trait allows swords")
+	actors.current_record()["traits"] = []
+	assert_true(weapon.misfit("bronze_sword").contains("cannot equip"))
 	actors.current_record()["equips"]["shield"] = "leather_armor"
 	actors.mark_dirty()
 	assert_true(actors.save_now())

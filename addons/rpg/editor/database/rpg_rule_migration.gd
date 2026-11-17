@@ -66,7 +66,7 @@ static func preview(data: RPGProjectData, to_id: String) -> Dictionary:
 	var to_def := _definition(data.root, to_id)
 	var out := {"from": from_id, "to": to_id, "ok": not to_def.is_empty(), "stats_removed": [], "stats_added": [],
 		"resources_removed": [], "resources_added": [], "capabilities_lost": [], "uses": [], "formula_problems": [],
-		"base_values": []}
+		"base_values": [], "classes_without_equip": []}
 	if to_def.is_empty():
 		out["formula_problems"].append("Rule system '%s' was not found." % to_id)
 		return out
@@ -101,6 +101,11 @@ static func preview(data: RPGProjectData, to_id: String) -> Dictionary:
 	old_rs.setup(from_def, data)
 	if rs.default_traits(false) != old_rs.default_traits(false) or rs.default_traits(true) != old_rs.default_traits(true):
 		out.base_values = _base_value_lines(rs)
+	# Classes with no "Can equip" entry: free to equip anything under "any", nothing under "none".
+	if rs.class_equip_default() == "none" and old_rs.class_equip_default() != "none":
+		for c in data.records("classes"):
+			if c is Dictionary and not (c.get("equip") is Dictionary):
+				out.classes_without_equip.append(str(c.get("id", "")))
 	for p in rs.validate():
 		out.formula_problems.append(str(p.get("message", p)) if p is Dictionary else str(p))
 	return out
@@ -201,6 +206,9 @@ static func describe(p: Dictionary) -> String:
 		lines.append("The default battle needs capabilities the new system lacks: %s" % ", ".join(p.capabilities_lost))
 	if not p.formula_problems.is_empty():
 		lines.append("Formula problems in the new system: %d" % p.formula_problems.size())
+	if not p.get("classes_without_equip", []).is_empty():
+		lines.append("")
+		lines.append("Classes with no \"Can equip\" lists can equip anything now. Under the new system they can equip only the types that Equip Weapon / Equip Armor traits name, until you fill in their lists: %s" % ", ".join(p.classes_without_equip))
 	if not p.get("base_values", []).is_empty():
 		lines.append("")
 		lines.append("The new system gives every class and enemy base values that their other traits (equipment, states, the actor) add to. A class or enemy that lists one of these traits itself uses its own value instead:")
