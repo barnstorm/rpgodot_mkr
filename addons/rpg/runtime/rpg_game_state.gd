@@ -650,6 +650,9 @@ func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 				_err("Game data: unknown counter '%s'." % which)
 				return 0
 			return int(counters[which])
+		"timer":
+			# VX Ace's "Other: Timer": the whole seconds a timer has left (timer 1 unless named).
+			return timer_seconds(str(g.get("timer", "1")))
 		"enemy":
 			var core: Variant = _battle_core(ctx)
 			if core == null:
@@ -1122,6 +1125,12 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 			counters[k] = int(d.counters.get(k, 0))
 	last_used = d.get("last_used", {}).duplicate() if d.get("last_used") is Dictionary else {}
 	changed.emit()
+
+
+## Notes a mistake the game carried on from (a division by zero, say): kept in `errors` and
+## printed as an engine warning.
+func warn(msg: String) -> void:
+	_err(msg)
 
 
 func _err(msg: String) -> void:

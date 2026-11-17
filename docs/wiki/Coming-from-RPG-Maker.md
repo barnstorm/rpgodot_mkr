@@ -46,7 +46,8 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
 | Change Transparency, Change Map Name Display, Change Tileset, Change Parallax, Change Battle Back | The same commands |
 | Change Battle BGM, Change Victory ME, Stop SE, Change Window Skin, Get Location Info | The same commands |
-| Control Variables: Game Data / Random | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats) or **Random** |
+| Control Variables: Game Data / Random / Other: Timer | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats, a **Timer**'s seconds left) or **Random** |
+| Control Variables: ÷ and % of negative numbers; dividing by zero | As the rule system's RPG Maker: VX Ace rules round down (−7 ÷ 2 = −4, −7 % 2 = 1), Classic rules cut towards zero (−3 and −1). Dividing by zero sets 0 and the event goes on |
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
 | Timer Operations (2000/2003) | **Control Timer**: two timers; Set (time in seconds, show on screen, which corner), Start, Stop, and what it does in battle (pause, keep counting, or abort at 0 — no rewards, the escape branch). The **Timer** condition (pages and branches) checks the time left, any comparison |

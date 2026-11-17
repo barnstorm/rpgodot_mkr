@@ -76,6 +76,9 @@ Page 1's condition makes the trees useless before the quest begins; page 2 makes
 - **Last used** — what the most recent battle action used and targeted: the item or skill, the actor who acted, and the actor or enemy it targeted. The values stick after the battle ends.
 - **Counter** — saves, battles, victories, defeats or escapes so far.
 - **Enemy** — one enemy's HP or other stat during a battle (battle events read these live).
+- **Timer** — the whole seconds timer 1 or timer 2 has left (RPG Maker's *Other: Timer*). Divide by 60 for the minutes and take the remainder for the seconds.
+
+Whole numbers divide the way your rule system's RPG Maker does. With the Classic rules a division is cut towards zero and the remainder keeps the variable's sign, as in RPG Maker 2000 and 2003: −7 ÷ 2 is −3 and the remainder is −1. With the VX Ace rules it is rounded down and the remainder takes the sign of the number you divide by, as in VX Ace: −7 ÷ 2 is −4 and the remainder is 1 — so *mod 20* wraps a negative column back onto a 20-wide map. Dividing by zero (or taking the remainder by zero) sets the variable to 0 and the event goes on, as in RPG Maker; the Godot debugger shows a warning that names the variable.
 
 The target can be one variable, a **range** of them (every declared variable between the two ends, in the order they were declared; random values re-roll for each one), or **indirect**: a variable whose *value is the id* of the variable to change. The value can be indirect the same way (**Pointer** mode reads the variable whose id another variable holds). **Control Switch** has the same target modes: a range turns every declared switch between its two ends ON or OFF (or flips them) at once, and the indirect target reads the switch's id from a variable.
 

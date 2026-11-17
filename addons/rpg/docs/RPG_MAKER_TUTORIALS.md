@@ -48,7 +48,8 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
 | Change Transparency, Change Map Name Display, Change Tileset, Change Parallax, Change Battle Back | The same commands |
 | Change Battle BGM, Change Victory ME, Stop SE, Change Window Skin, Get Location Info | The same commands |
-| Control Variables: Game Data / Random | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats) or **Random** |
+| Control Variables: Game Data / Random / Other: Timer | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats, a **Timer**'s seconds left) or **Random** |
+| Control Variables: ÷ and % of negative numbers; dividing by zero | As the rule system's RPG Maker: VX Ace rules round down (−7 ÷ 2 = −4, −7 % 2 = 1), Classic rules cut towards zero (−3 and −1). Dividing by zero sets 0 and the event goes on |
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
 | Troops: Autoname | **Autoname** on the Enemy groups tab |

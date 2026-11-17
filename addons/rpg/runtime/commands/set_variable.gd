@@ -6,6 +6,11 @@ extends RPGCommand
 ## true/false, {variable: id}, {pointer: id}, {self_variable: {...}}, game data, {random: [min, max]}
 ## or {formula: "..."}. Random and formula re-roll for each variable in a range, and a range is
 ## written all at once: if any value does not fit its variable, nothing is written.
+##
+## Whole-number division and remainder follow the rule set (RPGRuleSystem.variable_division):
+## towards zero as RPG Maker 2000/2003, or rounded down as VX Ace's Ruby. Dividing or taking the
+## remainder by zero sets the variable to 0 and the event goes on, as in RPG Maker; the mistake is
+## noted as a warning (RPGGameState.warn).
 
 
 static func descriptor() -> Dictionary:
@@ -149,7 +154,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			return RPGResult.error(str(rv[1]))
 		var v: Variant = rv[1]
 		var t := ctx.state.variable_type(id)
-		var ao: Array = _apply_op(op, t, ctx.state.get_variable(id), v, id)
+		var ao: Array = _apply_op(ctx, op, t, ctx.state.get_variable(id), v, id)
 		if not ao[0]:
 			return RPGResult.error(str(ao[1]))
 		var coerced: Variant = RPGGameState.coerce(t, ao[1])
@@ -162,26 +167,62 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 
 
 ## Applies the operation to a current value: [true, value] (or [false, error message]).
-func _apply_op(op: String, t: String, current: Variant, v: Variant, what: String) -> Array:
+func _apply_op(ctx: RPGContext, op: String, t: String, current: Variant, v: Variant, what: String) -> Array:
 	if op == "set":
 		return [true, v]
 	if t != "int" and t != "float":
 		return [false, "'%s' is %s; only 'set' is allowed." % [what, t]]
+	if op == "div" or op == "mod":
+		return [true, _divide(ctx, op, t, current, v, what)]
 	var cur := float(current)
 	var n := float(v)
 	match op:
 		"add": cur += n
 		"sub": cur -= n
 		"mul": cur *= n
-		"div":
-			if n == 0:
-				return [false, "Division by zero in Control Variable '%s'." % what]
-			cur = cur / n if t == "float" else float(int(cur) / int(n))
-		"mod":
-			if n == 0:
-				return [false, "Modulo by zero in Control Variable '%s'." % what]
-			cur = fmod(cur, n) if t == "float" else float(int(cur) % int(n))
 	return [true, cur]
+
+
+## Division and remainder. A whole-number variable divides by the whole part of the value, in
+## whole numbers (no detour through decimals, so large values stay exact).
+func _divide(ctx: RPGContext, op: String, t: String, current: Variant, v: Variant, what: String) -> Variant:
+	var rounds_down := _rounds_down(ctx)
+	if t == "float":
+		var x := float(current)
+		var y := float(v)
+		if y == 0.0:
+			_warn_zero(ctx, op, what)
+			return 0.0
+		if op == "div":
+			return x / y
+		return fposmod(x, y) if rounds_down else fmod(x, y)
+	var a := int(current)
+	var b := int(v)
+	if b == 0:
+		_warn_zero(ctx, op, what)
+		return 0
+	@warning_ignore("integer_division")
+	var q := a / b
+	var m := a % b
+	# GDScript cuts towards zero; rounding down differs only when the signs differ and the
+	# division is not exact.
+	if rounds_down and m != 0 and ((m < 0) != (b < 0)):
+		q -= 1
+		m += b
+	return q if op == "div" else m
+
+
+func _rounds_down(ctx: RPGContext) -> bool:
+	var rules: Variant = ctx.rpg.rules if ctx.rpg != null else null
+	return rules != null and rules.has_method("variable_division") and rules.variable_division() == "floor"
+
+
+## RPG Maker rescues a division by zero: the variable becomes 0 and the event goes on. The
+## maker still hears about it.
+func _warn_zero(ctx: RPGContext, op: String, what: String) -> void:
+	var where := RPGInterpreter.describe_where(ctx.interpreter.where()) if ctx.interpreter != null else ""
+	ctx.state.warn("Control Variable: '%s' was %s zero; it is set to 0%s." % [
+		what, "divided by" if op == "div" else "taken modulo", (" (" + where + ")") if where != "" else ""])
 
 
 ## The "Self variable" target: one named value that belongs to an event (any map's, blank map and
@@ -203,7 +244,7 @@ func _run_self(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		return RPGResult.error(str(rv[1]))
 	var v: Variant = rv[1]
 	var t := ctx.state.self_variable_type(map_id, ev, name)
-	var ao: Array = _apply_op(str(args.get("operation", "set")), t, ctx.state.get_self_variable(map_id, ev, name), v, name)
+	var ao: Array = _apply_op(ctx, str(args.get("operation", "set")), t, ctx.state.get_self_variable(map_id, ev, name), v, name)
 	if not ao[0]:
 		return RPGResult.error(str(ao[1]))
 	if not ctx.state.set_self_variable(map_id, ev, name, ao[1]):

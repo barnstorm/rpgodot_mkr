@@ -49,8 +49,8 @@ const TILE_PICKER_SCRIPT := "res://addons/rpg/editor/forms/rpg_tile_picker.gd"
 ## {game_data: {kind, ...}} (RPGGameState.game_data), {pointer: id} (the value of the variable
 ## whose id that variable holds), {self_variable: {map, event, name}} (an event's own value).
 const OPERAND_MODES := ["Number", "Variable", "Random", "Game data", "Pointer", "Self variable"]
-const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
-const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor", "Character", "Map id", "Party member", "Last used", "Counter", "Enemy"]
+const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy", "timer"]
+const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor", "Character", "Map id", "Party member", "Last used", "Counter", "Enemy", "Timer (seconds left)"]
 ## Character game data: targets (an event's ID is typed in directly) and fields.
 const CHAR_TARGETS := ["player", "this", "follower", "event"]
 const CHAR_TARGET_LABELS := ["Player", "This event", "Follower…", "Event…"]
@@ -1001,7 +1001,11 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	sv_event.tooltip_text = "An event ID; blank means this event"
 	sv_event.custom_minimum_size.x = 90.0
 	var sv_map := RPGRefPicker.new("map", data)
-	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef, sv_name, sv_event, sv_map]:
+	# Timer: which of the two timers (the whole seconds it has left).
+	var tmr := OptionButton.new()
+	tmr.add_item("Timer 1")
+	tmr.add_item("Timer 2")
+	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef, sv_name, sv_event, sv_map, tmr]:
 		hb.add_child(c)
 	var state := {"v": null, "fields": field_ids, "enemy_fields": enemy_ids}
 	var gkind := func() -> String:
@@ -1028,6 +1032,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 		cn.visible = m == 3 and k == "counter"
 		ei.visible = m == 3 and k == "enemy"
 		ef.visible = ei.visible
+		tmr.visible = m == 3 and k == "timer"
 		sv_name.visible = m == 5
 		sv_event.visible = m == 5
 		sv_map.visible = m == 5
@@ -1048,7 +1053,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				var g: Dictionary = out3.get("game_data", {})
 				var k: String = gkind.call()
 				g["kind"] = k
-				for opt in ["id", "field", "target", "index", "slot", "what", "which"]:
+				for opt in ["id", "field", "target", "index", "slot", "what", "which", "timer"]:
 					g.erase(opt)
 				if k in ["item", "weapon", "armor", "actor"]:
 					g["id"] = str(gref.get_value()) if gref.get_value() != null else ""
@@ -1070,6 +1075,8 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 					"enemy":
 						g["index"] = int(ei.value)
 						g["field"] = str(state.enemy_fields[ef.selected]) if ef.selected >= 0 else "hp"
+					"timer":
+						g["timer"] = "2" if tmr.selected == 1 else "1"
 				out3["game_data"] = g
 				return out3
 			4:
@@ -1110,6 +1117,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	cn.item_selected.connect(emit)
 	ei.value_changed.connect(emit)
 	ef.item_selected.connect(emit)
+	tmr.item_selected.connect(emit)
 	sv_name.text_changed.connect(emit)
 	sv_event.text_changed.connect(emit)
 	sv_map.value_changed.connect(emit)
@@ -1157,6 +1165,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				ef.add_item("⚠ %s" % efl)
 				efi = state.enemy_fields.size() - 1
 			ef.select(efi)
+			tmr.select(1 if str(g.get("timer", "1")) == "2" else 0)
 		elif v is Dictionary and v.has("pointer"):
 			mode.select(4)
 			pp.set_value(str(v.pointer))
