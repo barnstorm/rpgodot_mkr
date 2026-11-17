@@ -152,7 +152,10 @@ func test_g16_shop_compare_stat_follows_the_rules() -> void:
 func test_g17_change_state_knockout_zeroes_hp_and_revive_restores_one() -> void:
 	var hero: RPGBattler = env.rpg.state.actor("hero")
 	assert_true(hero.get_resource("hp") > 0)
-	var r := await _run([{"type": "change_state", "target": "hero", "state": "knockout", "operation": "add"}])
+	# Mira stays up, so the hero's fall is not a party wipe (that would be Game Over, issue #154).
+	var r := await _run([
+		{"type": "change_party", "operation": "add", "actor": "mira"},
+		{"type": "change_state", "target": "hero", "state": "knockout", "operation": "add"}])
 	assert_true(r.is_ok(), str(r))
 	assert_true(hero.has_state("knockout"))
 	assert_eq(hero.get_resource("hp"), 0, "knocked out means 0 HP, as in battle")
