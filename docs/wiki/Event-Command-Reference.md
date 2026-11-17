@@ -2,18 +2,40 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 91 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 92 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
 | Command | ID | Fields |
 | --- | --- | --- |
 | **Input Number** | `input_number` | Store in, Digits |
+| **Key Input Processing** | `key_input` | Store in, Wait until pressed, Accepted keys, Store time in, Extra actions |
 | **Select Item** | `select_item` | Store in, Which items |
 | **Show Balloon Icon** | `show_balloon` | Character, Balloon, Wait until done |
 | **Show Choices** | `show_choices` | Choices, Cursor starts on, When cancelled, On cancel |
 | **Show Scrolling Text** | `show_scrolling_text` | Text, Speed, No fast forward |
 | **Show Text** | `show_text` | Face, Speaker name, Text, Position, Background, Show gold window |
+
+
+**Key Input Processing** stores these codes — RPG Maker 2003's numbering, so games port over.
+`Menu`, `Debug`, `Through` and `Overlay` are this kit's own actions; actions you list in
+**Extra actions** count from 100 in the order you list them.
+
+| Key | Code | Key | Code |
+| --- | --- | --- | --- |
+| Down | 1 | Digits 0-9 | 10-19 |
+| Left | 2 | `+` `-` `*` `/` `.` | 20-24 |
+| Right | 3 | Menu | 30 |
+| Up | 4 | Debug | 31 |
+| Confirm | 5 | Through | 32 |
+| Cancel | 6 | Overlay | 33 |
+| Shift (Dash) | 7 | Extra actions | 100, 101, ... |
+
+When two accepted keys land in the same frame, RPG Maker 2003's priority decides: `.` `/` `*`
+`-` `+` first, then digits 9 to 0, then Shift, Cancel, Confirm, Up, Right, Left, Down; the kit's
+actions follow, then the ones you listed. Without **Wait until pressed**, a held key counts and
+"nothing held" stores 0. With it, the variable reads 0 for the whole wait and **Store time in**
+records how long the wait took, in tenths of a second.
 
 ## Flow
 
