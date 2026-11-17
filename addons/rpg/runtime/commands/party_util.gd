@@ -157,3 +157,47 @@ static func sync_level_to_exp(ctx: RPGContext, b: Variant) -> Array:
 	var ups: Array = rules.gain_exp(b, 0) if rules.has_method("gain_exp") else []
 	clamp_after_change(ctx, b)
 	return ups
+
+
+## The System's defeat handler (#39): a common event (and optional transfer) that takes the place
+## of Game Over when the party falls. "" when the game has none, or it names no common event.
+static func defeat_event_id(ctx: RPGContext) -> String:
+	var sys: Variant = ctx.data.system if ctx.data != null else null
+	var id := str(sys.get("defeat_event", "")) if sys is Dictionary else ""
+	return id if id != "" and ctx.data.common_events.has(id) else ""
+
+
+## Runs the defeat handler `defeat_ev` inside the running event: the party is sent to the map the
+## System names (if any), then the common event runs (an inn, a "you blacked out and crawled
+## back" scene) and the event that called goes on.
+static func run_defeat_handler(ctx: RPGContext, defeat_ev: String) -> RPGResult:
+	var sys: Dictionary = ctx.data.system
+	var d_to: Variant = sys.get("defeat_transfer")
+	if d_to is Dictionary and str(d_to.get("map", "")) != "" and (d_to.get("position") is Array) and d_to.position.size() >= 2 and ctx.rpg.game != null:
+		await ctx.rpg.game.transfer(str(d_to.map), Vector2i(int(d_to.position[0]), int(d_to.position[1])), str(sys.get("defeat_facing", "keep")), "black", 0, ctx.interpreter)
+	var r: RPGResult = await ctx.run_list(ctx.data.common_events[defeat_ev].get("commands", []), "defeat")
+	return r if r.is_error() else RPGResult.ok()
+
+
+## True when a party command has just left every party member knocked out on the map (issue
+## #154). Inside a battle the battle's own defeat check decides, so this is false there.
+static func party_fell_on_map(ctx: RPGContext) -> bool:
+	if ctx.battle != null and ctx.battle.valid():
+		return false
+	if ctx.rpg == null or ctx.rpg.game == null or not ctx.rpg.game.has_method("game_over"):
+		return false
+	if ctx.state.party.is_empty():
+		return false
+	return ctx.state.party_battlers().all(func(b): return b is RPGBattler and b.is_dead())
+
+
+## What a party wipe on the map leads to. RPG Maker ends the game (VX's Change HP; VX Ace and MV
+## check it on every map frame): Game Over, and the event stops as after a lost battle. With a
+## defeat handler in the System it runs instead, as it does for a lost battle, and the event
+## goes on.
+static func map_defeat(ctx: RPGContext) -> RPGResult:
+	var defeat_ev := defeat_event_id(ctx)
+	if defeat_ev != "":
+		return await run_defeat_handler(ctx, defeat_ev)
+	ctx.rpg.game.game_over.call_deferred()
+	return RPGResult.flow_exit()

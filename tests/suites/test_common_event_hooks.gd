@@ -202,8 +202,10 @@ func test_actor_ko_hook_fires_when_the_hero_falls() -> void:
 	await _sample_env()
 	_ce("fell", {"trigger": "on_actor_ko", "commands": [_bump("fish_caught")]})
 	_ce("death_state", {"trigger": "on_state_added", "hook_state": "knockout", "commands": [_bump("talks")]})
+	# Mira stays up: the whole party down on the map would be Game Over (#154).
 	var r: RPGResult = await env.rpg.run_commands([
-		{"type": "change_hp_mp", "target": "party", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true},
+		{"type": "change_party", "operation": "add", "actor": "mira"},
+		{"type": "change_hp_mp", "target": "hero", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true},
 	], {"kind": "api", "id": "t"})
 	assert_true(r.is_ok(), str(r))
 	assert_true(await _wait_until(func(): return env.rpg.get_variable("fish_caught") == 1), "dropping the hero to 0 HP is its own moment")

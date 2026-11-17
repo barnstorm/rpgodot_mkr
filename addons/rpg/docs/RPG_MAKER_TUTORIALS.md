@@ -38,7 +38,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Change Tile (2000/2003) | The same (*screen* category): replaces every tile of a layer matching a key, or sets the single cell at X, Y; **Keep** stores the change in the save (without it the map resets when reloaded, as in RPG Maker) |
 | Call Inn (2000/2003) | **Call Inn** (*party* category): the ask message from one of the two System styles (Terms), Yes/No with cancel as No, the can't-afford message, gold, fade, jingle (ME), a full Recover All and branches for stayed / didn't stay |
 | Battle commands (2003) | An actor's or class's **Battle commands** list builds the battle menu: Attack, Skill, a **Skill type** (only that type's skills; the VX Ace default menu when skill types are granted), Guard, Item, Escape, **Row** (swap front/back rows mid-battle; row rates scale physical damage dealt and taken) or **Event** (*Link to Event*: a menu entry the troop's battle events answer through the *Command used* condition, by its id or generically) |
-| Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
+| Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules). With *Allow knockout*, a change that leaves the whole party down on the map is Game Over and the event stops, as in RPG Maker (a trap that can kill); the same goes for Change State adding the knockout state. A System *Defeat handler* takes the place of that Game Over |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |

@@ -67,6 +67,10 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			ctx.state.notify_actor_changed(pair[0])
 	if enemy_side and ctx.battle != null and ctx.battle.valid():
 		ctx.battle.refresh()
+	# Adding the knockout state to the last one standing is a party wipe too (VX Ace and MV end
+	# the game whenever the whole party is down on the map).
+	if args.operation == "add" and not enemy_side and RPGPartyUtil.party_fell_on_map(ctx):
+		return await RPGPartyUtil.map_defeat(ctx)
 	return RPGResult.ok()
 
 

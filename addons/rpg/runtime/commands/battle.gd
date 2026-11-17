@@ -46,9 +46,7 @@ func child_lists(args: Dictionary) -> Array:
 ## The System's defeat handler (#39): a common event (and optional transfer) that takes the place
 ## of Game Over when the party loses. "" when the game has none, or it names no common event.
 static func defeat_event_id(ctx: RPGContext) -> String:
-	var sys: Variant = ctx.data.system if ctx.data != null else null
-	var id := str(sys.get("defeat_event", "")) if sys is Dictionary else ""
-	return id if id != "" and ctx.data.common_events.has(id) else ""
+	return RPGPartyUtil.defeat_event_id(ctx)
 
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
@@ -162,12 +160,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			# map the System names (if any), the common event runs (an inn, a "you blacked out
 			# and crawled back" scene), and the game goes on.
 			if defeat_ev != "":
-				var sys: Dictionary = ctx.data.system
-				var d_to: Variant = sys.get("defeat_transfer")
-				if d_to is Dictionary and str(d_to.get("map", "")) != "" and (d_to.get("position") is Array) and d_to.position.size() >= 2 and ctx.rpg.game != null:
-					await ctx.rpg.game.transfer(str(d_to.map), Vector2i(int(d_to.position[0]), int(d_to.position[1])), str(sys.get("defeat_facing", "keep")), "black", 0, ctx.interpreter)
-				var d_r: RPGResult = await ctx.run_list(ctx.data.common_events[defeat_ev].get("commands", []), "defeat")
-				return d_r if d_r.is_error() else RPGResult.ok()
+				return await RPGPartyUtil.run_defeat_handler(ctx, defeat_ev)
 			if ctx.rpg.game != null:
 				ctx.rpg.game.game_over.call_deferred()
 			return RPGResult.flow_exit()

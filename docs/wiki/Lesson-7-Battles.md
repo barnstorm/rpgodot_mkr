@@ -78,7 +78,7 @@ The chances share one roll (in the order above) and the rest of the encounters s
 | Advantage | Normal, preemptive, surprise, or one of the [2003 starts](#3-random-encounters): initiative, back attack, surround, pincer — a pincer also blocks escaping |
 | Store outcome in | A variable that gets the result |
 
-**The defeat handler** (Database > System): when the party loses a battle *Continue when lost* is off for, a **Defeat handler** common event takes the place of Game Over — an inn, a "*you blacked out and crawled back*" scene. An optional **Defeat transfer** carries the party to a map first (with **Defeat facing**), then the common event runs and the event that started the battle goes on as though nothing happened. Without a handler, losing is Game Over as usual.
+**The defeat handler** (Database > System): when the party loses a battle *Continue when lost* is off for, a **Defeat handler** common event takes the place of Game Over — an inn, a "*you blacked out and crawled back*" scene. An optional **Defeat transfer** carries the party to a map first (with **Defeat facing**), then the common event runs and the event that started the battle goes on as though nothing happened. Without a handler, losing is Game Over as usual. The same handler answers a wipe on the map: a **Change HP** with *Allow knockout* (a trap) or a **Change State** that leaves the whole party down is Game Over, or the handler when there is one.
 
 ## 5. Battle events
 
