@@ -98,11 +98,13 @@ The party commands reach the other side too: **Change HP / SP**, **Change State*
 
 **Force Flee** (2003) makes someone run instead: *Enemy #* or *Every enemy* — a fled enemy leaves the battle, takes nothing from the fight and gives no rewards, and when the last one goes the battle is won — or *The party*, which ends the battle as an escape with no chance roll, even when the group says *Can escape* is off. Useful for a monster that bolts at low HP, or a story fight the party is meant to lose without a game over.
 
+**Force Action** makes a battler use a skill or an item: a boss's signature move every third turn, a counterattack the moment it is hit, a story beat where the knight shields the princess. The subject is any member of the group (by its number) or any actor in the party; it does not need to know the skill, only the SP for it. Aim at its *last target*, a *random* one, or a number in the target row. *Right now* performs the action at once, outside the turn order — nobody's turn or gauge is used. *At its next turn* queues it instead: the battler uses that action when its turn comes (the player is not asked for it, and a timed battle's gauge is spent as usual). A subject that cannot act — dead, hidden or restricted — skips the command quietly, as in RPG Maker.
+
 **Change Party Member** works during a battle: an added actor joins the field at once (status row, side-view sprite and a turn gauge under ATB / CTB), a removed one leaves the fight, and victory EXP goes to the members present at the end. *Only for this battle* adds the actor for the fight and takes them out of the party again when it ends.
 
 For reinforcements, give the page an *Enemy HP* condition at 0%. When the last enemy on screen falls, the new ones appear and the battle goes on.
 
-Enemy Appear and Force Flee only work in a battle: in battle events, or in a common event they call. On a map event they stop the event with an error, and the export checks warn about it.
+Enemy Appear, Force Flee, Transform Enemy and Force Action only work in a battle: in battle events, or in a common event they call. On a map event they stop the event with an error, and the export checks warn about it.
 
 ## 6. Battle style
 

@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 89 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 90 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -128,7 +128,9 @@ There are 89 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
 | **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |
+| **Transform Enemy** | `transform_enemy` | Enemy # (1 = first in the group), Transform into, HP (keep / percent / refill), Remove its states |
 | **Force Flee** | `force_flee` | Who flees (Enemy # / Every enemy / The party), Enemy # (1 = first in the group) |
+| **Force Action** | `force_action` | Subject (Enemy # / Actor), Enemy #, Actor, Uses (skill / item), Skill, Item, Target (last / random / #), Target #, Timing (right now / at its next turn) |
 | **End Battle** | `abort_battle` | Result (abort / win / lose), Give victory rewards |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |
@@ -137,7 +139,6 @@ There are 89 built-in commands. The *ID* is the command's `type` in the event JS
 | **Return to Title Screen** | `return_to_title` |  |
 | **Run Scene** | `run_scene` | Scene, Arguments, Store result in, Timeout (0 = none), If cancelled |
 | **Shop Processing** | `shop` | Goods, Buy only |
-| **Transform Enemy** | `transform_enemy` | Enemy # (1 = first in the group), Transform into, HP (keep / percent / refill), Remove its states |
 
 ## Godot
 
