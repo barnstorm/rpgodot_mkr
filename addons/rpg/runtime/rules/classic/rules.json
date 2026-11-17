@@ -26,6 +26,7 @@
 	"parallel_switch_off": "pause",
 	"parallel_map_change": "keep",
 	"parallel_map_event_survives_map_change": false,
+	"turn_repeat": "from_start",
 	"levels": {"min": 1, "max": 99},
 	"growth": "class",
 	"exp_curve": {"type": "basis_inflation", "basis": 25, "inflation": 30},

@@ -254,6 +254,13 @@ func parallel_map_event_survives_map_change() -> bool:
 	return bool(definition.get("parallel_map_event_survives_map_change", false))
 
 
+## How a battle "Turn a, then every b" condition counts while b > 0 (issue #143). "from_start"
+## (RM2000/2003): turns a, a+b, a+2b, ... so 0 + b×X includes the battle's opening, turn 0.
+## "from_first_turn" (VX, VX Ace, MV): the same turns, but never before turn 1.
+func turn_repeat() -> String:
+	return str(definition.get("turn_repeat", "from_start"))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 

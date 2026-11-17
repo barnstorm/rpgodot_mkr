@@ -121,7 +121,7 @@ func test_troop_page_commands_wait_in_battle() -> void:
 	var data: RPGProjectData = env.rpg.data
 	var storm := {"id": "storm", "name": "Storm", "can_escape": true, "battle_view": "side", "members": [
 		{"enemy": "slime", "hidden": false, "position": [120, 150]}], "pages": [
-		{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"id": "p", "conditions": [{"kind": "turn", "n": 0}], "commands": [
 			{"type": "tint_screen", "red": 40, "green": 40, "blue": 60, "seconds": 0.5, "wait": true},
 			{"type": "flash_screen", "color": [255, 255, 255, 180], "seconds": 0.4, "wait": true},
 			{"type": "shake_screen", "power": 6, "seconds": 0.4, "wait": true},
@@ -132,7 +132,7 @@ func test_troop_page_commands_wait_in_battle() -> void:
 	var out := {}
 	var scene: Node = await _battle_open("storm", out)
 	assert_true(scene != null and is_instance_valid(scene), "the battle screen is up")
-	# The page runs at the start of turn 1, so let the opening log play out.
+	# The page runs as the battle opens (Turn 0), so let the opening log play out.
 	env.rpg.ui.auto_advance = true
 	assert_true(await _wait_until(func(): return not is_instance_valid(scene) or scene.stage.self_modulate != Color.WHITE, 15.0),
 		"the page's Tint Screen darkened the field")

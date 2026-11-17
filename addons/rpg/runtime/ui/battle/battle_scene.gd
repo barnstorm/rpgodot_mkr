@@ -1185,6 +1185,11 @@ func _run() -> void:
 		"pincer":
 			await say(_battle_term("pincer", "A pincer attack! There is no escaping!"), 0.6)
 	log_win.visible = false
+	# The battle opens: "Turn 0" pages run now, before the first command (issue #143).
+	core.begin_battle()
+	await _flush_checkpoints()
+	if not is_inside_tree():
+		return
 	if core.is_timed():
 		await _run_timed()
 		return
@@ -1213,6 +1218,13 @@ func _run() -> void:
 				break
 			for i in core.inputs_needed():
 				core.party[i].action = {"kind": "wait", "silent": true}
+		# The commands are in: the turn number goes up and its pages run before the first action.
+		core.begin_actions()
+		await _flush_checkpoints()
+		if not is_inside_tree():
+			return
+		if core.battle_over() != "":
+			break
 		var r: Dictionary = core.next_action()
 		while not r.is_empty():
 			await show_action(r)

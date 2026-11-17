@@ -52,6 +52,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
 | Troops: Autoname | **Autoname** on the Enemy groups tab |
+| Troop battle events: *Turn No. a + b×X* (Turn 0 = before the first command) | Condition **Turn**, with *Then every* for the b×X part. Turn 0 is the battle's opening; turn 1 begins when the first commands are entered, before the first action. With the VX Ace rules a repeating page skips the opening, as in VX Ace and MV; with the Classic rules it can include it, as in 2000/2003. Older versions of the kit ran *Turn 1* as the battle opened |
 | Actor Description, Status screen | Actor **Description**; on the Status screen, OK shows it |
 | Class parameter curves | Classes: each stat is **Per level** or **Curve** (level 1 / level 99 values and a shape), with a graph |
 | Battle Test (party, levels) | **Game > Battle test…** (choose the enemy group, the party and their levels), or Battle test on the Enemy groups tab |

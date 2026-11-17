@@ -334,6 +334,48 @@ func test_troop_page_variable_condition_runs_mid_battle() -> void:
 	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
 
 
+## RPG Maker's turn numbering in a real fight (#143): the "Turn 0" page has run when the first
+## command window opens; the "Turn 1" page runs once the commands are in, before anyone acts.
+func test_turn_zero_runs_before_the_first_command_and_turn_one_after_it() -> void:
+	_sample_env()
+	var opening := {"id": "opening", "conditions": [{"kind": "turn", "n": 0}], "span": "once_per_battle", "commands": [
+		{"type": "set_variable", "id": "talks", "operation": "set", "value": 1}]}
+	# The wait holds the page open, so the test can look at the battle while "Turn 1" runs.
+	var first := {"id": "first", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+		{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1},
+		{"type": "wait", "seconds": 0.5},
+		{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 2}]}
+	_add_troop(_goblin_troop([opening, first]))
+	var out := {}
+	var scene := _start_battle({"troop": "boss", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_eq(int(env.rpg.get_variable("talks")), 1, "Turn 0 ran before the first command")
+	assert_eq(int(env.rpg.get_variable("fish_caught")), 0, "Turn 1 waits for the commands")
+	assert_eq(scene.core.turn, 0, "the first commands are entered at turn 0")
+	var hero_hp: int = scene.core.party[0].get_resource("hp")
+	var goblin_hp: int = scene.core.enemies[0].get_resource("hp")
+	# Fight, Attack, the goblin: ok until the commands are in and the page has started.
+	var end := Time.get_ticks_msec() + 10000
+	while int(env.rpg.get_variable("fish_caught")) == 0 and Time.get_ticks_msec() < end:
+		if is_instance_valid(scene) and scene.phase != "":
+			if scene.phase == "party":
+				scene.cmd_list.select(0)
+			scene.handle_action("ok")
+		await tree.process_frame
+	assert_eq(int(env.rpg.get_variable("fish_caught")), 1, "Turn 1 runs once the commands are in")
+	assert_eq(scene.core.turn, 1, "the turn number went up when the actions began")
+	assert_eq(scene.core.party[0].get_resource("hp"), hero_hp, "nobody has acted yet")
+	assert_eq(scene.core.enemies[0].get_resource("hp"), goblin_hp, "nobody has acted yet")
+	assert_true(await _wait_until(func(): return int(env.rpg.get_variable("fish_caught")) == 2), "the page ends")
+	# The turn plays out and the next command window opens, still turn 1 until it is answered.
+	await _open_party_command(scene)
+	assert_eq(scene.core.turn, 1)
+	assert_true(scene.core.enemies[0].get_resource("hp") < goblin_hp or scene.core.party[0].get_resource("hp") < hero_hp
+		or scene.core.party[0].turns_taken == 1, "turn 1's actions ran after the page")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
 # --- Conditional Branch battle checks (#50) ------------------------------------------------------------
 
 
@@ -350,7 +392,8 @@ func _branch(cond: Dictionary) -> bool:
 func test_conditional_branch_battle_checks_in_events() -> void:
 	_sample_env()
 	# A troop page runs an `if` with a page-style check: branches read the running battle too.
-	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+	# Turn 0: the page runs as the battle opens, before the first command (#143).
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 0}], "span": "once_per_battle", "commands": [
 		{"type": "if", "condition": {"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 100}, "then": [
 			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": []}]}
 	_add_troop(_later_troop([page]))
@@ -360,7 +403,8 @@ func test_conditional_branch_battle_checks_in_events() -> void:
 	assert_eq(int(env.rpg.state.get_variable("fish_caught")), 1, "the page's if read the enemy's HP")
 	assert_true(await _branch({"kind": "actor_can_act", "id": "hero"}), "the hero can act")
 	assert_true(await _branch({"kind": "enemy_can_act", "index": 0}), "so can the first slime")
-	assert_true(await _branch({"kind": "turn", "n": 1}), "and it is turn 1")
+	assert_true(await _branch({"kind": "turn", "n": 0}), "and the turn is still 0 through the first input")
+	assert_false(await _branch({"kind": "turn", "n": 1}), "turn 1 begins when its actions do")
 	assert_false(await _branch({"kind": "actor_can_act", "id": "mira"}), "an actor outside the battle cannot act")
 	assert_false(await _branch({"kind": "enemy_can_act", "index": 1}), "nor can the hidden member")
 	assert_false(await _branch({"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 50}), "the slime is above half HP")
@@ -755,9 +799,9 @@ func test_force_action_right_now_acts_out_of_turn() -> void:
 func test_force_action_at_its_next_turn_uses_the_turn() -> void:
 	_sample_env()
 	Engine.time_scale = 4.0
-	# A start-of-turn page forces both sides' turn-1 actions: the goblin burns the hero, the hero
-	# burns the goblin (each 6 SP of their 10).
-	var page := {"id": "forced", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+	# A page that runs as the battle opens (Turn 0) forces both sides' turn-1 actions: the goblin
+	# burns the hero, the hero burns the goblin (each 6 SP of their 10).
+	var page := {"id": "forced", "conditions": [{"kind": "turn", "n": 0}], "span": "once_per_battle", "commands": [
 		{"type": "force_action", "subject": "enemy", "enemy_index": 1, "what": "skill", "skill": "fire",
 			"target": "index", "target_index": 1, "timing": "turn"},
 		{"type": "force_action", "subject": "actor", "actor": "leader", "what": "skill", "skill": "fire",
@@ -768,7 +812,7 @@ func test_force_action_at_its_next_turn_uses_the_turn() -> void:
 	# Turn 1 plays out with nobody asked: no ok is ever pressed here, so the battle could only
 	# move on if the party command never opened (the forced hero is not waiting for a command).
 	var reached := await _wait_until(func():
-		return not is_instance_valid(scene) or (scene.phase == "party" and scene.core.turn >= 2), 30.0)
+		return not is_instance_valid(scene) or (scene.phase == "party" and scene.core.turn >= 1), 30.0)
 	assert_true(reached, "turn 2's party command opens (turn 1 needed no input)")
 	assert_eq(scene.core.enemies[0].get_resource("sp"), 4, "the goblin's forced fire ran on its turn")
 	assert_eq(scene.core.party[0].get_resource("sp"), 4, "the hero's forced fire ran on their turn")
