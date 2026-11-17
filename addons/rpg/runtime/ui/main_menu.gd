@@ -845,7 +845,8 @@ func skill_usable(b: Object, id: String) -> bool:
 
 func _refresh_skills(keep := true) -> void:
 	var out := []
-	for id in skill_actor.skills:
+	var ids: Array = rules().known_skills(skill_actor) if rules() != null and skill_actor is RPGBattler else skill_actor.skills
+	for id in ids:
 		var rec := record("skills", str(id))
 		var cost: Dictionary = rec.get("cost", {})
 		var cost_text := ""
@@ -939,6 +940,8 @@ func candidates(b: Object, slot: String) -> Array:
 
 
 func can_equip(b: Object, slot: String, kind: String, id: String) -> bool:
+	if rules() != null and b is RPGBattler:
+		return rules().can_equip(b, slot, id)
 	var rec := record(kind, id)
 	if rec.is_empty():
 		return false

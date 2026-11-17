@@ -36,6 +36,7 @@ const DEFAULT_TERMS := {
 	"critical": "A critical hit!",
 	"counter": "%1 counterattacks!",
 	"magic_reflection": "%1 reflects the magic!",
+	"substitute": "%1 covers %2!",
 	"state_added": "%1 is affected by %2!",
 	"state_removed": "%1 is no longer affected by %2.",
 	"state_resisted": "%1 resisted %2.",
@@ -324,6 +325,40 @@ func is_slot_sealed(b: RPGBattler, slot: String) -> bool:
 		if str(t.get("id", "")) == slot:
 			return true
 	return false
+
+
+## Whether `b` may equip `item_id` into `slot` — the check the Equip screen and the Change
+## Equipment event command share. The record must exist for that kind of slot, the slot must not
+## be sealed, and the class's "equip" allow-lists must cover the item's weapon or armour type;
+## an "equip_weapon_type" / "equip_armor_type" trait widens them (MV's equippable weapons and
+## armours), so an equipment can grant the right to wear its kind.
+func can_equip(b: RPGBattler, slot: String, item_id: String) -> bool:
+	if b == null or not b.is_actor() or item_id == "":
+		return false
+	if is_slot_sealed(b, slot):
+		return false
+	var kind := equip_slot_kind(b, slot)
+	var rec := _rec("weapons", item_id) if kind == "weapon" else equip_record(slot, item_id)
+	if rec.is_empty():
+		return false
+	var allowed: Variant = _rec("classes", b.class_id).get("equip", {})
+	if not allowed is Dictionary:
+		allowed = {}
+	if kind == "weapon":
+		var ty := str(rec.get("weapon_type", ""))
+		var list: Variant = allowed.get("weapon_types", null)
+		return list == null or (list as Array).has(ty) or has_trait(b, "equip_weapon_type", ty)
+	if str(rec.get("slot", "")) != "" and str(rec.get("slot", "")) != slot:
+		return false
+	if str(rec.get("slot", "")) == "":
+		for e in _rec("types", "equip_slots").get("entries", []):
+			if str(e.get("id", "")) == slot:
+				var types: Array = e.get("armor_types", [])
+				if not types.is_empty() and not types.has(str(rec.get("armor_type", ""))):
+					return false
+	var aty := str(rec.get("armor_type", ""))
+	var alist: Variant = allowed.get("armor_types", null)
+	return alist == null or (alist as Array).has(aty) or has_trait(b, "equip_armor_type", aty)
 
 
 ## Traits of `kind` from the battler's own record, class and states (not equipment, so the
@@ -648,6 +683,29 @@ func trait_field(b: RPGBattler, code: String, fallback := 0) -> int:
 	if not defs.has(code):
 		return fallback
 	return int(_trait_field(b, traits(b), defs[code]))
+
+
+## How `b` falls when defeated (MV's collapseType): "normal" (the default), "boss", "instant"
+## or "none", from the highest-valued "collapse" trait or an enemy record's "collapse" field.
+func collapse_kind(b: RPGBattler) -> String:
+	const NAMES := ["normal", "boss", "instant", "none"]
+	var best := -1
+	for t in traits(b, "collapse"):
+		best = maxi(best, clampi(int(t.get("value", 0)), 0, 3))
+	if best >= 0:
+		return NAMES[best]
+	var c := str(battler_record(b).get("collapse", ""))
+	return c if NAMES.has(c) else "normal"
+
+
+## The formula's plain value with a = user and b = target — no variance, criticals or guards:
+## what Auto Battle scores skills by (MV's evaluate, without its random trials).
+func formula_value(user: RPGBattler, target: RPGBattler, action: Dictionary) -> int:
+	var u := resolve_action(user, action)
+	if u.is_empty() or str(u.get("formula", "")) == "":
+		return 0
+	var r := _eval(str(u.formula), _env(user, target, u), "formula_value")
+	return int(r.value) if r.ok else 0
 
 
 ## Whether "snapshot_traits" defines `code` — lets callers keep their RNG draws (a weighted
@@ -1236,8 +1294,18 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 			u = (definition.get("attack", {}) as Dictionary).duplicate(true)
 			u.kind = "attack"
 			u.id = "attack"
-			if str(u.get("element", "")) == "" and user != null:
-				u.element = attack_element(user)
+			if user != null:
+				if str(u.get("element", "")) == "":
+					u.element = attack_element(user)
+				# Attack State and Attack Speed traits ride on every normal attack (MV's
+				# attackStates / attackSpeed): each state lands with its trait chance, and the
+				# speed joins the turn-order roll.
+				for t in traits(user, "attack_state"):
+					var sid := str(t.get("id", ""))
+					if sid != "":
+						u.effects = (u.get("effects", []) as Array).duplicate()
+						u.effects.append({"kind": "add_state", "id": sid, "chance": int(t.get("value", 100))})
+				u.speed = int(u.get("speed", 0)) + int(trait_sum(user, "attack_speed"))
 			if not u.has("name"):
 				u.name = "Attack"
 		"skill":
@@ -1313,6 +1381,8 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 	if kind == "skill":
 		if restriction(user) == "cannot_use_skills":
 			return false
+		if has_trait(user, "seal_skill", str(action.get("skill", ""))):
+			return false
 		if not skill_type_usable(user, str(u.get("skill_type", ""))):
 			return false
 		var cost: Dictionary = _skill_cost(user, u)
@@ -1320,6 +1390,20 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 			if user.get_resource(res_id) < int(cost[res_id]):
 				return false
 	return true
+
+
+## The battler's skill list with traits folded in (MV's skills()): the learned list, plus
+## "add_skill" traits (an equipment or state can grant a single skill), minus "seal_skill"
+## traits. What the skill menus show and what battle actions accept.
+func known_skills(b: RPGBattler) -> Array:
+	var out: Array = (b.skills as Array).duplicate()
+	for t in traits(b, "add_skill"):
+		var sk := str(t.get("id", ""))
+		if sk != "" and not out.has(sk) and not _rec("skills", sk).is_empty():
+			out.append(sk)
+	for t in traits(b, "seal_skill"):
+		out.erase(str(t.get("id", "")))
+	return out
 
 
 ## Skill types. A "seal_skill_type" trait (id = skill type) blocks that type. When the rule system
@@ -1515,7 +1599,9 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 		var amp := int(absf(value) * variance / 100.0)
 		if amp > 0:
 			value += rng.randi_range(-amp, amp)
-	if out.type == "damage" and target.guarding and value > 0.0:
+	# Guarding, or MV's Guard special flag — which guards whenever the battler can still act.
+	var guarding := target.guarding or (has_trait(target, "guard") and can_act(target))
+	if out.type == "damage" and guarding and value > 0.0:
 		# MV's applyGuard: damage / (2 x GRD). guard_percent is the /2 (50 = half damage), the
 		# Guard Effect Sp-Parameter the rest — a rules set without it divides by 100 (= x1.0).
 		value = value * float(cfg.get("guard_percent", 50)) / float(trait_field(target, "grd", 100))

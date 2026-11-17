@@ -14,7 +14,7 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 
 - Ace's damage formulas, variance and criticals; HIT, EVA and CRI checks.
 - Class parameter curves (level 1 value, level 99 value, a growth shape) with a graph in the Classes tab.
-- Features (the kit calls them **Traits**): Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen.
+- Features (the kit calls them **Traits**): Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Attack State, Attack Speed, Add/Seal Skill Type, Add/Seal Skill, Equip Weapon/Armor Type, Dual Wield, Seal Equip, Action Times+, Special Flags (Auto Battle, Guard, Substitute, Preserve TP), Collapse Effect, HP/MP Regen.
 - Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.
 - Actors can use a skill type (Magic, Special) only when their class or actor adds it with an *Add Skill Type* trait, as in Ace.
 - Regeneration and each state's damage apply on the map every 20 steps.
@@ -23,8 +23,9 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - MV **invocation fields**: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss — through the rules' `gain_on_use`).
 - Buffs and debuffs: the *Add Buff* / *Add Debuff* / *Remove Buff* / *Remove Debuff* effects step a stat ±25% per level (two levels max), roll debuff chances against Debuff Rate traits and the user's luck, and wear off after their turns or at battle's end. Classic has none — its halve/double stat changes are states.
 - The remaining Ex- and Sp-Parameters: *Counter Attack* answers a physical hit with the target's own attack and *Magic Reflection* sends a magical skill back to its caster (checked per hit, counter first); *Target Rate* weights random enemy picks (0 drops a foe from the draw), *Guard Effect* divides guarded damage, *Recovery Effect* scales healing received (an item's also by the user's *Pharmacology*), and *MP Cost Rate*, *Physical/Magic Damage Rate*, *Floor Damage* rate and *Experience* rate scale their totals.
+- The rest of the trait list: *Attack State* rides every normal attack (its chance, times the target's State Rate) and *Attack Speed* joins the attack's turn-order roll; *Add Skill* / *Seal Skill* widen and hole the skill list the menus, battle input and events read; *Equip Weapon/Armor Type* widen the class's equip lists, which the equipment menu and the Change Equipment command consult. The special flags: *Auto Battle* asks for no command and picks its own (a hurting friend is mended, else the strongest hit — no dice rolled), *Guard* halves damage without a guard command, *Substitute* steps in front of a friend under a quarter of HP ("Bruno covers Eric!"; a certain hit cannot be covered) and *Preserve TP* keeps TP between battles. The *Collapse Effect* picks how a side-view sprite dies: normal fade, boss, instant or none.
 
-Not covered yet: Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
+Not covered yet: Fix Equip. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 
 ## Switching
 
