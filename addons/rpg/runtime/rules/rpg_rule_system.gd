@@ -196,8 +196,45 @@ func life_resource() -> String:
 	return str(definition.get("life_resource", "hp"))
 
 
+## The spell resource ("sp" in classic, "mp" in VX Ace), for MP conditions and costs; "" when the
+## ruleset declares no second resource. Declared as "magic_resource" in the definition, else the
+## first resource that is not the life one.
+func magic_resource() -> String:
+	var m := str(definition.get("magic_resource", ""))
+	if _res_defs.has(m):
+		return m
+	for r in _res_order:
+		if str(r) != life_resource():
+			return str(r)
+	return ""
+
+
 func death_state() -> String:
 	return str(definition.get("death_state", "knockout"))
+
+
+## Whether slip damage can knock out by default; a state's slip "can_kill" overrides it per state.
+func slip_knockout() -> bool:
+	return bool(definition.get("slip_knockout", true))
+
+
+## What a parallel common event's condition switch going off does to its run: "pause" freezes it
+## at its current command and carries on there when the switch returns (RM2000/2003); "restart"
+## discards the run, and the event starts from the top when the switch returns (MV).
+func parallel_switch_off() -> String:
+	return str(definition.get("parallel_switch_off", "restart"))
+
+
+## What a map change does to a running parallel common event: "keep" lets it run on across the
+## transfer (RM2000/2003); "restart" discards it and it starts from the top on the new map (MV).
+func parallel_map_change() -> String:
+	return str(definition.get("parallel_map_change", "keep"))
+
+
+## RM2000-style option: the parallel map event that runs a transfer keeps executing on the new map
+## (its current pass finishes there); by default, like MV, it stops with its map.
+func parallel_map_event_survives_map_change() -> bool:
+	return bool(definition.get("parallel_map_event_survives_map_change", false))
 
 
 func has_capability(cap: String) -> bool:
@@ -761,15 +798,33 @@ func state_chance_rate(b: RPGBattler, state_id: String) -> float:
 	return trait_rate(b, "state_rate", state_id)
 
 
-## Adds a state with its record's duration. Adding the death state zeroes the life resource
-## and clears other states. Returns true if the state was added.
+## Adds a state with its record's duration. Re-adding a state that is already there resets its
+## turns with a fresh roll (durations never stack, as MV). A battler whose death state is resisted
+## is immortal: the death state is never added, not even at 0 life. Adding the death state zeroes
+## the life resource and clears other states. Returns true if the state was added or refreshed.
 func add_state(b: RPGBattler, state_id: String) -> bool:
-	if b.has_state(state_id):
+	var rec := _rec("states", state_id)
+	if state_id == death_state() and state_chance_rate(b, state_id) <= 0.0:
+		# Resisting death (or a 0 state rate): never knocked out, even at 0 life.
 		return false
+	if b.has_state(state_id):
+		var turns := _roll_state_turns(rec)
+		for s in b.states:
+			if s.id == state_id:
+				s.turns = turns
+		return true
 	if b.is_dead() and state_id != death_state():
 		return false
-	var rec := _rec("states", state_id)
-	var turns := -1
+	if state_id == death_state():
+		b.states.clear()
+		b.resources[life_resource()] = 0
+		b.guarding = false
+	b.add_state(state_id, _roll_state_turns(rec))
+	return true
+
+
+## A fresh duration roll for a state record: -1 ("until removed") or 1..turns_max.
+func _roll_state_turns(rec: Dictionary) -> int:
 	if rec.has("turns_min") or rec.has("turns_max"):
 		var lo := int(rec.get("turns_min", rec.get("turns_max", 1)))
 		var hi := int(rec.get("turns_max", lo))
@@ -778,13 +833,8 @@ func add_state(b: RPGBattler, state_id: String) -> bool:
 			# at the end of the turn it was added in, like a roll of 1, so a duration of "0 to N
 			# turns" can never make it permanent. Only "at most 0" (or no duration) means
 			# "until removed".
-			turns = maxi(1, rng.randi_range(mini(lo, hi), hi))
-	if state_id == death_state():
-		b.states.clear()
-		b.resources[life_resource()] = 0
-		b.guarding = false
-	b.add_state(state_id, turns)
-	return true
+			return maxi(1, rng.randi_range(mini(lo, hi), hi))
+	return -1
 
 
 ## Removes a state. Removing the death state revives with at least 1 life point.
@@ -816,48 +866,53 @@ func can_act(b: RPGBattler) -> bool:
 	return b.is_alive() and restriction(b) != "cannot_act"
 
 
-## End-of-turn processing for one battler: slip damage and state durations.
+## End-of-turn or end-of-action processing for one battler: slip damage, regeneration and state
+## durations. `timing` is "turn_end" (the battle turn ended: slip damage, regeneration and the
+## countdown of "turn end" states, as in RPG Maker 2000) or "action_end" (one battler acted:
+## only "action end" states count down, as MV's Action End timing).
 ## Returns {damage, removed_states, lines, knocked_out}.
-func tick_states(b: RPGBattler) -> Dictionary:
+func tick_states(b: RPGBattler, timing := "turn_end") -> Dictionary:
 	var out := {"damage": 0, "removed_states": [], "lines": [], "knocked_out": false}
 	if b.is_dead():
 		return out
-	# Regeneration: resources with a "regen" formula (a = the battler), e.g. HP Regen traits.
-	# Negative regeneration never knocks out.
-	if _has_resource_key("regen"):
-		var env := {"a": snapshot(b), "b": {}, "v": variables, "s": {}, "rng": rng}
-		var regen := _gain_resources(b, "regen", env, true)
-		for rid in regen:
-			var delta: int = regen[rid]
-			if delta > 0:
-				out.lines.append(term("recover", [b.name, delta, _resource_label(rid)]))
-			else:
-				out.lines.append(term("resource_damage", [b.name, -delta, _resource_label(rid)]))
-				if rid == life_resource():
-					out.damage += -delta
-		if not regen.is_empty():
-			out["regen"] = regen
+	if timing == "turn_end":
+		# Regeneration: resources with a "regen" formula (a = the battler), e.g. HP Regen traits.
+		# Negative regeneration never knocks out.
+		if _has_resource_key("regen"):
+			var env := {"a": snapshot(b), "b": {}, "v": variables, "s": {}, "rng": rng}
+			var regen := _gain_resources(b, "regen", env, true)
+			for rid in regen:
+				var delta: int = regen[rid]
+				if delta > 0:
+					out.lines.append(term("recover", [b.name, delta, _resource_label(rid)]))
+				else:
+					out.lines.append(term("resource_damage", [b.name, -delta, _resource_label(rid)]))
+					if rid == life_resource():
+						out.damage += -delta
+			if not regen.is_empty():
+				out["regen"] = regen
 	for s in b.states.duplicate():
 		var rec := _rec("states", s.id)
-		var slip: Dictionary = rec.get("slip", {})
-		if not slip.is_empty() and b.is_alive():
-			var res_id: String = slip.get("resource", life_resource())
-			var m := max_resource(b, res_id)
-			var amount := int(slip.get("amount", 0)) + int(float(m) * float(slip.get("percent", 0)) / 100.0)
-			amount = maxi(amount, 1)
-			var cur := b.get_resource(res_id)
-			var floor_value := 0 if slip.get("can_kill", false) else 1
-			var new_value := clampi(cur - amount, mini(floor_value, cur), m)
-			b.set_resource(res_id, new_value)
-			if res_id == life_resource():
-				out.damage += cur - new_value
-			out.lines.append(term("slip", [b.name, cur - new_value, rec.get("name", s.id)]))
-			if res_id == life_resource() and new_value <= 0:
-				add_state(b, death_state())
-				out.knocked_out = true
-				out.lines.append(term("knockout", [b.name]))
-				return out
-		if s.turns > 0:
+		if timing == "turn_end":
+			var slip: Dictionary = rec.get("slip", {})
+			if not slip.is_empty() and b.is_alive():
+				var res_id: String = slip.get("resource", life_resource())
+				var m := max_resource(b, res_id)
+				var amount := int(slip.get("amount", 0)) + int(float(m) * float(slip.get("percent", 0)) / 100.0)
+				amount = maxi(amount, 1)
+				var cur := b.get_resource(res_id)
+				var floor_value := 0 if slip.get("can_kill", slip_knockout()) else 1
+				var new_value := clampi(cur - amount, mini(floor_value, cur), m)
+				b.set_resource(res_id, new_value)
+				if res_id == life_resource():
+					out.damage += cur - new_value
+				out.lines.append(term("slip", [b.name, cur - new_value, rec.get("name", s.id)]))
+				if res_id == life_resource() and new_value <= 0:
+					if add_state(b, death_state()):
+						out.knocked_out = true
+						out.lines.append(term("knockout", [b.name]))
+						return out
+		if s.turns > 0 and str(rec.get("auto_removal", "turn_end")) == timing:
 			s.turns -= 1
 			if s.turns == 0:
 				remove_state(b, s.id)
@@ -1030,11 +1085,13 @@ func _map_change(b: RPGBattler, res_id: String, delta: int, can_kill: bool, out:
 		_note_map_change(out, res_id, new_value - cur)
 
 
-## A battler whose life reached 0 on the map gets the death state (and its "added" message).
+## A battler whose life reached 0 on the map gets the death state (and its "added" message),
+## unless it resists death (an immortal stays up at 0 life).
 func _check_map_knockout(b: RPGBattler, out: Dictionary) -> void:
 	if b.has_state(death_state()) or not b.resources.has(life_resource()) or b.get_resource(life_resource()) > 0:
 		return
-	add_state(b, death_state())
+	if not add_state(b, death_state()):
+		return
 	out.knocked_out = true
 	_map_message(out, _rec("states", death_state()), "added", b.name)
 
@@ -1445,11 +1502,11 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 			if chance2 > 0.0 and rng.chance_percent(chance2):
 				target.remove_state(s.id)
 				res.removed_states.append(s.id)
-	# Knockout.
+	# Knockout (unless death is resisted: an immortal stays up at 0 life).
 	if target.get_resource(life_resource()) <= 0 and not target.has_state(death_state()):
-		add_state(target, death_state())
-		res.added_states.append(death_state())
-		res.knocked_out = true
+		if add_state(target, death_state()):
+			res.added_states.append(death_state())
+			res.knocked_out = true
 	# Resources charged by taking damage (e.g. TP): "gain_on_damage" formula, a = the target,
 	# b = the user, s = {damage: life lost, max: target's max life}.
 	if life_lost > 0 and target.is_alive() and _has_resource_key("gain_on_damage"):

@@ -3,16 +3,20 @@ class_name RPGConditionEditor
 extends VBoxContainer
 ## One condition: a kind dropdown plus that kind's fields (built with RPGFormBuilder).
 ## Same shape on pages and in `if` commands: {kind, ...}. Compound kinds (all/any/not) and
-## unknown kinds are edited as JSON so nothing is lost. Character facing and Button held are
-## offered only in Conditional Branch (`branch`), as in RPG Maker.
+## unknown kinds are edited as JSON so nothing is lost. Character facing, Button, Started by
+## and Can pass are offered only in Conditional Branch (`branch`), as in RPG Maker.
 
 signal value_changed(value: Variant)
 signal pick_location_requested(callback: Callable, current: Variant)
 
 const KIND_LABELS := {
-	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "item": "Item / weapon / armour held",
+	"switch": "Switch", "variable": "Variable", "self_switch": "Self switch", "self_variable": "Self variable", "item": "Item / weapon / armour held",
 	"actor": "Actor", "gold": "Gold", "turn": "Turn", "enemy_hp": "Enemy HP", "actor_hp": "Actor HP",
+	"enemy_mp": "Enemy MP", "actor_mp": "Actor MP", "enemy_turns": "Enemy turns taken", "actor_turns": "Actor turns taken",
+	"command_used": "Command used", "turn_end": "Turn end", "actor_can_act": "Actor can act",
+	"enemy_can_act": "Enemy can act", "enemy_is_target": "Enemy is the target",
 	"vehicle": "Vehicle", "facing": "Character facing", "button": "Button held down",
+	"started_by": "Started by", "formula": "Formula", "can_pass": "Can pass",
 }
 
 var data: RPGProjectData
@@ -39,7 +43,7 @@ func _init(p_data: RPGProjectData = null, p_registry: RPGCommandRegistry = null,
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var table: Dictionary = RPGFormBuilder.BATTLE_CONDITION_FIELDS if battle else RPGFormBuilder.CONDITION_FIELDS
 	for k in table.keys():
-		if branch or not RPGFormBuilder.BRANCH_ONLY_CONDITIONS.has(k):
+		if (branch or not RPGFormBuilder.BRANCH_ONLY_CONDITIONS.has(k)) and not (branch and RPGFormBuilder.PAGE_ONLY_CONDITIONS.has(k)):
 			_kinds.append(k)
 	# Kinds the project's enabled extensions declare (manifest "conditions").
 	_ext_kinds = registry.condition_kinds() if registry != null else {}
@@ -94,7 +98,8 @@ func set_value(v: Variant) -> void:
 		i = _kinds.size() - 1
 	_kind_opt.select(i)
 	_build(kind)
-	if _fields_for(kind)[0].key == "_json":
+	var flds := _fields_for(kind)
+	if not flds.is_empty() and flds[0].key == "_json":
 		_form.set_value({"_json": _value})
 	else:
 		_form.set_value(_value)

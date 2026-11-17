@@ -45,6 +45,8 @@ Damage formulas, and the formulas in `rules.json`, use a small, safe expression 
 
 It can't call methods or run other code, so a formula can't break the game or the editor. A formula with a mistake reports what is wrong; it never quietly gives 0.
 
+The **Formula** condition kind (pages and Conditional Branch) evaluates a formula with `a` and `b` empty and `v` the project's variables: `v.apples >= 3` is "the party has picked at least 3 apples". A `true` result or any non-zero number passes.
+
 ## Battle speed (ATB and CTB)
 
 ATB gauges and the CTB turn order fill by `atb_speed`: `rules.json` `"atb": {"speed": "<formula>"}`, or else the agility stat (`agi`, or `spd` / `dex` when there is none).

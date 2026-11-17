@@ -4,7 +4,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 
 ## Setting up
 
-- **New Project:** make an empty Godot project, copy `addons/rpg` and `addons/rpg_database` into it, and enable *RPG Kit* in *Project > Project Settings > Plugins*. Then press **Create RPG project** on the **RPG** tab. For the VX and VX Ace tutorials, set **Style** to *RPG Maker VX / VX Ace*: the game screen becomes 544×416, and imported VX character and face sheets are cut the VX way. The menus and battle screen are laid out RPG Maker 2000-style and scaled up to fit.
+- **New Project:** from the sample's **RPG** tab, choose **Project > New project...**, enter a name, choose a new or empty folder, and press **Create project**. It creates an independent Godot project with the kit and starter data. In an empty Godot project where the kit is already installed, press **Create RPG project** on the **RPG** tab instead. For the VX and VX Ace tutorials, set **Style** to *RPG Maker VX / VX Ace*: the game screen becomes 544×416, and imported VX character and face sheets are cut the VX way. The menus and battle screen are laid out RPG Maker 2000-style and scaled up to fit.
 - **Maker view:** while you're on the RPG or Database tab, Godot's own panels are hidden, so the screen looks like RPG Maker's window. Turn this off with *Project > Maker view*.
 - **Your RPG Maker art:** the tutorials use RPG Maker's bundled art and sounds (the RTP). If you own RPG Maker, use *Tools > Resources > Import an RPG Maker project or RTP folder…* to copy your RTP or project graphics in. RPG Kit doesn't ship the RTP; check RPG Maker's licence before you publish games that use it.
 
@@ -12,7 +12,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 
 | RPG Maker | RPG Kit |
 | --- | --- |
-| File > New Project | Godot project + **Create RPG project** |
+| File > New Project | RPG tab > Project > **New project...** |
 | Mode: Map / Event / Region | **Mode** menu, or F5 / F6 / F7 |
 | Draw: Pencil, Rectangle, Ellipse, Flood Fill, Shadow Pen | **Draw** menu or toolbar |
 | Scale | **Scale** menu, or Ctrl+= / Ctrl+− / Ctrl+0 |

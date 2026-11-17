@@ -315,37 +315,62 @@ func test_change_party_battle_temp_member_leaves_afterwards() -> void:
 	assert_eq(env.rpg.state.party, ["hero"], "but leaves the party when the battle ends")
 
 
-# --- play counters, last used and enemy stats (#54) ---------------------------------------------------
+# --- troop page conditions, the RM2003 set (#11) --------------------------------------------------------
 
 
-## A finished battle counts itself and its outcome, records what was used and at what, and a
-## battle event reads an enemy's stats through the enemy game data kind.
-func test_battle_counts_records_use_and_reads_enemy_stats() -> void:
+## A variable condition on a troop page: the scene hands it to rpg.state.check_condition, and the
+## page runs mid-battle once the variable is set.
+func test_troop_page_variable_condition_runs_mid_battle() -> void:
 	_sample_env()
-	_add_troop(_later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1, "every": 1}], "span": "every_check", "commands": [
-		{"type": "set_variable", "id": "talks", "operation": "set", "value": {"game_data": {"kind": "enemy", "index": 0, "field": "level"}}}]}]))
-	var done := {"r": null}
-	var run_cmd := func(): done.r = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_escape": false, "can_lose": true}])
-	run_cmd.call()
-	assert_true(await _wait_until(func(): return env.rpg.ui.scene_stack.size() > 0), "the battle scene opens")
-	var scene: Node = env.rpg.ui.scene_stack[-1]
-	scene.auto = true
-	env.rpg.ui.auto_advance = true
-	var end := Time.get_ticks_msec() + 20000
-	while done.r == null and Time.get_ticks_msec() < end:
-		if is_instance_valid(scene) and scene.phase != "":
-			if scene.phase == "party":
-				scene.cmd_list.select(0)
-			scene.handle_action("ok")
-		await tree.process_frame
-	assert_true(done.r != null and done.r.is_ok(), "the battle command finishes: %s" % [done.r])
-	var st: RPGGameState = env.rpg.state
-	assert_eq(st.game_data({"kind": "counter", "field": "battles"}), 1, "the battle counts")
-	assert_eq(st.game_data({"kind": "counter", "field": "victories"}), 1, "the win counts")
-	assert_eq(st.game_data({"kind": "counter", "field": "escapes"}), 0, "nothing escaped")
-	assert_eq(str(st.game_data({"kind": "last_used", "field": "actor"})), "hero", "the hero acted")
-	assert_eq(st.game_data({"kind": "last_used", "field": "target_enemy"}), 0, "the first enemy was the target")
-	assert_true(int(env.rpg.get_variable("talks")) >= 1, "a battle event read the enemy's level")
+	var page := {"id": "hook", "conditions": [{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}],
+		"span": "once_per_battle", "commands": [{"type": "set_switch", "id": "rain", "value": "on"}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_false(env.rpg.get_switch("rain"), "the page has not run yet")
+	await env.rpg.run_commands([{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 3}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_true(env.rpg.get_switch("rain"), "the variable condition fired during the fight")
+
+
+# --- Conditional Branch battle checks (#50) ------------------------------------------------------------
+
+
+## Runs one Conditional Branch in the running battle; returns true (then) or false (else).
+func _branch(cond: Dictionary) -> bool:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "if", "condition": cond, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 0}]}], {"kind": "api", "id": "t"})
+	assert_false(r.is_error(), "the branch ran: %s" % str(r))
+	return int(env.rpg.state.get_variable("fish_caught")) == 1
+
+
+func test_conditional_branch_battle_checks_in_events() -> void:
+	_sample_env()
+	# A troop page runs an `if` with a page-style check: branches read the running battle too.
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 100}, "then": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": 1}], "else": []}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	assert_eq(int(env.rpg.state.get_variable("fish_caught")), 1, "the page's if read the enemy's HP")
+	assert_true(await _branch({"kind": "actor_can_act", "id": "hero"}), "the hero can act")
+	assert_true(await _branch({"kind": "enemy_can_act", "index": 0}), "so can the first slime")
+	assert_true(await _branch({"kind": "turn", "n": 1}), "and it is turn 1")
+	assert_false(await _branch({"kind": "actor_can_act", "id": "mira"}), "an actor outside the battle cannot act")
+	assert_false(await _branch({"kind": "enemy_can_act", "index": 1}), "nor can the hidden member")
+	assert_false(await _branch({"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 50}), "the slime is above half HP")
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "no action has run, nothing is the target")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+	# Outside a battle the checks are quietly false (with a warning logged), not an error.
+	assert_false(await _branch({"kind": "enemy_is_target", "index": 0}), "outside a battle the check is false")
+	assert_true(env.rpg.state.errors.size() > 0, "the misuse was reported")
 
 
 # --- troop sources (#38) ------------------------------------------------------------------------------
@@ -484,118 +509,6 @@ func test_force_flee_errors() -> void:
 	await _finish(scene, out)
 
 
-# --- Transform Enemy (#3) ------------------------------------------------------------------------------
-
-
-## A troop page turns enemy #1 into a bat: same slot with its "A" suffix, the sprite rebuilt where
-## the slime stood, and victory pays the bat's rewards for it.
-func test_transform_enemy_from_a_troop_page() -> void:
-	_sample_env()
-	_add_troop(_twin_troop([{"id": "molt", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle",
-		"commands": [{"type": "transform_enemy", "enemy_index": 1, "enemy": "bat"}]}]))
-	var out := {}
-	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
-	await _open_party_command(scene)
-	assert_true(await _wait_until(func(): return scene.core.enemies[0].id == "bat" and scene.enemy_nodes.has(scene.core.enemies[0])), "enemy #1 became a bat with a rebuilt sprite")
-	var nb: RPGBattler = scene.core.enemies[0]
-	assert_eq(nb.name, "Bat A", "the twin group keeps the suffix")
-	assert_eq(scene.core.enemies[1].id, "slime", "the other member is untouched")
-	assert_eq(nb.get_resource("hp"), 30, "keep HP clamps the slime's full 40 to the bat's maximum")
-	var spr: TextureRect = scene.enemy_nodes[nb]
-	assert_true(spr is TextureRect and spr.visible, "the new sprite stands in the field")
-	assert_eq(scene.enemy_nodes.size(), 2, "one sprite per member, the old one gone")
-	# The fight ends: the former slime now pays the bat's rewards.
-	await env.rpg.run_commands([
-		{"type": "change_hp_mp", "target": "troop", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true}], {"kind": "api", "id": "t"})
-	await _finish(scene, out)
-	assert_eq(out.r.value.outcome, "win")
-	assert_eq(int(out.r.value.rewards.get("exp", 0)), 11, "the bat's EXP replaced the slime's")
-	assert_eq(int(out.r.value.rewards.get("gold", 0)), 14, "and its gold")
-
-
-## The HP and state options: keep the value (clamped), keep the percentage, or refill — states
-## ride along unless the command says to clear them.
-func test_transform_enemy_hp_modes_and_clear_states() -> void:
-	_sample_env()
-	_add_troop(_twin_troop())
-	var out := {}
-	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
-	await _open_party_command(scene)
-	await env.rpg.run_commands([
-		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 1, "resource": "hp", "operation": "decrease", "amount": 20},
-		{"type": "change_state", "target": "enemy", "enemy_index": 1, "state": "poison", "operation": "add", "force": true}], {"kind": "api", "id": "t"})
-	# Keep: 20 of the slime's 40 carries straight over (the goblin's maximum is 150).
-	await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 1, "enemy": "goblin"}], {"kind": "api", "id": "t"})
-	var goblin: RPGBattler = scene.core.enemies[0]
-	assert_eq(goblin.id, "goblin")
-	assert_eq(goblin.get_resource("hp"), 20, "keep carries the value, under the new maximum")
-	assert_true(goblin.state_ids().has("poison"), "states ride along by default")
-	# Percent: 20 of 150 is 13.3%, and 13.3% of the bat's 30 rounds to 4.
-	await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 1, "enemy": "bat", "hp": "percent"}], {"kind": "api", "id": "t"})
-	var bat: RPGBattler = scene.core.enemies[0]
-	assert_eq(bat.get_resource("hp"), 4, "percent converts the ratio")
-	assert_true(bat.state_ids().has("poison"), "still kept without clear_states")
-	# Refill and clear: back to a slime at full health, the poison left behind.
-	await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 1, "enemy": "slime", "hp": "refill", "clear_states": true}], {"kind": "api", "id": "t"})
-	var slime: RPGBattler = scene.core.enemies[0]
-	assert_eq(slime.get_resource("hp"), 40, "refill fills the new maximum")
-	assert_false(slime.state_ids().has("poison"), "clear_states leaves the old states behind")
-	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
-	await _finish(scene, out)
-	assert_eq(out.r.value.outcome, "escape")
-
-
-## Outside a battle it stops the event with a named error; inside one the enemy number has to be
-## a member of the group and the record has to exist.
-func test_transform_enemy_errors() -> void:
-	_sample_env()
-	var r: RPGResult = await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 1, "enemy": "bat"}], {"kind": "api", "id": "t"})
-	assert_true(r.is_error() and str(r.message).contains("only works in a battle event"), "no battle: %s" % [r])
-	_add_troop(_twin_troop())
-	var out := {}
-	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
-	await _open_party_command(scene)
-	var r2: RPGResult = await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 5, "enemy": "bat"}], {"kind": "api", "id": "t"})
-	assert_true(r2.is_error() and str(r2.message).contains("no enemy #5"), "out of range: %s" % [r2])
-	assert_eq(scene.core.enemies[0].id, "slime", "nobody changed")
-	var r3: RPGResult = await env.rpg.run_commands([{"type": "transform_enemy", "enemy_index": 1, "enemy": "ghost"}], {"kind": "api", "id": "t"})
-	assert_true(r3.is_error() and str(r3.message).contains("ghost"), "a missing record is a named error: %s" % [r3])
-	assert_eq(scene.core.enemies[0].id, "slime", "still nobody changed")
-	var cmd: RPGCommand = env.rpg.registry.get_command("transform_enemy")
-	assert_eq(cmd.summary({"enemy_index": 2, "enemy": "bat"}), "Transform: enemy #2 becomes bat")
-	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
-	await _finish(scene, out)
-
-
-## The export checks: the enemy number must be a member of the group, the command only works in
-## a battle, and the "Becomes" record has to exist.
-func test_validator_checks_transform_enemy() -> void:
-	_sample_env()
-	var reg: RPGCommandRegistry = env.rpg.registry
-	var t := _later_troop([{"id": "m", "conditions": [{"kind": "turn", "n": 1}], "commands": [
-		{"type": "transform_enemy", "enemy_index": 5, "enemy": "bat"},
-		{"type": "transform_enemy", "enemy_index": 2, "enemy": "bat"}]}])
-	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
-	var msgs := probs.map(func(p): return "%s %s" % [p.severity, p.message])
-	assert_true(msgs.any(func(m): return m.begins_with("error") and m.contains("no enemy #5")), str(msgs))
-	assert_false(msgs.any(func(m): return m.contains("#2")), "enemy #2 is a member of the group: %s" % str(msgs))
-	# On a map it can never work: the battle-only warning on the command itself.
-	var ev := {"id": "t", "position": [1, 1], "pages": [{"commands": [{"type": "transform_enemy", "enemy_index": 1, "enemy": "bat"}]}]}
-	var p2 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
-	var w := p2.filter(func(p): return str(p.message).contains("only works in a battle event"))
-	assert_eq(w.size(), 1, str(p2))
-	assert_eq(w[0].severity, "warning")
-	assert_eq(w[0].path, "events/0/pages/0/commands/0")
-	# The "Becomes" record is a command ref: a missing enemy is flagged like any other ref.
-	var ghost := _twin_troop([{"id": "m", "conditions": [{"kind": "turn", "n": 1}], "commands": [
-		{"type": "transform_enemy", "enemy_index": 1, "enemy": "ghost"}]}])
-	_add_troop(ghost)
-	env.rpg.data.db["troops"].file["records"].append(ghost)
-	var refs := RPGValidator.references(env.rpg.data, env.rpg.registry).map(func(p): return p.message)
-	assert_true(refs.any(func(m): return m.contains("Enemy 'ghost' does not exist")), str(refs))
-	assert_false(refs.any(func(m): return m.contains("'bat' does not exist")), "a real enemy is fine")
-
-
 # --- the defeat handler (#39) --------------------------------------------------------------------------
 
 
@@ -654,6 +567,147 @@ func test_defeat_handler_instead_of_game_over() -> void:
 	assert_true(r2.r != null, "the second battle ends")
 	assert_eq(str(env.rpg.get_variable("battle_outcome")), "lose", "the party falls again")
 	assert_true(await _wait_until(func(): return _game_over_shown(), 10.0), "a missing handler shows Game Over as before")
+
+
+# --- Transform Enemy (#3) -----------------------------------------------------------------------------
+
+
+func test_transform_enemy_keeps_the_slot_and_takes_the_new_record() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var e2: RPGBattler = scene.core.enemies[1]
+	var old_node: Node = scene.enemy_nodes[e2]
+	assert_eq(e2.name, "Slime B")
+	await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 2, "into": "goblin"}], {"kind": "api", "id": "t"})
+	var goblin: RPGBattler = scene.core.enemies[1]
+	assert_true(goblin != e2, "the slot is taken by the new record's battler")
+	assert_eq(goblin.id, "goblin", "the record is the new one")
+	assert_eq(goblin.name, "Goblin B", "the A/B suffix moves to the new name")
+	assert_eq(goblin.index, 1)
+	assert_eq(goblin.screen_position, Vector2(200, 150), "it stands where the slime stood")
+	assert_eq(env.rpg.rules.max_resource(goblin, "hp"), 150, "goblin's maximum")
+	assert_true(goblin.skills.has("power_strike"), "goblin's action skill is there")
+	var new_node: Node = scene.enemy_nodes.get(goblin)
+	assert_true(new_node != null and new_node != old_node, "its image was rebuilt")
+	assert_true(new_node.visible, "and is on the field")
+	assert_false(scene.enemy_nodes.has(e2), "the old battler's sprite is gone")
+	# Its stats really come from the new record: an attack the slime would have survived.
+	await env.rpg.run_commands([
+		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 2, "resource": "hp", "operation": "decrease", "amount": 149},
+		{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	assert_true(goblin.is_alive(), "149 damage is not the knockout it was for a slime")
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "escape")
+
+
+func test_transform_enemy_hp_policies() -> void:
+	# 20 of 40 HP carried into a goblin (150): keep, percentage, refill, and clamped back down.
+	for what in [
+		{"hp": "keep", "expect": 20, "note": "keep"},
+		{"hp": "percent", "expect": 75, "note": "percent (half of 150)"},
+		{"hp": "refill", "expect": 150, "note": "refill"},
+	]:
+		_sample_env()
+		Engine.time_scale = 4.0
+		_add_troop(_twin_troop())
+		var out := {}
+		var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+		await _open_party_command(scene)
+		await env.rpg.run_commands([
+			{"type": "change_hp_mp", "target": "enemy", "enemy_index": 1, "resource": "hp", "operation": "decrease", "amount": 20},
+			{"type": "transform_enemy", "enemy": 1, "into": "goblin", "hp": what.hp}], {"kind": "api", "id": "t"})
+		var goblin: RPGBattler = scene.core.enemies[0]
+		assert_eq(goblin.get_resource("hp"), what.expect, "%s: the goblin starts at %d HP" % [what.note, what.expect])
+		await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+		await _finish(scene, out)
+	# Back into a slime, 150 HP is clamped to the new maximum of 40.
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 1, "into": "goblin", "hp": "refill"}], {"kind": "api", "id": "t"})
+	await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 1, "into": "slime"}], {"kind": "api", "id": "t"})
+	assert_eq((scene.core.enemies[0] as RPGBattler).get_resource("hp"), 40, "keep: the new maximum is the ceiling")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+
+
+func test_transform_enemy_states_and_rewards_follow_the_new_record() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	await env.rpg.run_commands([
+		{"type": "change_state", "target": "enemy", "enemy_index": 1, "state": "poison", "operation": "add", "force": true},
+		{"type": "transform_enemy", "enemy": 1, "into": "goblin"}], {"kind": "api", "id": "t"})
+	var goblin: RPGBattler = scene.core.enemies[0]
+	assert_true(goblin.state_ids().has("poison"), "states are kept across a transform")
+	await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 1, "into": "bat", "clear_states": true}], {"kind": "api", "id": "t"})
+	assert_false((scene.core.enemies[0] as RPGBattler).state_ids().has("poison"), "unless the command clears them")
+	# Spoils follow the newest record: a bat (5) and a slime (6).
+	await env.rpg.run_commands([
+		{"type": "change_hp_mp", "target": "troop", "resource": "hp", "operation": "decrease", "amount": 999, "allow_knockout": true}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	assert_eq(out.r.value.outcome, "win")
+	assert_eq(int(out.r.value.rewards.get("exp", 0)), 11, "bat's 5 EXP and the slime's 6")
+
+
+func test_transform_enemy_hidden_member_and_enemy_hp_condition() -> void:
+	_sample_env()
+	Engine.time_scale = 4.0
+	# The page runs once enemy #1 is below half of the goblin's 150 — a slime at 30 of 40 (75%)
+	# would be above it, so the condition can only fire against the new record's maximum.
+	var page := {"id": "hurt", "conditions": [{"kind": "enemy_hp", "index": 0, "op": "<=", "percent": 50}], "span": "once_per_battle",
+		"commands": [{"type": "set_switch", "id": "rain", "value": "on"}]}
+	_add_troop(_later_troop([page]))
+	var out := {}
+	var scene := _start_battle({"troop": "later", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	var e2: RPGBattler = scene.core.enemies[1]
+	await env.rpg.run_commands([
+		{"type": "change_hp_mp", "target": "enemy", "enemy_index": 1, "resource": "hp", "operation": "decrease", "amount": 10},
+		{"type": "transform_enemy", "enemy": 1, "into": "goblin"},
+		{"type": "transform_enemy", "enemy": 2, "into": "bat"}], {"kind": "api", "id": "t"})
+	var bat: RPGBattler = scene.core.enemies[1]
+	assert_eq(bat.name, "Bat B", "a hidden member transforms too")
+	assert_true(bat.hidden, "and stays hidden")
+	assert_false(env.rpg.state.get_switch("rain"), "the page has not run yet")
+	# Bringing the hidden member in shows the new enemy.
+	await env.rpg.battle.reveal(bat)
+	assert_false(bat.hidden)
+	assert_eq(scene.core.active_enemies().size(), 2)
+	await _finish(scene, out)
+	assert_true(env.rpg.state.get_switch("rain"), "the enemy HP condition follows the new record (30/150 <= 50%)")
+
+
+func test_transform_enemy_errors_and_summary() -> void:
+	_sample_env()
+	var r: RPGResult = await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 1, "into": "goblin"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error(), "outside a battle it stops the event")
+	assert_true(r.message.contains("battle event"), r.message)
+	Engine.time_scale = 4.0
+	_add_troop(_twin_troop())
+	var out := {}
+	var scene := _start_battle({"troop": "twins", "can_escape": false, "can_lose": true}, out)
+	await _open_party_command(scene)
+	r = await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 3, "into": "goblin"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and r.message.contains("no enemy #3"), r.message)
+	r = await env.rpg.run_commands([{"type": "transform_enemy", "enemy": 1, "into": "dragon"}], {"kind": "api", "id": "t"})
+	assert_true(r.is_error() and r.message.contains("does not exist"), r.message)
+	assert_eq(scene.core.enemies[0].id, "slime", "nothing changed")
+	await env.rpg.run_commands([{"type": "abort_battle", "result": "abort"}], {"kind": "api", "id": "t"})
+	await _finish(scene, out)
+	var cmd: RPGCommand = env.rpg.registry.get_command("transform_enemy")
+	assert_eq(cmd.summary({"enemy": 2, "into": "goblin"}), "Transform Enemy: enemy #2 -> goblin")
+	assert_eq(cmd.summary({"enemy": 1, "into": "bat", "hp": "percent", "clear_states": true}), "Transform Enemy: enemy #1 -> bat (HP % kept), states removed")
 
 
 # --- Force Action (#12) ------------------------------------------------------------------------------
@@ -733,7 +787,7 @@ func test_force_action_in_a_timed_battle() -> void:
 	scene.atb_mode = "wait"     # time only moves when no command window is open
 	var goblin: RPGBattler = scene.core.enemies[0]
 	var hero: RPGBattler = scene.core.party[0]
-	# Right now: the goblin zaps the hero while the hero's window is open — out of turn, and
+	# Right now: the goblin zaps the hero while the hero's window is open - out of turn, and
 	# without the goblin's gauge filling.
 	var hero_hp: int = hero.get_resource("hp")
 	await env.rpg.run_commands([{"type": "force_action", "enemy_index": 1, "what": "skill", "skill": "zapt",
@@ -814,7 +868,6 @@ func test_force_action_errors_and_summary() -> void:
 	assert_eq(cmd.summary({"enemy_index": 1, "item": "potion", "what": "item", "timing": "turn"}), "Force Action: enemy #1 uses potion, at its next turn")
 
 
-# --- the validator -----------------------------------------------------------------------------------
 
 
 func test_validator_checks_enemy_targets() -> void:
@@ -846,6 +899,158 @@ func test_validator_checks_enemy_targets() -> void:
 	assert_eq(w3.size(), 1, str(p3))
 	assert_eq(w3[0].severity, "warning")
 	assert_eq(w3[0].path, "events/0/pages/0/commands/0")
+
+
+# --- Game Data: play counters and last used (#54) -----------------------------------------------------
+
+
+func test_battle_command_updates_play_counters() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var st: RPGGameState = env.rpg.state
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "counters"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(st.game_data({"kind": "counter", "which": "battles"})), 1, "the fight was counted")
+	assert_eq(int(st.game_data({"kind": "counter", "which": "victories"})), 1, "a win")
+	assert_eq(int(st.game_data({"kind": "counter", "which": "defeats"})), 0)
+	assert_eq(int(st.game_data({"kind": "counter", "which": "escapes"})), 0)
+
+
+func test_counters_readable_while_the_fight_runs() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var seen := {"battles": -1}
+	var on_started := func(_args: Dictionary) -> void:
+		seen.battles = int(env.rpg.state.game_data({"kind": "counter", "which": "battles"}))
+	env.rpg.battle_started.connect(on_started)
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "live"})
+	env.rpg.battle_started.disconnect(on_started)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(seen.battles, 1, "the counter is live during the battle")
+
+
+func test_last_used_recorded_by_battle_actions() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "slimes", "can_lose": true}], {"kind": "api", "id": "lu"})
+	assert_true(r.is_ok(), str(r))
+	var st: RPGGameState = env.rpg.state
+	assert_eq(str(st.game_data({"kind": "last_used", "what": "actor"})), "hero", "the hero acted")
+	assert_true(int(st.game_data({"kind": "last_used", "what": "target_enemy"})) in [0, 1], "an enemy was targeted: %s" % str(st.last_used))
+
+
+func test_battle_event_reads_enemy_game_data() -> void:
+	_sample_env()
+	env.rpg.ui.auto_advance = true
+	var page := {"id": "probe", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle",
+		"commands": [
+			{"type": "set_variable", "id": "fish_caught", "operation": "set", "value": {"game_data": {"kind": "enemy", "index": 0, "field": "hp"}}},
+			{"type": "abort_battle", "result": "abort"}]}
+	_add_troop(_later_troop([page]))
+	var r: RPGResult = await env.rpg.run_commands([{"type": "battle", "troop": "later", "can_lose": true, "can_escape": false}], {"kind": "api", "id": "probe"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("fish_caught")), 40, "the first slime's HP read from inside the battle")
+
+
+func test_validator_checks_troop_condition_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var good := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_mp", "index": 0, "op": "<=", "percent": 25},
+		{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2},
+		{"kind": "actor_mp", "id": "hero", "op": "<=", "percent": 50},
+		{"kind": "actor_turns", "id": "hero", "op": "==", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "skill", "skill": "fire"},
+		{"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3},
+	], "commands": []}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [good]}, reg, "troops.json")
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := _later_troop([{"id": "p", "conditions": [
+		{"kind": "enemy_turns", "index": 0, "op": "~=", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "dance"},
+		{"kind": "command_used", "id": "mira", "command": "skill"},
+		{"kind": "actor_mp", "id": "", "op": "<=", "percent": 50},
+	], "commands": []}])
+	var msgs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json").map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown battle command 'dance'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("needs the skill")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+	# Battle-only kinds do not work on map pages.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"conditions": [{"kind": "enemy_turns", "index": 0, "op": ">=", "n": 2}], "commands": []}]}
+	var p3 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_true(p3.any(func(p): return str(p.message).contains("Unknown condition kind 'enemy_turns'")), str(p3))
+
+
+func test_validator_checks_enemy_action_conditions() -> void:
+	_sample_env()
+	var good := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "<=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state", "state": "poison"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_level", "pick": "highest", "op": ">=", "level": 5}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "enemies_alive", "op": "<=", "count": 1}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "id": "fish_caught", "op": ">=", "value": 3}},
+	]}
+	var probs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [good]})
+	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
+	var bad := {"id": "strategist", "name": "Strategist", "stats": {}, "actions": [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "party_loyalty"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "mp", "op": "~=", "percent": 25}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "state"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "variable", "op": ">=", "against": "sometimes"}},
+		{"skill": "attack", "rating": 5, "condition": {"kind": "switch"}},
+	]}
+	var msgs := RPGValidator.structure("database:enemies", {"schema_version": 1, "records": [bad]}).map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("Unknown condition kind 'party_loyalty'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid state")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid variable")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
+
+
+func test_validator_battle_branch_kinds() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	# Inside a battle event (or a common event) the battle checks are fine.
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "if", "condition": {"kind": "actor_can_act", "id": "hero"}, "then": [], "else": [
+			{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}])
+	assert_eq(RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json").size(), 0, "troop page commands may use them")
+	var ce := {"id": "probe", "trigger": "none", "commands": [
+		{"type": "if", "condition": {"kind": "enemy_can_act", "index": 0}, "then": [], "else": []}]}
+	assert_eq(RPGValidator.structure("common_events", {"schema_version": 1, "common_events": [ce]}, reg, "common_events.json").size(), 0, "so may common events")
+	# On a map they only ever evaluate false: warned, not an error.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "enemy_is_target", "index": 0}, "then": [], "else": []}]}]}
+	var probs := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	assert_eq(probs.size(), 1, str(probs))
+	assert_eq(probs[0].severity, "warning")
+	# And they are not page conditions, even on a battle page.
+	var bad := _later_troop([{"id": "p", "conditions": [{"kind": "actor_can_act", "id": "hero"}], "commands": []}])
+	var p2 := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json")
+	assert_eq(p2.size(), 1, "a branch-only kind is not a page condition")
+	assert_eq(p2[0].severity, "error")
+
+
+func test_validator_checks_transform_enemy() -> void:
+	_sample_env()
+	var reg: RPGCommandRegistry = env.rpg.registry
+	var t := _later_troop([{"id": "p", "conditions": [{"kind": "turn", "n": 1}], "commands": [
+		{"type": "transform_enemy", "enemy": 2, "into": "goblin"},
+		{"type": "transform_enemy", "enemy": 5, "into": "goblin"}]}])
+	var probs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [t]}, reg, "troops.json")
+	var msgs := probs.map(func(p): return "%s %s" % [p.severity, p.message])
+	assert_true(msgs.any(func(m): return m.begins_with("error") and m.contains("no enemy #5")), str(msgs))
+	assert_false(msgs.any(func(m): return m.contains("#2")), "enemy #2 is a member of the group: %s" % str(msgs))
+	# On a map it can never work: the battle-only warning, also inside a branch.
+	var ev := {"id": "e", "position": [1, 1], "pages": [{"commands": [
+		{"type": "if", "condition": {"kind": "switch", "id": "s"}, "then": [
+			{"type": "transform_enemy", "enemy": 1, "into": "goblin"}], "else": []}]}]}
+	var p2 := RPGValidator.structure("events", {"schema_version": 1, "map": "town", "events": [ev]}, reg, "events.json")
+	var w := p2.filter(func(p): return str(p.message).contains("only works in a battle event"))
+	assert_eq(w.size(), 1, str(p2))
+	assert_eq(w[0].severity, "warning")
 
 
 func test_validator_checks_force_action() -> void:

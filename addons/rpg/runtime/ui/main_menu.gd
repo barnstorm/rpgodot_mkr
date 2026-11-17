@@ -787,7 +787,7 @@ func _note_use(what: Dictionary, user: Object, targets: Array) -> void:
 		if t != null and "id" in t:
 			what["target_actor"] = str(t.id)
 			break
-	rpg.state.note_use(what)
+	rpg.state.record_last_used(what)
 
 
 ## Reserves the action's Common Event effects (once per use, not per target). True when any.

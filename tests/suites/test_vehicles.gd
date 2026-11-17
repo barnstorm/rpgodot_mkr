@@ -129,3 +129,64 @@ func test_vehicle_condition_and_commands_validate() -> void:
 	var g: RPGResult = await env.rpg.run_commands([{"type": "change_vehicle_graphic", "vehicle": "ship", "graphic": {"sheet": "vehicles", "index": 0}}], {"kind": "api", "id": "t"})
 	assert_true(g.is_ok(), str(g))
 	assert_eq(V.look(env.rpg, "ship").graphic.index, 0, "the override is kept in the game state")
+
+
+# --- Set Vehicle Location while riding (#76) -------------------------------------------------
+
+## Parks the boat at the shore and steps aboard from the land cell, the usual way.
+func _board_boat(sh: Dictionary) -> RPGPlayer:
+	await env.rpg.run_commands([{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": "town", "position": [sh.water.x, sh.water.y]}}], {"kind": "api", "id": "t"})
+	var p: RPGPlayer = env.game.player
+	p.place(sh.land)
+	_face(sh.dir)
+	assert_true(p.check_action(), "action button boards the boat")
+	return p
+
+
+func test_set_vehicle_location_moves_the_ridden_boat_on_the_same_map() -> void:
+	var sh := _shore()
+	if sh.is_empty():
+		fail("no shore on the sample town")
+		return
+	var p: RPGPlayer = await _board_boat(sh)
+	assert_eq(env.rpg.state.riding, "boat")
+	var deeper: Vector2i = sh.water + sh.dir
+	var run: RPGResult = await env.rpg.run_commands([{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": "town", "position": [deeper.x, deeper.y]}}], {"kind": "api", "id": "t"})
+	assert_true(run.is_ok(), str(run))
+	assert_eq(p.cell, deeper, "the party moved with the boat")
+	assert_eq(env.rpg.state.riding, "boat", "still riding")
+	assert_eq(env.rpg.state.vehicles.boat.position, [deeper.x, deeper.y])
+	assert_false(env.game.map.vehicle_nodes.has("boat"), "the ridden boat is drawn as the player, not a parked sprite")
+
+
+func test_set_vehicle_location_transfers_the_party_with_the_ridden_boat_to_another_map() -> void:
+	var sh := _shore()
+	if sh.is_empty():
+		fail("no shore on the sample town")
+		return
+	var p: RPGPlayer = await _board_boat(sh)
+	var run: RPGResult = await env.rpg.run_commands([{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": "field", "position": [2, 2]}}], {"kind": "api", "id": "t"})
+	assert_true(run.is_ok(), str(run))
+	await env.settle()
+	assert_eq(env.game.map.map_id, "field", "an immediate transfer, still riding")
+	assert_eq(p.cell, Vector2i(2, 2))
+	assert_eq(env.rpg.state.riding, "boat")
+	assert_eq(env.rpg.state.vehicles.boat.map, "field")
+	assert_false(env.game.map.vehicle_nodes.has("boat"))
+
+
+func test_mv_rules_leave_the_ridden_vehicle_where_it_is() -> void:
+	var sh := _shore()
+	if sh.is_empty():
+		fail("no shore on the sample town")
+		return
+	var p: RPGPlayer = await _board_boat(sh)
+	env.rpg.data.project["rules"] = "vx_ace"
+	var run: RPGResult = await env.rpg.run_commands([{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": "town", "position": [1, 1]}}], {"kind": "api", "id": "t"})
+	assert_true(run.is_ok(), "no error while riding under the VX Ace style rules")
+	assert_eq(p.cell, sh.water, "the party did not move")
+	assert_eq(env.rpg.state.vehicles.boat.position, [sh.water.x, sh.water.y], "the ridden boat stays with the player")
+	# A vehicle nobody rides still parks under the VX Ace style rules.
+	var park: RPGResult = await env.rpg.run_commands([{"type": "set_vehicle_location", "vehicle": "ship", "to": {"map": "town", "position": [sh.water.x, sh.water.y]}}], {"kind": "api", "id": "t"})
+	assert_true(park.is_ok(), str(park))
+	assert_eq(env.rpg.state.vehicles.ship.position, [sh.water.x, sh.water.y])

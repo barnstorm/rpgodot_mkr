@@ -88,6 +88,29 @@ func run_list(list: Variant, label := "") -> RPGResult:
 	return await interpreter.run_list(list, label)
 
 
+## Runs a map event's page inline as a subroutine (Call Event). While it runs, the called event is
+## "this event", so self switches, self variables and \E[] codes in the page belong to it; the
+## caller's event is restored afterwards.
+func run_event_page(ev: Node, commands: Array, label: String) -> RPGResult:
+	var err := interpreter.push_call(label)
+	if err != "":
+		return RPGResult.error(err)
+	var prev_event := event
+	var prev_map := _event_map
+	var prev_id := _event_id
+	event = ev
+	_event_map = str(ev.map_id)
+	_event_id = str(ev.event_id)
+	interpreter.in_called_page += 1
+	var r: RPGResult = await interpreter.run_list(commands, label)
+	interpreter.in_called_page -= 1
+	interpreter.pop_call()
+	event = prev_event
+	_event_map = prev_map
+	_event_id = prev_id
+	return r
+
+
 func check_condition(cond: Dictionary) -> bool:
 	return state.check_condition(cond, map_id(), event_id(), self)
 
@@ -106,12 +129,30 @@ func wait_seconds(seconds: float) -> bool:
 	if seconds <= 0.0:
 		await tree.process_frame
 		return not token.is_cancelled
+	if interpreter != null and interpreter.suspends_with_map:
+		return await _wait_seconds_suspended(seconds)
 	interpreter.set_waiting(true)
 	var timer := tree.create_timer(seconds, false)
 	var w := RPGWaiter.any([timer.timeout, token.cancelled])
 	var r: Array = await w.done
 	interpreter.set_waiting(false)
 	return r[0] == 0 and not token.is_cancelled
+
+
+## A parallel's wait only advances while the map runs: a menu-type screen or battle suspends it,
+## and the remaining time picks up where it left off when the screen closes (RPG Maker's map
+## scene). A paused task (its condition switch went off under the classic rules) freezes the same
+## way. Frame-accumulated so no time passes while suspended or paused.
+func _wait_seconds_suspended(seconds: float) -> bool:
+	interpreter.set_waiting(true)
+	var left := seconds
+	while left > 0.0 and not token.is_cancelled:
+		await tree.process_frame
+		if rpg.scheduler.map_suspended() or interpreter.paused:
+			continue
+		left -= tree.get_root().get_process_delta_time()
+	interpreter.set_waiting(false)
+	return not token.is_cancelled
 
 
 ## Waits for a signal. Returns {ok: bool, value}.
@@ -126,10 +167,16 @@ func wait_signal(sig: Signal) -> Dictionary:
 
 
 func wait_frames(n: int) -> bool:
-	for i in n:
+	var left := n
+	while left > 0:
 		if token.is_cancelled:
 			return false
 		await tree.process_frame
+		# A parallel's frames do not pass while the map is suspended (menu, battle...) or the
+		# task is paused.
+		if interpreter != null and interpreter.suspends_with_map and (rpg.scheduler.map_suspended() or interpreter.paused):
+			continue
+		left -= 1
 	return not token.is_cancelled
 
 
