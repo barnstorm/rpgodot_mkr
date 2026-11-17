@@ -21,6 +21,7 @@
 		"wait.gd",
 		"call_common_event.gd",
 	"call_event.gd",
+		"call_inn.gd",
 		"exit_event.gd",
 		"comment.gd",
 		"erase_event.gd",
