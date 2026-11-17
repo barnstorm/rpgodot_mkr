@@ -180,7 +180,7 @@ func test_escape_leaves_the_battle_without_rewards() -> void:
 	assert_eq(str(res.lines[0]), "Runner flees!")
 	core.end_turn()
 	# Finish the fight: the runner gives no exp, no gold.
-	core.enemies[1].set_resource("hp", 0)
+	rules.add_state(core.enemies[1], rules.death_state())
 	assert_eq(core.battle_over(), "win")
 	assert_eq(core.rewards().exp, 4, "only the sitter counts")
 	assert_eq(core.rewards().gold, 4)
@@ -233,8 +233,8 @@ func test_transform_action_becomes_the_new_record() -> void:
 	assert_eq(nb.get_resource("hp"), 30, "keep mode: the HP carries over, clamped to the new max")
 	core.end_turn()
 	# Rewards come from the new record.
-	core.enemies[0].set_resource("hp", 0)
-	core.enemies[1].set_resource("hp", 0)
+	rules.add_state(core.enemies[0], rules.death_state())
+	rules.add_state(core.enemies[1], rules.death_state())
 	assert_eq(core.battle_over(), "win")
 	assert_eq(core.rewards().exp, 40, "two butterflies, not two caterpillars")
 	assert_eq(core.rewards().gold, 60)

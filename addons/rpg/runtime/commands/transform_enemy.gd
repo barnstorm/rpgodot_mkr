@@ -1,11 +1,10 @@
 @tool
 extends RPGCommand
-## RPG Maker 2003's "Transform Monster": an enemy group member becomes another enemy record —
-## name, graphic, stats, actions, traits and rewards — keeping its slot on screen and its "A/B"
-## suffix. HP is kept (clamped to the new maximum), kept as a percentage, or refilled; states
-## are kept or cleared. Battle events only (an enemy group's battle events, or a common event
-## they call); anywhere else it stops the event with an error. The same swap also runs without a
-## command, as the enemy action "transform" (#10).
+## RPG Maker's "Transform Enemy": an enemy group member fighting the battle becomes a different
+## enemy. It keeps its slot (position in the group, screen position, "appears later" flag, turn
+## state) and its "A"/"B" suffix; stats, actions, graphic and rewards come from the new record.
+## Battle events only (an enemy group's battle events, or a common event they call); anywhere
+## else it stops the event with an error.
 
 
 static func descriptor() -> Dictionary:
@@ -13,32 +12,39 @@ static func descriptor() -> Dictionary:
 		"type": "transform_enemy", "schema_version": 1, "category": "scenes", "label": "Transform Enemy",
 		"battle_only": true,
 		"fields": [
-			{"key": "enemy_index", "kind": "int", "default": 1, "min": 1, "label": "Enemy # (1 = first in the group)"},
-			{"key": "enemy", "kind": "ref", "ref": "enemy", "required": true, "label": "Becomes"},
-			{"key": "hp", "kind": "choice", "options": ["keep", "percent", "refill"], "option_labels": ["Keep HP (clamped to the new max)", "Keep HP %", "Refill HP"], "default": "keep", "label": "HP"},
-			{"key": "clear_states", "kind": "bool", "default": false, "label": "Clear states"},
+			{"key": "enemy", "kind": "int", "default": 1, "min": 1, "label": "Enemy # (1 = first in the group)"},
+			{"key": "into", "kind": "ref", "ref": "enemy", "label": "Transform into", "required": true},
+			{"key": "hp", "kind": "choice", "options": ["keep", "percent", "refill"],
+				"option_labels": ["Keep HP (clamped to the new maximum)", "Keep HP percentage", "Start at full HP"],
+				"default": "keep", "label": "HP"},
+			{"key": "clear_states", "kind": "bool", "default": false, "label": "Remove its states"},
 		],
 	}
 
 
 func summary(args: Dictionary) -> String:
-	return "Transform: enemy #%d becomes %s" % [int(args.get("enemy_index", 1)), args.get("enemy", "")]
-
-
-## The battle scene running now, through the public battle API (rpg.battle), or null.
-static func battle_scene(ctx: RPGContext) -> Node:
-	return ctx.battle.scene() if ctx.battle != null else null
+	var what := str(args.get("into", ""))
+	var label := "Transform Enemy: enemy #%d%s" % [int(args.get("enemy", 1)), (" -> " + what) if what != "" else ""]
+	match str(args.get("hp", "keep")):
+		"percent":
+			label += " (HP % kept)"
+		"refill":
+			label += " (HP refilled)"
+	if bool(args.get("clear_states", false)):
+		label += ", states removed"
+	return label
 
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
-	var scene := battle_scene(ctx)
-	if scene == null:
+	var facade: RPGBattleFacade = ctx.battle
+	if facade == null or not facade.valid():
 		return RPGResult.error("Transform Enemy: this only works in a battle event (no battle is running).")
-	var idx := int(args.get("enemy_index", 1)) - 1
-	var core: Variant = scene.get("core")
-	if core != null and idx >= core.troop.get("members", []).size():
-		return RPGResult.error("Transform Enemy: enemy group '%s' has no enemy #%d." % [core.troop.get("id", ""), idx + 1])
-	var nb: Variant = await scene.enemy_transform(idx, str(args.get("enemy", "")), str(args.get("hp", "keep")), bool(args.get("clear_states", false)))
-	if nb == null:
-		return RPGResult.error("Transform Enemy: enemy '%s' does not exist." % args.get("enemy", ""))
+	var enemy_id := str(args.get("into", ""))
+	if not ctx.data.has_record("enemies", enemy_id):
+		return RPGResult.error("Transform Enemy: enemy '%s' does not exist." % enemy_id)
+	var b: RPGBattler = await facade.transform(int(args.get("enemy", 1)), enemy_id,
+		str(args.get("hp", "keep")), bool(args.get("clear_states", false)))
+	if b == null:
+		var n := int(args.get("enemy", 1))
+		return RPGResult.error("Transform Enemy: enemy group '%s' has no enemy #%d." % [facade.core().troop.get("id", ""), n])
 	return RPGResult.ok()

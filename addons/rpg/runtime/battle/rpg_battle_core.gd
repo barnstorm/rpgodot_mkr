@@ -115,9 +115,10 @@ var switch_setter: Callable
 var condition_reader: Callable
 ## Called with (item_id) to give back an item whose action a hook cancelled or replaced.
 var item_refund: Callable
-## Called with a {item/skill/actor/target_actor/target_enemy} dictionary after each action that
-## was used, so the game state can record the "last used" game data (#54). Unset: not recorded.
-var note_use: Callable
+## Called with a Dictionary of Game Data "last used" values ({item, skill, actor, target_actor,
+## target_enemy}; only the keys the action fills) after each action that really happens. Wired by
+## the battle scene to the game state. Unset: nothing is recorded.
+var last_used_recorder: Callable
 ## The object battle hooks are reported to (has battle_hook(name, args, mode) -> {args, cancel}),
 ## normally the RPG service. Null: no hooks.
 var hooks: Object = null
@@ -137,7 +138,9 @@ var _defeated := {}            ## hooks: battlers reported as defeated (until re
 var _charged := {}             ## Charge Up: enemy -> damage multiplier waiting for its next attack
 var _forced_next := {}         ## battler -> action a battle event forced for its next turn
 var _last_target := {}         ## battler -> the first target of its most recent action
+var _used_commands := {}       ## actor id -> [{kind, skill}] used this battle turn (command_used)
 var _forced := false          ## the result came from force_result()
+var _last_action_targets: Array = []  ## targets of the most recently executed action
 
 
 func _init(p_party: Array = [], p_troop: Dictionary = {}, p_rules: RPGRuleSystem = null, p_rng: RPGRandom = null) -> void:
@@ -204,6 +207,7 @@ func start() -> void:
 	_result = ""
 	_forced = false
 	_rewards = {}
+	_last_action_targets.clear()
 	_page_runs.clear()
 	_queue.clear()
 	_queue_built = false
@@ -248,6 +252,7 @@ func begin_turn() -> void:
 		return
 	turn += 1
 	phase = "input"
+	_used_commands.clear()   # command_used conditions only see the current battle turn
 	if is_timed():
 		# Timed battles: nobody's action or guard is reset here (that happens per battler, when
 		# its gauge fills); only the turn counter moves on.
@@ -358,6 +363,13 @@ func next_action() -> Dictionary:
 			given = _forced_targets(b, b.action)
 			_forced_next.erase(b)
 		var result := _execute(b, given)
+		# States set to wear off at the battler's action end tick right here (MV's Action End),
+		# with the action's result for the UI; the rest wait for end_turn().
+		var tick := rules.tick_states(b, "action_end")
+		if not tick.lines.is_empty():
+			tick.battler = b
+			result["ticks"] = [tick]
+		_note_command(b, result)
 		report_changes()
 		if _vitals() != before:
 			checkpoint.emit("after_change")
@@ -387,6 +399,7 @@ func end_turn() -> Array:
 	for b in all_battlers():
 		if not b.is_active():
 			continue
+		b.turns_taken += 1   # one battle turn = one of the battler's own turns (#11)
 		var r := rules.tick_states(b)
 		if not r.lines.is_empty():
 			r.battler = b
@@ -511,6 +524,7 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary, p_action: Dic
 		"guard":
 			b.guarding = true
 			res.lines.append(rules.term("guard", [b.name]))
+			_record_last_used(b, kind, {}, [])
 		"escape":
 			if b.is_enemy():
 				# The monster leaves the fight (2003): out of the battle and its rewards, exactly
@@ -539,6 +553,30 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary, p_action: Dic
 				res.lines.append(rules.term("wait", [b.name]))
 		_:
 			res.lines.append(rules.term("wait", [b.name]))
+	# A guard targets its user; escape and wait target nothing. Neither leaves the last action's
+	# targets pointing at an enemy, so the branch check stops holding there.
+	_last_action_targets = [b] if kind == "guard" else []
+
+
+## Reports what an action used and targeted to `last_used_recorder`. Only actions that really
+## happen (costs paid) are reported; a guard reports just who guarded.
+func _record_last_used(b: RPGBattler, kind: String, u: Dictionary, targets: Array) -> void:
+	if not last_used_recorder.is_valid():
+		return
+	var out := {}
+	if (kind == "item" or kind == "skill") and str(u.get("id", "")) != "":
+		out[kind] = str(u.id)
+	if b.is_actor():
+		out["actor"] = b.id
+	for t in targets:
+		if t.is_actor():
+			out["target_actor"] = t.id
+			break
+	for t in targets:
+		if t.is_enemy():
+			out["target_enemy"] = t.index
+			break
+	last_used_recorder.call(out)
 
 
 # --- hooks ---------------------------------------------------------------------------------------
@@ -665,6 +703,8 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 		targets = (h.targets as Array).filter(func(t): return t is RPGBattler)
 	_last_target[b] = targets[0] if not targets.is_empty() else _last_target.get(b)
 	rules.pay_cost(b, action)
+	_last_action_targets = targets
+	_record_last_used(b, kind, u, targets)
 	match kind:
 		"attack":
 			res.lines.append(rules.term("attack", [b.name]))
@@ -675,21 +715,6 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 		"self_destruct":
 			res.lines.append(rules.term("self_destruct", [b.name]))
 	res.targets = targets
-	if note_use.is_valid():
-		# The "last used" game data (#54): what was used and who it was aimed at.
-		var used := {}
-		if kind == "item":
-			used["item"] = str(u.id)
-		elif kind == "skill":
-			used["skill"] = str(u.id)
-		if b.is_actor():
-			used["actor"] = str(b.id)
-		for t in targets:
-			if t.is_actor() and not used.has("target_actor"):
-				used["target_actor"] = str(t.id)
-			elif t.is_enemy() and not used.has("target_enemy"):
-				used["target_enemy"] = int(t.index)
-		note_use.call(used)
 	var repeats := maxi(1, int(action.get("times", 1)))
 	if kind == "attack":
 		repeats += int(rules.trait_sum(b, "extra_attack"))
@@ -1014,8 +1039,15 @@ func act(b: RPGBattler) -> Dictionary:
 		if not _extra.has(b):
 			_extra[b] = 0 if str(b.action.get("kind", "")) == "escape" else maxi(1, rules.action_times(b)) - 1
 		res = _execute(b, given)
+		# Action-end states tick after each action (extra actions too, as MV's Action End).
+		var tick := rules.tick_states(b, "action_end")
+		if not tick.lines.is_empty():
+			tick.battler = b
+			res["ticks"] = [tick]
+		_note_command(b, res)
 	res["skipped"] = skipped
-	res["ticks"] = []
+	if not res.has("ticks"):
+		res["ticks"] = []
 	if not skipped and int(_extra.get(b, 0)) > 0 and b.is_active() and rules.can_act(b) and not res.escaped and battle_over() == "":
 		# "action_times": another action right away (the player picks it for an actor).
 		_extra[b] = int(_extra[b]) - 1
@@ -1025,6 +1057,7 @@ func act(b: RPGBattler) -> Dictionary:
 	else:
 		_extra.erase(b)
 		if b.is_active():
+			b.turns_taken += 1   # one gauge fill = one of the battler's own turns (#11)
 			var t := rules.tick_states(b)
 			if not t.lines.is_empty():
 				t.battler = b
@@ -1171,6 +1204,8 @@ func _enemy_action_dict(a: Dictionary) -> Dictionary:
 	return act
 
 
+## One action-pattern condition. Shared helpers (_turn_matches, _hp_percent, _mp_percent,
+## _compare, _switch_is) keep the semantics the same as the troop page conditions (#9).
 func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 	if not (c is Dictionary) or c.is_empty():
 		return true
@@ -1181,8 +1216,44 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
 		"hp":
 			return _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
+		"mp":
+			if rules.magic_resource() == "":
+				return false
+			return _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+		"state":
+			return e.has_state(str(c.get("state", "")))
+		"party_level":
+			var levels := []
+			for a in party:
+				if a.is_active():
+					levels.append(float(a.level))
+			if levels.is_empty():
+				return false
+			var lv := levels.max()
+			if str(c.get("pick", "average")) != "highest":
+				lv = levels.reduce(func(s, x): return s + x, 0.0) / levels.size()
+			return _compare(lv, str(c.get("op", ">=")), float(c.get("level", 1)))
+		"enemies_alive":
+			var alive := 0
+			for foe in enemies:
+				if foe.is_active():
+					alive += 1
+			return _compare(float(alive), str(c.get("op", ">=")), float(c.get("count", 1)))
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
+		"variable":
+			# Same variable semantics as page conditions, through condition_reader. The editor
+			# stores the ref under "variable" (the condition's "id" is the switch's key), so both
+			# spellings are accepted here; "against" is the editor's name for the operand.
+			if condition_reader.is_valid():
+				var cc := {
+					"kind": "variable",
+					"id": str(c.get("variable", c.get("id", ""))),
+					"op": str(c.get("op", "==")),
+					"value": c.get("against", c.get("value", 0)),
+				}
+				return bool(condition_reader.call(cc))
+			return false
 	return false
 
 
@@ -1195,9 +1266,15 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 ##        priority, commands, at?: [checkpoint kinds]}
 ## Conditions (all must hold; a page with no conditions never runs):
 ##   {kind: "turn", n, every}            turn == n, or turn >= n and (turn - n) % every == 0
-##   {kind: "enemy_hp", index, op, percent}
-##   {kind: "actor_hp", id, op, percent}
+##   {kind: "enemy_hp"|"enemy_mp", index, op, percent}
+##   {kind: "actor_hp"|"actor_mp", id, op, percent}
+##   {kind: "enemy_turns", index, op, n}   the enemy's own turns (taken or lost)
+##   {kind: "actor_turns", id, op, n}      the actor's own turns (taken or lost)
+##   {kind: "command_used", id, command, skill?}   the actor used this command this battle turn
 ##   {kind: "switch", id, value?: true}
+##   {kind: "turn_end"}                 only true at the end_of_turn checkpoint
+## Other kinds (variable, item, gold, extension kinds marked "battle": true) are answered by
+## condition_reader, which the battle scene wires to rpg.state.check_condition.
 ## With `consume` (default) the returned pages are recorded as run, so their span is honoured.
 func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Array:
 	var pages: Array = troop.get("pages", [])
@@ -1214,7 +1291,7 @@ func eligible_battle_pages(checkpoint_kind: String, consume: bool = true) -> Arr
 			"once_per_turn":
 				if int(_page_runs.get(pid, -1)) == turn:
 					continue
-		if not page_conditions_met(p):
+		if not page_conditions_met(p, checkpoint_kind):
 			continue
 		found.append({"page": p, "i": i, "priority": int(p.get("priority", 0)), "id": pid})
 	found.sort_custom(func(x, y):
@@ -1233,17 +1310,17 @@ static func page_id(p: Dictionary, i: int) -> String:
 	return str(p.get("id", "page_%d" % i))
 
 
-func page_conditions_met(p: Dictionary) -> bool:
+func page_conditions_met(p: Dictionary, checkpoint_kind := "") -> bool:
 	var conds: Array = p.get("conditions", [])
 	if conds.is_empty():
 		return false
 	for c in conds:
-		if not _page_condition(c):
+		if not _page_condition(c, checkpoint_kind):
 			return false
 	return true
 
 
-func _page_condition(c: Dictionary) -> bool:
+func _page_condition(c: Dictionary, checkpoint_kind := "") -> bool:
 	match str(c.get("kind", "")):
 		"turn":
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
@@ -1253,14 +1330,51 @@ func _page_condition(c: Dictionary) -> bool:
 				if e.index == idx:
 					return not e.hidden and _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
 			return false
+		"enemy_mp":
+			if rules.magic_resource() == "":
+				return false
+			var mp_idx := int(c.get("index", 0))
+			for e in enemies:
+				if e.index == mp_idx:
+					return not e.hidden and _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+			return false
 		"actor_hp":
 			for a in party:
 				if a.id == str(c.get("id", "")):
 					return _compare(_hp_percent(a), str(c.get("op", "<=")), float(c.get("percent", 100)))
 			return false
+		"actor_mp":
+			if rules.magic_resource() == "":
+				return false
+			for mp_a in party:
+				if mp_a.id == str(c.get("id", "")):
+					return _compare(_mp_percent(mp_a), str(c.get("op", "<=")), float(c.get("percent", 50)))
+			return false
+		"enemy_turns":
+			var t_idx := int(c.get("index", 0))
+			for e in enemies:
+				if e.index == t_idx:
+					return not e.hidden and _compare(float(e.turns_taken), str(c.get("op", ">=")), float(c.get("n", 1)))
+			return false
+		"actor_turns":
+			for t_a in party:
+				if t_a.id == str(c.get("id", "")):
+					return _compare(float(t_a.turns_taken), str(c.get("op", ">=")), float(c.get("n", 1)))
+			return false
+		"command_used":
+			for u in _used_commands.get(str(c.get("id", "")), []):
+				if str(u.get("kind", "")) != str(c.get("command", "")):
+					continue
+				var want := str(c.get("skill", ""))
+				if want == "" or str(u.get("skill", "")) == want:
+					return true
+			return false
 		"switch":
 			return _switch_is(str(c.get("id", "")), bool(c.get("value", true)))
-	# Other kinds (extension kinds marked "battle": true): the battle scene asks the game state.
+		"turn_end":
+			return checkpoint_kind == "end_of_turn"
+	# Other kinds (variable, item, gold, extension kinds marked "battle": true): the battle
+	# scene asks the game state through condition_reader.
 	if condition_reader.is_valid():
 		return bool(condition_reader.call(c))
 	push_warning("Battle page condition kind '%s' is not supported" % str(c.get("kind", "")))
@@ -1281,10 +1395,57 @@ func _hp_percent(b: RPGBattler) -> float:
 	return 100.0 * float(b.get_resource(res)) / float(m)
 
 
+## MP percent for the enemy_mp/actor_mp conditions; only called when magic_resource() != ""
+## (a ruleset with no spell resource never matches an MP condition).
+func _mp_percent(b: RPGBattler) -> float:
+	var res := rules.magic_resource()
+	var m := rules.max_resource(b, res)
+	if m <= 0:
+		return 0.0
+	return 100.0 * float(b.get_resource(res)) / float(m)
+
+
+## command_used conditions: remember the command an actor used this battle turn (a cancelled
+## action counts as none). skill is only set for skill commands.
+func _note_command(b: RPGBattler, res: Dictionary) -> void:
+	if not b.is_actor() or bool(res.get("cancelled", false)):
+		return
+	var used := {"kind": str(res.get("kind", "")), "skill": str(res.action.get("skill", ""))}
+	if not _used_commands.has(b.id):
+		_used_commands[b.id] = []
+	(_used_commands[b.id] as Array).append(used)
+
+
 func _switch_is(id: String, value: bool) -> bool:
 	if not switch_reader.is_valid():
 		return false
 	return bool(switch_reader.call(id)) == value
+
+
+## A Conditional Branch battle check (RM2000/2003): whether an actor in the party or an enemy
+## by its 0-based member index can act (present and not held back by a state), and whether an
+## enemy is the target of the action that just ran (true only for a single-enemy action).
+## Battlers that are not in the fight give false. The game state routes these kinds here
+## through the battle facade while a battle runs.
+func branch_check(kind: String, cond: Dictionary) -> bool:
+	match kind:
+		"actor_can_act":
+			for a in party:
+				if a.id == str(cond.get("id", "")):
+					return a.is_active() and rules.can_act(a)
+			return false
+		"enemy_can_act", "enemy_is_target":
+			var e: RPGBattler = null
+			for x in enemies:
+				if x.index == int(cond.get("index", 0)):
+					e = x
+					break
+			if e == null:
+				return false
+			if kind == "enemy_can_act":
+				return e.is_active() and rules.can_act(e)
+			return _last_action_targets.size() == 1 and _last_action_targets[0] == e
+	return false
 
 
 static func _compare(a: float, op: String, b: float) -> bool:
@@ -1382,10 +1543,10 @@ func force_flee(target: String, member_index := -1) -> Array:
 
 
 ## Transform (2003, #3): the member at `member_index` (0-based) becomes the enemy record
-## `enemy_id`, keeping its slot, screen position and "A/B" suffix. `hp_mode`: "keep" the current
-## HP (clamped to the new maximum), "percent" keep the HP %, anything else refill. States are
-## kept unless `clear_states`. Stats, actions, traits and rewards come from the new record.
-## Returns the new battler, or null when the member or the enemy record does not exist.
+## `enemy_id`, keeping its slot, screen position and "A/B" suffix. `hp_mode`: "keep" carries the
+## resources over clamped to the new maxima, "percent" carries their shares over, "refill" starts
+## full. States are kept unless `clear_states`. Stats, actions, traits and rewards come from the
+## new record. Returns the new battler, or null when the member or the enemy record does not exist.
 func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", clear_states := false) -> RPGBattler:
 	var old: RPGBattler = null
 	for e in enemies:
@@ -1401,6 +1562,8 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 	nb.screen_position = old.screen_position
 	nb.hidden = old.hidden
 	nb.escaped = old.escaped
+	nb.guarding = old.guarding
+	nb.action = old.action
 	# "Slime A" keeps its letter when the troop fielded more than one of the old enemy (counted
 	# from the troop, so members that already transformed away do not lose their suffix).
 	var crowd := 0
@@ -1411,14 +1574,22 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 			and old.name[old.name.length() - 2] == " " and old.name[old.name.length() - 1] >= "A" \
 			and old.name[old.name.length() - 1] <= "Z":
 		nb.name = "%s %s" % [nb.name, old.name[old.name.length() - 1]]
-	# HP: the value (clamped), the percentage, or a fresh start (new_enemy_battler recovered all).
-	var life := rules.life_resource()
+	# Resources: the values (clamped to the new maxima), their shares, or a fresh start
+	# (new_enemy_battler recovered all: every resource is at its maximum).
+	var old_values := old.resources.duplicate()
+	var shares := {}
+	for rid in old_values:
+		var m: int = rules.max_resource(old, rid)
+		shares[rid] = clampf(float(old_values[rid]) / float(m), 0.0, 1.0) if m > 0 else 1.0
 	match hp_mode:
-		"keep":
-			nb.set_resource(life, clampi(old.get_resource(life), 0, rules.max_resource(nb, life)))
 		"percent":
-			var pct := 100.0 * float(old.get_resource(life)) / float(maxi(1, rules.max_resource(old, life)))
-			nb.set_resource(life, int(round(pct * rules.max_resource(nb, life) / 100.0)))
+			for rid in shares:
+				nb.set_resource(rid, roundi(float(shares[rid]) * rules.max_resource(nb, rid)))
+		"refill":
+			pass
+		_:
+			for rid in old_values:
+				nb.set_resource(rid, clampi(int(old_values[rid]), 0, rules.max_resource(nb, rid)))
 	if not clear_states:
 		for s in old.states:
 			nb.add_state(str(s.id), int(s.get("turns", -1)))
@@ -1447,6 +1618,7 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 			_extra.erase(old)
 		if _turn_members.has(old):
 			_turn_members[_turn_members.find(old)] = nb
+	_rewards.clear()  # the spoils follow the new record (rewards() reads battler_record(e))
 	enemy_transformed.emit(old, nb)
 	return nb
 
@@ -1471,7 +1643,6 @@ func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
 		_result = ""
 		phase = "actions"
 	return b
-
 
 ## Change Party Member during the battle: brings `party` in step with `wanted` (actor battlers;
 ## the battle scene passes the state's party through battle_members()). Added actors join with a

@@ -44,7 +44,9 @@ If the RPG tab is missing, open *Project > Project Settings > Plugins* and tick 
 
 ## 3b. Start your own game
 
-To make your own game, put the kit into a new Godot project:
+From the sample's **RPG** tab, choose **Project > New project...**. Enter your game's name, choose a new or empty folder outside the sample, select a style, and press **Create project**. The kit copies itself and the starter assets, creates a starter database and first map, and opens the new game in another Godot editor window. You can untick **Open the new project in another editor window** to open its `project.godot` later.
+
+To add the kit to a Godot project you already created:
 
 1. In the Project Manager press **Create**, pick an empty folder, and create the project. The renderer doesn't matter much for 2D; the sample uses *Compatibility*.
 2. Close Godot. Copy these folders from the kit into your project folder, keeping their paths:

@@ -3,6 +3,7 @@ extends RefCounted
 ## Message text codes (by stable ID, not number):
 ##   \V[id] variable value      \S[id] switch ON/OFF       \N[actor_id] actor name
 ##   \P[n] name of party member n (1-based)                \G currency unit
+##   \E[name] this event's self variable, \E[event/name] on this map, \E[map/event/name] anywhere
 ##   \C[n] text colour (0 = default, 1-15 palette)         \\ a backslash
 ##   \. wait 1/4 s   \| wait 1 s   \! wait for a key   \> \< show the rest instantly / stop
 ##   \I[n] icon n of the icon sheet (RPG Maker VX/MV; RPGIcons), one character wide; dropped when
@@ -38,7 +39,7 @@ static func escape(text: String) -> String:
 ## that name each other stop here instead of looping).
 const MAX_DEPTH := 4
 ## One-character codes the kit owns (extensions cannot register these).
-const BUILTIN_CODES := "VSNPGCI\\.|!><$^"
+const BUILTIN_CODES := "VSNPGCIE\\.|!><$^"
 
 
 static func expand(text: String, rpg: Node, info: Dictionary = {}) -> Dictionary:
@@ -103,6 +104,8 @@ static func expand(text: String, rpg: Node, info: Dictionary = {}) -> Dictionary
 				"G":
 					insert = rpg.data.currency() if rpg else "G"
 					consumed = 2
+				"E":
+					insert = _self_var(rpg, arg, info)
 				"C":
 					if color_open:
 						out += "[/color]"
@@ -242,6 +245,34 @@ static func _icon_tag(rpg: Node, arg: String) -> String:
 	return RPGIcons.bbcode(arg.strip_edges().to_int(), ICON_SIZE, p)
 
 
+## \E[...] self variable value: "name" (this event), "event/name" (this map) or "map/event/name"
+## (any map's). The running event comes from the message params ("_event_map"/"_event_id"), which
+## the message commands thread in; anything unknown reads as 0.
+static func _self_var(rpg: Node, arg: String, info: Dictionary) -> String:
+	var parts := arg.split("/")
+	var map_id := ""
+	var event_id := ""
+	var name := ""
+	match parts.size():
+		1:
+			name = parts[0]
+			var p: Dictionary = info.get("params", {}) if info.get("params") is Dictionary else {}
+			map_id = str(p.get("_event_map", ""))
+			event_id = str(p.get("_event_id", ""))
+		2:
+			event_id = parts[0]
+			name = parts[1]
+			var m: Node = rpg.current_map() if rpg != null and rpg.has_method("current_map") else null
+			map_id = str(m.map_id) if m != null and "map_id" in m else ""
+		_:
+			map_id = parts[0]
+			event_id = parts[1]
+			name = parts[2]
+	if rpg == null or map_id == "" or event_id == "" or name == "":
+		return "0"
+	return str(rpg.state.get_self_variable(map_id, event_id, name))
+
+
 static func _actor_name(rpg: Node, id: String) -> String:
 	if rpg == null:
 		return id
@@ -258,12 +289,12 @@ static func _bb_escape(s: String) -> String:
 	return s.replace("[", "[lb]")
 
 
-## Plain text for labels (choices): value codes (\V \S \N \P \G and \\) are expanded, formatting
-## and wait codes (\C, \., \|, \! ...) are dropped.
-static func expand_plain(text: String, rpg: Node) -> String:
+## Plain text for labels (choices): value codes (\V \S \N \P \G \E and \\) are expanded, formatting
+## and wait codes (\C, \., \|, \! ...) are dropped. `info` carries the message params for \E.
+static func expand_plain(text: String, rpg: Node, info: Dictionary = {}) -> String:
 	if not _ext(rpg, "text_codes").is_empty() or not _ext(rpg, "text_tags").is_empty():
 		# Extension codes in a label: expand fully, then drop the formatting.
-		var bb := str(expand(text, rpg).bbcode).replace("[lb]", "\u0001")
+		var bb := str(expand(text, rpg, info.duplicate()).bbcode).replace("[lb]", "\u0001")
 		bb = RegEx.create_from_string("\\[[^\\]]*\\]").sub(bb, "", true)
 		return bb.replace("\u0001", "[")
 	var re := RegEx.create_from_string("\\\\(\\\\|[A-Za-z](\\[[^\\]]*\\])?|[.|!><$^])")
@@ -291,6 +322,8 @@ static func expand_plain(text: String, rpg: Node) -> String:
 					out += _actor_name(rpg, rpg.state.party[idx])
 			"G":
 				out += rpg.data.currency() if rpg else "G"
+			"E":
+				out += _self_var(rpg, arg, info)
 	return out + text.substr(last)
 
 

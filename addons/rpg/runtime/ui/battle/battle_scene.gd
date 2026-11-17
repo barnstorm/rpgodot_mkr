@@ -212,7 +212,7 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 		rpg.state.change_items(id, "decrease", 1)
 		return true
 	core.item_refund = func(id: String) -> void: rpg.state.change_items(id, "increase", 1)
-	core.note_use = func(what: Dictionary): rpg.state.note_use(what)
+	core.last_used_recorder = func(d: Dictionary) -> void: rpg.state.record_last_used(d)
 	core.switch_reader = func(id: String) -> bool: return rpg.state.get_switch(id)
 	core.switch_setter = func(id: String, value: bool) -> void: rpg.state.set_switch(id, value)
 	core.condition_reader = extension_condition
@@ -471,7 +471,6 @@ func _rebuild_enemy_sprite(old_b: RPGBattler, new_b: RPGBattler) -> void:
 		field.add_child(spr)
 	enemy_nodes[new_b] = spr
 	_place_battler_nodes()
-	_refresh_order_strip()
 	_refresh_status()
 
 
@@ -913,6 +912,41 @@ func _shake() -> void:
 		t.tween_property(stage, "position:x", float(x), 0.04)
 
 
+## Transform Enemy (event command): the troop member at `member_index` (0-based) becomes an enemy
+## built from `enemy_id` (same slot: index, position, turn state). The old image flashes away, the
+## new one fades in at the same spot and "%1 transformed into %2!" shows; the status display and
+## CTB order strip follow. Awaits the message. Returns the transformed battler, or null when the
+## member or enemy record does not exist.
+func transform_enemy(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	if core == null or member_index < 0 or member_index >= core.enemies.size():
+		return null
+	var old_name := (core.enemies[member_index] as RPGBattler).name
+	var result: RPGBattler = core.transform_enemy((core.enemies[member_index] as RPGBattler).index, enemy_id, hp_policy, clear_states)
+	if result == null:
+		return null
+	# The enemy_transformed signal swaps the sprite (deferred, same draw order and position);
+	# the fade-in queues behind it. Hidden members transform unseen, as they stay hidden.
+	_fade_in_enemy_node.call_deferred(result)
+	_refresh_order_strip()
+	refresh_after_event()
+	await say(_battle_term("transform", "%1 transformed into %2!", [old_name, result.name]), 0.45)
+	log_win.visible = false
+	return result
+
+
+## Transform Enemy fades the new sprite in where the old one stood (queued behind the deferred
+## enemy_transformed rebuild, so the node it fades is the new one).
+func _fade_in_enemy_node(b: RPGBattler) -> void:
+	var spr: TextureRect = enemy_nodes.get(b)
+	if spr == null or b.hidden:
+		return
+	spr.modulate = Color(1, 1, 1, 0)
+	if auto or not is_inside_tree():
+		spr.modulate.a = 1.0
+	else:
+		spr.create_tween().tween_property(spr, "modulate:a", 1.0, 0.3)
+
+
 ## Enemy Appear (event command): brings troop member `member_index` (-1: every hidden member)
 ## into the battle. Each one's image fades in and "%1 appears!" shows; target lists, the CTB order
 ## strip and battler_node(b) follow. Returns the battlers that appeared.
@@ -962,22 +996,6 @@ func enemy_flee(target: String, member_index := -1) -> Array:
 	_refresh_order_strip()
 	_refresh_status()
 	return fled
-
-
-## Transform Enemy (event command): the member at `member_index` (0-based) becomes the enemy
-## record `enemy_id` — HP and states follow `hp_mode` / `clear_states` (see
-## RPGBattleCore.transform_enemy). The sprite is rebuilt in place by the core's
-## enemy_transformed signal; "*%1 transformed!*" shows. Returns the new battler, or null when
-## the member or the record does not exist.
-func enemy_transform(member_index: int, enemy_id: String, hp_mode := "keep", clear_states := false) -> RPGBattler:
-	if core == null:
-		return null
-	var nb: RPGBattler = core.transform_enemy(member_index, enemy_id, hp_mode, clear_states)
-	if nb == null:
-		return null
-	await say(rules().term("transform", [nb.name]), 0.45)
-	log_win.visible = false
-	return nb
 
 
 func _collapse(b: RPGBattler) -> void:
@@ -1170,20 +1188,15 @@ func _run() -> void:
 					await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 				if not is_inside_tree():
 					return
+			# States that wear off at the battler's action end (MV's Action End timing).
+			await _show_ticks(r.get("ticks", []))
 			await _flush_checkpoints()
 			if r.escaped or core.battle_over() != "":
 				break
 			r = core.next_action()
 		if core.battle_over() != "":
 			break
-		for t in core.end_turn():
-			for l in t.lines:
-				await say(l, 0.45)
-			if int(t.get("damage", 0)) > 0:
-				popup(t.battler, str(t.damage), Color.WHITE, "slip")
-			if t.get("knocked_out", false) and t.battler.is_enemy():
-				_collapse(t.battler)
-			_refresh_status()
+		await _show_ticks(core.end_turn())
 		await _flush_checkpoints()
 		_refresh_status()
 		log_win.visible = false
@@ -1191,6 +1204,18 @@ func _run() -> void:
 			await get_tree().process_frame
 	outcome = core.battle_over()
 	await _end_battle()
+
+
+## Shows end-of-action / end-of-turn state effects (slip damage, states wearing off, a knockout).
+func _show_ticks(ticks: Array) -> void:
+	for t in ticks:
+		for l in t.lines:
+			await say(l, 0.45)
+		if int(t.get("damage", 0)) > 0:
+			popup(t.battler, str(t.damage), Color.WHITE, "slip")
+		if t.get("knocked_out", false) and t.battler.is_enemy():
+			_collapse(t.battler)
+	_refresh_status()
 
 
 ## A battle term from the rule system (Terms record "battle_<key>"), or `fallback` when the
@@ -1277,14 +1302,7 @@ func _timed_turn(b: RPGBattler) -> void:
 			await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 		if not is_inside_tree():
 			return
-	for t in r.get("ticks", []):
-		for l in t.lines:
-			await say(l, 0.45)
-		if int(t.get("damage", 0)) > 0:
-			popup(t.battler, str(t.damage), Color.WHITE, "slip")
-		if t.get("knocked_out", false) and t.battler.is_enemy():
-			_collapse(t.battler)
-	_refresh_status()
+	await _show_ticks(r.get("ticks", []))
 	await _flush_checkpoints()
 	if r.get("turn_end", false) and core.battle_over() == "":
 		core.begin_turn()

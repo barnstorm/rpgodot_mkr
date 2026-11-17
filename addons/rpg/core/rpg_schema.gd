@@ -28,6 +28,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 	defs["operand"] = {"oneOf": [
 		{"type": "number"},
 		{"type": "object", "required": ["variable"], "properties": {"variable": {"$ref": "#/$defs/id"}}},
+		{"type": "object", "required": ["pointer"], "properties": {"pointer": {"$ref": "#/$defs/id"}}},
 		{"type": "object", "required": ["random"], "properties": {"random": {"type": "array", "minItems": 2, "maxItems": 2}}},
 		{"type": "object", "required": ["game_data"], "properties": {"game_data": {"type": "object", "required": ["kind"]}}},
 	]}
@@ -54,6 +55,14 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"switch": {"$ref": "#/$defs/id"}, "value": {"type": "boolean"}, "sound": {"$ref": "#/$defs/sound"},
 			"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 			"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"}, "hide": {"type": "boolean"},
+			"slide": {"type": "string"},
+			"move_to": {"oneOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "string"}]},
+			"call": {"type": "object", "required": ["method"], "properties": {
+				"method": {"type": "string"}, "args": {"type": "array"},
+			}},
+			"speed_up": {"type": "boolean"}, "speed_down": {"type": "boolean"},
+			"frequency_up": {"type": "boolean"}, "frequency_down": {"type": "boolean"},
+			"opacity_up": {"type": "boolean"}, "opacity_down": {"type": "boolean"},
 		},
 	}
 	defs["route"] = {"oneOf": [
@@ -95,7 +104,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
 			"graphic": {"$ref": "#/$defs/graphic"},
 			"movement": {"type": "object", "properties": {
-				"type": {"enum": ["fixed", "random", "approach", "custom"]},
+				"type": {"enum": ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]},
 				"speed": {"type": "integer", "minimum": 1, "maximum": 6},
 				"frequency": {"type": "integer", "minimum": 1, "maximum": 5},
 				"route": {"$ref": "#/$defs/route"},
@@ -103,6 +112,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"options": {"type": "object", "properties": {
 				"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 				"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"},
+				"forbid_overlap": {"type": "boolean"},
 			}},
 			"priority": {"enum": ["below", "same", "above"]},
 			"trigger": {"enum": ["action_button", "player_touch", "event_touch", "autorun", "parallel"]},
@@ -223,16 +233,22 @@ static func _condition_schema() -> Dictionary:
 	var branches := [
 		{"properties": {"kind": {"const": "switch"}, "id": {"$ref": "#/$defs/id"}, "value": {"type": "boolean"}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"const": "variable"}, "id": {"$ref": "#/$defs/id"}, "op": op, "value": {"oneOf": [{"$ref": "#/$defs/operand"}, {"type": "string"}, {"type": "boolean"}]}}, "required": ["kind", "id"]},
-		{"properties": {"kind": {"const": "self_switch"}, "id": {"enum": ["A", "B", "C", "D"]}, "value": {"type": "boolean"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"const": "self_switch"}, "id": {"enum": ["A", "B", "C", "D"]}, "value": {"type": "boolean"}, "event": {"type": "string"}, "map": {"$ref": "#/$defs/id"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"const": "self_variable"}, "name": {"$ref": "#/$defs/id"}, "op": op, "value": {"oneOf": [{"$ref": "#/$defs/operand"}, {"type": "string"}, {"type": "boolean"}]}, "event": {"type": "string"}, "map": {"$ref": "#/$defs/id"}}, "required": ["kind", "name"]},
 		{"properties": {"kind": {"const": "item"}, "id": {"$ref": "#/$defs/id"}, "item_kind": {"enum": ["items", "weapons", "armors"]}, "count": {"type": "integer", "minimum": 1}}, "required": ["kind", "id"]},
-		{"properties": {"kind": {"const": "actor"}, "id": {"$ref": "#/$defs/id"}, "check": {"enum": ["in_party", "name", "class", "skill", "weapon", "armor", "state"]}, "value": {"type": "boolean"}, "name": {"type": "string"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"const": "actor"}, "id": {"$ref": "#/$defs/id"}, "check": {"enum": ["in_party", "name", "class", "skill", "weapon", "armor", "state", "level", "hp", "sp"]}, "value": {"oneOf": [{"type": "boolean"}, {"$ref": "#/$defs/operand"}]}, "name": {"type": "string"}, "op": op, "percent": {"type": "boolean"}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"const": "facing"}, "target": {"type": "string"}, "facing": {"enum": ["down", "left", "right", "up"]}}, "required": ["kind", "facing"]},
-		{"properties": {"kind": {"const": "button"}, "button": {"enum": ["ok", "cancel", "dash", "up", "down", "left", "right"]}}, "required": ["kind", "button"]},
+		{"properties": {"kind": {"const": "button"}, "button": {"enum": ["ok", "cancel", "dash", "up", "down", "left", "right"]}, "mode": {"enum": ["held", "pressed", "repeated"]}}, "required": ["kind", "button"]},
+		{"properties": {"kind": {"const": "started_by"}, "by": {"enum": ["action_button", "player_touch", "event_touch", "autorun", "parallel", "call"]}}, "required": ["kind", "by"]},
+		{"properties": {"kind": {"const": "formula"}, "text": {"type": "string", "maxLength": 2000}}, "required": ["kind", "text"]},
+		{"properties": {"kind": {"const": "can_pass"}, "target": {"type": "string"}, "facing": {"enum": ["down", "left", "right", "up"]}, "distance": {"type": "integer", "minimum": 1, "maximum": 20}}, "required": ["kind", "facing"]},
 		{"properties": {"kind": {"const": "gold"}, "op": op, "value": {"$ref": "#/$defs/operand"}}, "required": ["kind"]},
 		{"properties": {"kind": {"const": "vehicle"}, "id": {"enum": ["none", "boat", "ship", "airship"]}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"enum": ["all", "any"]}, "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}}}, "required": ["kind", "conditions"]},
 		{"properties": {"kind": {"const": "not"}, "condition": {"$ref": "#/$defs/condition"}}, "required": ["kind", "condition"]},
-		{"properties": {"kind": {"enum": ["turn", "enemy_hp", "actor_hp"]}}, "required": ["kind"]},
+		{"properties": {"kind": {"enum": ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "turn_end"]}}, "required": ["kind"]},
+		{"properties": {"kind": {"const": "actor_can_act"}, "id": {"$ref": "#/$defs/id"}}, "required": ["kind", "id"]},
+		{"properties": {"kind": {"enum": ["enemy_can_act", "enemy_is_target"]}, "index": {"type": "integer", "minimum": 0}}, "required": ["kind"]},
 	]
 	for b in branches:
 		b["type"] = "object"

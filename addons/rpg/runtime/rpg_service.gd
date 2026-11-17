@@ -1,12 +1,13 @@
 extends Node
 ## The `RPG` autoload: one global entry point for the runtime.
-## Typed access to switches, variables, self switches, the party and inventory; common events;
+## Typed access to switches, variables, self switches, self variables, the party and inventory; common events;
 ## saving through the save service. All state changes go through methods that check values and
 ## emit change signals. Tests can create extra instances and call boot() with a fixture folder.
 
 signal switch_changed(id: String, value: bool)
 signal variable_changed(id: String, value: Variant)
 signal self_switch_changed(key: String, value: bool)
+signal self_variable_changed(key: String, value: Variant)
 signal error_reported(message: String, where: Dictionary)
 ## Emitted by the emit_signal command: (name, args).
 signal event_signal(name: String, args: Dictionary)
@@ -153,6 +154,7 @@ func boot(root := "res://rpg") -> void:
 	state.switch_changed.connect(func(id, v): switch_changed.emit(id, v))
 	state.variable_changed.connect(func(id, v): variable_changed.emit(id, v))
 	state.self_switch_changed.connect(func(k, v): self_switch_changed.emit(k, v))
+	state.self_variable_changed.connect(func(k, v): self_variable_changed.emit(k, v))
 	state.changed.connect(request_refresh)
 	state.actor_changed.connect(check_levels)
 	state.party_changed.connect(check_levels)
@@ -352,6 +354,14 @@ func set_self_switch(map_id: String, event_id: String, letter: String, value: bo
 	return state.set_self_switch(map_id, event_id, letter, value)
 
 
+func get_self_variable(map_id: String, event_id: String, name: String) -> Variant:
+	return state.get_self_variable(map_id, event_id, name)
+
+
+func set_self_variable(map_id: String, event_id: String, name: String, value: Variant) -> bool:
+	return state.set_self_variable(map_id, event_id, name, value)
+
+
 ## Runs a common event. mode "main" joins the main queue (one main event at a time);
 ## mode "parallel" runs it as its own task. Returns the RPGResult when it finishes.
 func run_common_event(id: String, mode := "main") -> RPGResult:
@@ -382,6 +392,12 @@ func request_refresh() -> void:
 	_refresh_pending = true
 
 
+## True when a page refresh is pending: it runs on the next frame, or before the next command
+## that needs it (see RPGInterpreter.execute).
+func refresh_pending() -> bool:
+	return _refresh_pending
+
+
 ## Called by the scheduler once per frame before it starts new work.
 func process_refresh() -> void:
 	if not _refresh_pending:
@@ -402,10 +418,28 @@ func _refresh_common_events() -> void:
 			continue
 		var key: String = "common:" + str(id)
 		var ok := _common_active(ce)
-		if ok and not scheduler.parallels.has(key) and _game_running():
+		var task: RPGScheduler.ParallelTask = scheduler.parallels.get(key)
+		if ok and task == null and _game_running():
 			scheduler.start_parallel(key, ce.get("commands", []), {"kind": "common_event", "id": id, "map": "", "event": ""}, null, func(): return _common_active(ce))
-		elif not ok and scheduler.parallels.has(key):
-			scheduler.stop_parallel(key, "condition switch off")
+		elif ok and task != null and task.paused:
+			# The condition switch came back on: a paused run carries on at its command.
+			scheduler.resume_parallel(key)
+		elif not ok and task != null:
+			# The condition switch went off: the classic rules pause the run in place and resume
+			# it when the switch returns; MV-style rules discard it (a later switch-on then starts
+			# the event from the top again).
+			if _parallel_switch_off() == "pause":
+				scheduler.pause_parallel(key)
+			else:
+				scheduler.stop_parallel(key, "condition switch off")
+
+
+## What a parallel common event's condition switch going off does to its run, per the rule system
+## (RPGRuleSystem.parallel_switch_off): "pause" (RM2000/2003) or "restart" (MV).
+func _parallel_switch_off() -> String:
+	if rules != null and rules.has_method("parallel_switch_off"):
+		return str(rules.parallel_switch_off())
+	return "restart"
 
 
 func _common_active(ce: Dictionary) -> bool:
@@ -417,8 +451,9 @@ func _game_running() -> bool:
 	return current_map() != null
 
 
-## Autoruns: checked in a fixed order (map events by ID, then common events by ID) whenever the
-## main interpreter is idle. An autorun repeats while its conditions stay true.
+## Autoruns: checked in a fixed order (map events in file order, then common events in file
+## order — creation order, as in RPG Maker) whenever the main interpreter is idle. An autorun
+## repeats while its conditions stay true.
 func _check_autoruns() -> void:
 	if scheduler.is_main_busy() or not scheduler.input_locks.is_empty():
 		return
@@ -440,8 +475,8 @@ func _check_autoruns() -> void:
 			_note_autorun("%s/%s" % [m.map_id, ev.event_id], "map event '%s' on map '%s'" % [ev.event_id, m.map_id])
 			ev.start_autorun()
 			return
+	# common_events.json's order is the run order (#73): no sorting, as with map events.
 	var ids: Array = data.common_events.keys()
-	ids.sort()
 	for id in ids:
 		var ce: Dictionary = data.common_events[id]
 		if ce.get("trigger", "none") == "autorun" and _common_active(ce):
