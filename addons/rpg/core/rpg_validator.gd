@@ -376,6 +376,26 @@ static func _enemy_appear_checks(tr: Dictionary, list: Variant, registry: RPGCom
 		)
 
 
+## Transform Enemy in a troop's battle events: the enemy number must be a member of the group.
+## The "into" enemy record itself is checked like any ref (missing record = error) by the
+## reference pass.
+static func _transform_enemy_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
+	if registry == null or not (list is Array):
+		return
+	var rec := str(tr.get("id", ""))
+	var members: Variant = tr.get("members", [])
+	if not (members is Array):
+		return
+	registry.walk(list, func(c: Dictionary, p: String) -> void:
+		if str(c.get("type", "")) != "transform_enemy":
+			return
+		var n := int(c.get("enemy", 1)) if typeof(c.get("enemy", 1)) in [TYPE_INT, TYPE_FLOAT] else 0
+		if n < 1 or n > members.size():
+			out.append(problem("error", file, rec, "enemy", path + p.replace(".", "/") + "/enemy",
+				"Transform Enemy: enemy group '%s' has no enemy #%d." % [rec, n], "Pick a number from 1 to %d." % members.size()))
+		)
+
+
 ## The party commands' enemy target in a troop's battle events (Change HP/SP, Change State,
 ## Recover All), and Force Flee's enemy number: the enemy number must be a member of the group.
 static func _enemy_target_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
@@ -416,6 +436,7 @@ static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file:
 			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, "battle_page")
 		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out, "battle")
 		_enemy_appear_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
+		_transform_enemy_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 		_enemy_target_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 
 

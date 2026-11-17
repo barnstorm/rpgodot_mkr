@@ -1487,10 +1487,10 @@ func force_flee(target: String, member_index := -1) -> Array:
 
 
 ## Transform (2003, #3): the member at `member_index` (0-based) becomes the enemy record
-## `enemy_id`, keeping its slot, screen position and "A/B" suffix. `hp_mode`: "keep" the current
-## HP (clamped to the new maximum), "percent" keep the HP %, anything else refill. States are
-## kept unless `clear_states`. Stats, actions, traits and rewards come from the new record.
-## Returns the new battler, or null when the member or the enemy record does not exist.
+## `enemy_id`, keeping its slot, screen position and "A/B" suffix. `hp_mode`: "keep" carries the
+## resources over clamped to the new maxima, "percent" carries their shares over, "refill" starts
+## full. States are kept unless `clear_states`. Stats, actions, traits and rewards come from the
+## new record. Returns the new battler, or null when the member or the enemy record does not exist.
 func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", clear_states := false) -> RPGBattler:
 	var old: RPGBattler = null
 	for e in enemies:
@@ -1506,6 +1506,8 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 	nb.screen_position = old.screen_position
 	nb.hidden = old.hidden
 	nb.escaped = old.escaped
+	nb.guarding = old.guarding
+	nb.action = old.action
 	# "Slime A" keeps its letter when the troop fielded more than one of the old enemy (counted
 	# from the troop, so members that already transformed away do not lose their suffix).
 	var crowd := 0
@@ -1516,14 +1518,22 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 			and old.name[old.name.length() - 2] == " " and old.name[old.name.length() - 1] >= "A" \
 			and old.name[old.name.length() - 1] <= "Z":
 		nb.name = "%s %s" % [nb.name, old.name[old.name.length() - 1]]
-	# HP: the value (clamped), the percentage, or a fresh start (new_enemy_battler recovered all).
-	var life := rules.life_resource()
+	# Resources: the values (clamped to the new maxima), their shares, or a fresh start
+	# (new_enemy_battler recovered all: every resource is at its maximum).
+	var old_values := old.resources.duplicate()
+	var shares := {}
+	for rid in old_values:
+		var m: int = rules.max_resource(old, rid)
+		shares[rid] = clampf(float(old_values[rid]) / float(m), 0.0, 1.0) if m > 0 else 1.0
 	match hp_mode:
-		"keep":
-			nb.set_resource(life, clampi(old.get_resource(life), 0, rules.max_resource(nb, life)))
 		"percent":
-			var pct := 100.0 * float(old.get_resource(life)) / float(maxi(1, rules.max_resource(old, life)))
-			nb.set_resource(life, int(round(pct * rules.max_resource(nb, life) / 100.0)))
+			for rid in shares:
+				nb.set_resource(rid, roundi(float(shares[rid]) * rules.max_resource(nb, rid)))
+		"refill":
+			pass
+		_:
+			for rid in old_values:
+				nb.set_resource(rid, clampi(int(old_values[rid]), 0, rules.max_resource(nb, rid)))
 	if not clear_states:
 		for s in old.states:
 			nb.add_state(str(s.id), int(s.get("turns", -1)))
@@ -1552,6 +1562,7 @@ func transform_enemy(member_index: int, enemy_id: String, hp_mode := "keep", cle
 			_extra.erase(old)
 		if _turn_members.has(old):
 			_turn_members[_turn_members.find(old)] = nb
+	_rewards.clear()  # the spoils follow the new record (rewards() reads battler_record(e))
 	enemy_transformed.emit(old, nb)
 	return nb
 
@@ -1576,7 +1587,6 @@ func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
 		_result = ""
 		phase = "actions"
 	return b
-
 
 ## Change Party Member during the battle: brings `party` in step with `wanted` (actor battlers;
 ## the battle scene passes the state's party through battle_members()). Added actors join with a

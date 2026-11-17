@@ -912,6 +912,41 @@ func _shake() -> void:
 		t.tween_property(stage, "position:x", float(x), 0.04)
 
 
+## Transform Enemy (event command): the troop member at `member_index` (0-based) becomes an enemy
+## built from `enemy_id` (same slot: index, position, turn state). The old image flashes away, the
+## new one fades in at the same spot and "%1 transformed into %2!" shows; the status display and
+## CTB order strip follow. Awaits the message. Returns the transformed battler, or null when the
+## member or enemy record does not exist.
+func transform_enemy(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	if core == null or member_index < 0 or member_index >= core.enemies.size():
+		return null
+	var old_name := (core.enemies[member_index] as RPGBattler).name
+	var result: RPGBattler = core.transform_enemy((core.enemies[member_index] as RPGBattler).index, enemy_id, hp_policy, clear_states)
+	if result == null:
+		return null
+	# The enemy_transformed signal swaps the sprite (deferred, same draw order and position);
+	# the fade-in queues behind it. Hidden members transform unseen, as they stay hidden.
+	_fade_in_enemy_node.call_deferred(result)
+	_refresh_order_strip()
+	refresh_after_event()
+	await say(_battle_term("transform", "%1 transformed into %2!", [old_name, result.name]), 0.45)
+	log_win.visible = false
+	return result
+
+
+## Transform Enemy fades the new sprite in where the old one stood (queued behind the deferred
+## enemy_transformed rebuild, so the node it fades is the new one).
+func _fade_in_enemy_node(b: RPGBattler) -> void:
+	var spr: TextureRect = enemy_nodes.get(b)
+	if spr == null or b.hidden:
+		return
+	spr.modulate = Color(1, 1, 1, 0)
+	if auto or not is_inside_tree():
+		spr.modulate.a = 1.0
+	else:
+		spr.create_tween().tween_property(spr, "modulate:a", 1.0, 0.3)
+
+
 ## Enemy Appear (event command): brings troop member `member_index` (-1: every hidden member)
 ## into the battle. Each one's image fades in and "%1 appears!" shows; target lists, the CTB order
 ## strip and battler_node(b) follow. Returns the battlers that appeared.
