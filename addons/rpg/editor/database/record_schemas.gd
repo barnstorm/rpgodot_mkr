@@ -126,8 +126,16 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					{"key": "id", "kind": "ref", "ref": "item", "ref_from": "kind", "label": "Item"},
 					_i("chance", "Chance %", 10, 0, 100)]},
 				{"key": "actions", "kind": "list", "default": [], "label": "Action patterns", "item_fields": [
-					{"key": "skill", "kind": "ref", "ref": "skill", "allow": ["attack", "guard", "wait", "escape"], "default": "attack", "label": "Skill"},
+					{"key": "skill", "kind": "ref", "ref": "skill", "allow": ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"], "default": "attack", "label": "Action",
+						"help": "A skill, or one of the 2003 basic actions: Attack, Double Attack (two hits), Guard, Observe (nothing, a message), Charge Up (the next attack hits harder), Self Destruct (the monster's remaining HP as damage to the party, then it falls), Escape (it leaves the battle and its rewards), Transform (it becomes the enemy below)."},
+					{"key": "enemy", "kind": "ref", "ref": "enemy", "default": "", "label": "Becomes",
+						"show_if": {"key": "skill", "equals": "transform"},
+						"help": "The enemy record this one turns into when the action runs."},
 					_i("rating", "Rating", 5, 1, 10),
+					{"key": "switch_on", "kind": "ref", "ref": "switch", "default": "", "label": "Switch ON",
+						"help": "Turned on when this action is used (2003's phase chaining: \"after using Charge Up, switch 12 ON enables the big attack\")."},
+					{"key": "switch_off", "kind": "ref", "ref": "switch", "default": "", "label": "Switch OFF",
+						"help": "Turned off when this action is used."},
 					{"key": "condition", "kind": "object", "default": {"kind": "always"}, "label": "Condition", "fields": _enemy_condition_fields()}]},
 				_traits(trait_kinds, type_lists, stats),
 			]

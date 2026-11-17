@@ -42,6 +42,11 @@ const DEFAULT_TERMS := {
 	"escape": "The party escaped!",
 	"escape_fail": "Couldn't escape!",
 	"no_escape": "There is no escape!",
+	"flee": "%1 flees!",
+	"observe": "%1 is observing.",
+	"charge": "%1 is charging up!",
+	"self_destruct": "%1 self-destructs!",
+	"transform": "%1 transformed!",
 	"appear": "%1 appears!",
 	"victory": "Victory!",
 	"defeat": "The party has fallen...",
@@ -695,7 +700,8 @@ func new_enemy_battler(enemy_id: String) -> RPGBattler:
 	b.base = (rec.get("stats", {}) as Dictionary).duplicate(true)
 	for a in rec.get("actions", []):
 		var sk := str(a.get("skill", ""))
-		if sk != "" and not sk in ["attack", "guard", "wait", "escape"] and not b.skills.has(sk):
+		# The 2003 basic actions are not skills; everything else names a skill record.
+		if sk != "" and not sk in ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"] and not b.skills.has(sk):
 			b.skills.append(sk)
 	_apply_level_formulas(b, "on_create_enemy")
 	recover_all(b)
@@ -1118,6 +1124,22 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 				return {}
 			u = rec2.duplicate(true)
 			u.kind = "item"
+		"self_destruct":
+			# The 2003 basic action: the monster's life for damage to the party. The definition
+			# (rules.json "self_destruct") can tune the formula like any skill.
+			u = (definition.get("self_destruct", {}) as Dictionary).duplicate(true)
+			u.kind = "self_destruct"
+			u.id = "self_destruct"
+			if not u.has("name"):
+				u.name = "Self-Destruct"
+			if not u.has("scope"):
+				u.scope = "all_enemies"
+			if not u.has("formula"):
+				u.formula = "a.hp"
+			if not u.has("hit"):
+				u.hit = 100
+			if not u.has("hit_type"):
+				u.hit_type = "certain"
 		_:
 			return {}
 	# Extra fields every action has in formulas (rules.json "usable_defaults", e.g. tp_gain: 0).
@@ -1149,7 +1171,7 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 	if not can_act(user):
 		return false
 	var kind := str(action.get("kind", ""))
-	if kind in ["guard", "wait", "escape", "attack"]:
+	if kind in ["guard", "wait", "escape", "attack", "observe", "charge", "transform", "self_destruct"]:
 		return true
 	var u := resolve_action(user, action)
 	if u.is_empty():
@@ -1195,6 +1217,12 @@ func action_times(b: RPGBattler) -> int:
 		if rng.chance_percent(float(t.get("value", 100))):
 			n += 1
 	return n
+
+
+## Charge Up (2003): the multiplier a stored charge gives the monster's next attack. A public
+## step, so a rule system (rules.gd) can make charging stronger or weaker.
+func charge_multiplier(b: RPGBattler) -> float:
+	return 2.0
 
 
 func pay_cost(user: RPGBattler, action: Dictionary) -> void:
