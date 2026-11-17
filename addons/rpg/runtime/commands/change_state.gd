@@ -34,7 +34,9 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		if b is RPGBattler and rules is RPGRuleSystem:
 			if args.operation == "add":
 				if args.get("force", false):
-					b.add_state(sid)
+					if not b.has_state(sid):
+						b.add_state(sid)
+						_notify_state(ctx, b, sid, true)
 				else:
 					rules.add_state(b, sid)
 			else:
@@ -44,19 +46,32 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			continue
 		if args.operation == "add":
 			if b is Object and b.has_method("add_state"):
+				var had: bool = b.has_state(sid)
 				b.add_state(sid)
+				if not had:
+					_notify_state(ctx, b, sid, true)
 			elif not RPGPartyUtil.states_of(b).any(func(s): return s.get("id", "") == sid):
 				RPGPartyUtil.states_of(b).append({"id": sid, "turns": -1})
+				_notify_state(ctx, b, sid, true)
 		else:
 			if b is Object and b.has_method("remove_state"):
-				b.remove_state(sid)
+				if b.remove_state(sid):
+					_notify_state(ctx, b, sid, false)
 			else:
 				var st: Array = RPGPartyUtil.states_of(b)
 				for i in range(st.size() - 1, -1, -1):
 					if st[i].get("id", "") == sid:
 						st.remove_at(i)
+						_notify_state(ctx, b, sid, false)
 		if str(pair[0]) != "":
 			ctx.state.notify_actor_changed(pair[0])
 	if enemy_side and ctx.battle != null and ctx.battle.valid():
 		ctx.battle.refresh()
 	return RPGResult.ok()
+
+
+## The on_state_added / on_state_removed common events (issue #52): the rule system's own paths
+## emit through the service; these are the no-rules fallbacks of this command.
+static func _notify_state(ctx: RPGContext, b: Variant, sid: String, added: bool) -> void:
+	if ctx.rpg != null and ctx.rpg.has_signal("actor_state_changed"):
+		ctx.rpg.actor_state_changed.emit(b, sid, added)

@@ -103,6 +103,10 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	ctx.state.bump_counter("battles")
 	if ctx.rpg.has_signal("battle_started"):
 		ctx.rpg.battle_started.emit(bargs.duplicate())
+	# The battle moment hooks run right here (a queued run would only get its turn after the
+	# battle): each hooked common event finishes before the scene starts (issue #52).
+	if ctx.rpg.has_method("run_hook_common_events"):
+		await ctx.rpg.run_hook_common_events("on_battle_start", {"troop": troop, "map": ctx.map_id()})
 	var r: Dictionary = await ctx.ui.run_contract_scene(scene, bargs, context, ctx.token)
 	var res0: Variant = r.get("value")
 	if ctx.rpg.has_signal("battle_ended"):
@@ -112,6 +116,13 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		ctx.rpg.battle_ended.emit(oc, res0)
 	if ctx.rpg.has_method("check_levels"):
 		ctx.rpg.check_levels()
+	# After the level-up hooks (the party grows, then the battle is officially over), the battle
+	# end moment runs its hooked common events (issue #52).
+	if ctx.rpg.has_method("run_hook_common_events"):
+		var oc2 := ""
+		if r.status == "finished":
+			oc2 = str(res0.get("outcome", "win")) if res0 is Dictionary else str(res0)
+		await ctx.rpg.run_hook_common_events("on_battle_end", {"outcome": oc2, "map": ctx.map_id()})
 	var lost: bool = r.status == "finished" and (str(res0.get("outcome", "")) if res0 is Dictionary else str(res0)) == "lose"
 	var defeat_ev := defeat_event_id(ctx)
 	if lost and not bool(args.get("can_lose", false)) and defeat_ev == "":

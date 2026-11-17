@@ -70,6 +70,7 @@ const DEFAULT_TERMS := {
 var definition := {}
 var db = null
 var rng := RPGRandom.new()
+var rpg = null             ## the running RPG service (actor_state_changed signals, issue #52)
 var variables := {}            ## formula `v` (the runtime may share its variables dict)
 var rules_id := ""
 var last_error := ""
@@ -906,6 +907,7 @@ func add_state(b: RPGBattler, state_id: String) -> bool:
 		b.guarding = false
 		b.buffs.clear()
 	b.add_state(state_id, _roll_state_turns(rec))
+	_notify_state_change(b, state_id, true)
 	return true
 
 
@@ -929,7 +931,16 @@ func remove_state(b: RPGBattler, state_id: String) -> bool:
 		return false
 	if state_id == death_state():
 		b.resources[life_resource()] = maxi(1, int(b.resources.get(life_resource(), 0)))
+	_notify_state_change(b, state_id, false)
 	return true
+
+
+## Tells the service a state changed, wherever the change came from (a map command, an item or
+## skill effect, battle damage and state expiry): on_state_added / on_state_removed common
+## events and the actor_state_changed signal (issue #52).
+func _notify_state_change(b: RPGBattler, state_id: String, added: bool) -> void:
+	if rpg != null and rpg.has_signal("actor_state_changed"):
+		rpg.actor_state_changed.emit(b, state_id, added)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1117,6 +1128,7 @@ func end_battle(b: RPGBattler) -> void:
 	for s in b.states.duplicate():
 		if _rec("states", s.id).get("remove_at_battle_end", false):
 			b.remove_state(s.id)
+			_notify_state_change(b, str(s.id), false)
 	b.buffs.clear()
 	b.guarding = false
 	b.action = {}
@@ -1776,6 +1788,7 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 			var chance2 := float(_rec("states", s.id).get("remove_on_damage", 0))
 			if chance2 > 0.0 and rng.chance_percent(chance2):
 				target.remove_state(s.id)
+				_notify_state_change(target, str(s.id), false)
 				res.removed_states.append(s.id)
 	# Knockout (unless death is resisted: an immortal stays up at 0 life).
 	if target.get_resource(life_resource()) <= 0 and not target.has_state(death_state()):

@@ -30,6 +30,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | `\V[1]`, `\N[1]` | `\V[talked_count]`, `\N[hero]` (an ID instead of a number) |
 | `\I[n]` (VX/MV message icon), the Icon field of items, skills and states | The same: `\I[64]` and the **Icon** field (a grid of the icon sheet, searchable by name). The starter icons are the kit's own (CC0), so their numbers differ from RPG Maker's IconSet |
 | Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch |
+| Common events that run on game moments (plugins: Yanfly Utility Common Events, Galv's Auto Common Events, Hime's Level Up Events) | Built in: a common event's Trigger can be an **engine moment** (map enter/leave, every N steps, region/terrain, level up, state added/removed, knockout, battle start/end, game over, menu, party change, vehicles, new game, load), with filters and the moment's data as Game Data `hook.*` |
 | Timer Operations (2000/2003) | **Control Timer**: two timers; Set (time, show on screen, corner), Start, Stop, and what it does in battle (pause, count, or abort at 0); the **Timer** condition checks the time left |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
 | Change Party Member | Change Party Member |

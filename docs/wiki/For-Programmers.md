@@ -28,7 +28,7 @@ Useful members:
 | `register_condition_kind(kind, check)` | A new condition kind |
 | `battle_hook(hook, args, mode)` | Run a battle hook (below) |
 
-Signals: `switch_changed`, `variable_changed`, `self_switch_changed`, `self_variable_changed`, `title_shown`, `new_game_started`, `game_loaded`, `map_entered`, `map_left`, `player_stepped(cell, region, terrain)`, `menu_opened`, `menu_closed`, `battle_started`, `battle_ended(outcome, result)`, `actor_levelled`, `quitting`, `option_changed`, `message_opened`, `message_char`, `message_closed`, `autosaved`, `error_reported`, and the battle signals `battle_scene_ready`, `turn_started`, `action_chosen`, `damage_calculated`, `state_changed`, `battler_defeated`, `victory`.
+Signals: `switch_changed`, `variable_changed`, `self_switch_changed`, `self_variable_changed`, `title_shown`, `new_game_started`, `game_loaded`, `map_entered`, `map_left`, `player_stepped(cell, region, terrain)`, `menu_opened`, `menu_closed`, `battle_started`, `battle_ended(outcome, result)`, `actor_levelled`, `quitting`, `option_changed`, `message_opened`, `message_char`, `message_closed`, `autosaved`, `game_over_started`, `actor_state_changed(battler, state_id, added)`, `vehicle_entered(kind)`, `vehicle_exited(kind)`, `error_reported`, and the battle signals `battle_scene_ready`, `turn_started`, `action_chosen`, `damage_calculated`, `state_changed`, `battler_defeated`, `victory`.
 
 ## Custom event commands
 
@@ -88,7 +88,7 @@ Only extensions turned on in *Tools > Extensions* load. What a manifest can decl
 | Key | Gives you |
 | --- | --- |
 | `commands` | Event commands |
-| `entry_scripts` | Scripts made once when the game boots (extend `RPGExtension`, or any Node). They get `on_new_game`, `on_game_loaded`, `on_map_entered(map_id)`, `on_map_left`, `on_player_stepped(cell, region, terrain)`, `on_menu_opened` / `on_menu_closed`, `on_battle_started` / `on_battle_ended`, `on_actor_levelled`, `on_title_shown`, `on_quitting` |
+| `entry_scripts` | Scripts made once when the game boots (extend `RPGExtension`, or any Node). They get `on_new_game`, `on_game_loaded`, `on_map_entered(map_id)`, `on_map_left`, `on_player_stepped(cell, region, terrain)`, `on_menu_opened` / `on_menu_closed`, `on_battle_started` / `on_battle_ended`, `on_actor_levelled`, `on_actor_state_changed(battler, state_id, added)`, `on_vehicle_entered(kind)` / `on_vehicle_exited(kind)`, `on_game_over_started`, `on_title_shown`, `on_quitting` |
 | `settings_schema` | A settings form in *Tools > Extensions*, saved in `rpg/extensions.json`; read with `RPG.extension_setting(id, key)` |
 | `save_sections` | `[{namespace, version}]`: data saved, loaded and migrated with the game |
 | `menu_entries` | Main-menu entries (a common event, a scene or a method), with show/enable conditions |

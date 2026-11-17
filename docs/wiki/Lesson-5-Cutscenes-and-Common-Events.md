@@ -91,6 +91,41 @@ Example: a `full_heal` common event
 
 Now any event can do `◆ Call Common Event: full_heal`. An item can run one too (Lesson 6): a *Tent* that calls `full_heal`.
 
+### Engine moments
+
+The Trigger list has a third kind: **engine moments**. Instead of polling in a Parallel event, a common event can simply *be* the reaction to something the engine already knows: the moment happens, the common event runs. No switches, no waiting loops.
+
+| Moment | Runs when… |
+| --- | --- |
+| New game starts | a new game begins (before the first map's intro events) |
+| A game is loaded | a save file finishes loading |
+| Entering / leaving a map | the player arrives on a map / leaves one — *Only map* narrows it to one map |
+| Every N steps | each Nth step of the player (set *N* in *Every N steps*) |
+| Entering / leaving a region | the player steps into / out of a region painted on the RPG tab's Regions — *Region* narrows it to one |
+| Entering a terrain | the player steps onto a terrain tag — *Terrain* narrows it to one |
+| An actor levels up | right after the level-up message — *Only actor* narrows it to one |
+| A state is added / removed | an actor gains or loses a state — *Only state* and *Only actor* narrow it |
+| An actor is knocked out | the actor falls (battle defeat, map HP-to-zero, poison slip damage) |
+| A battle starts / ends | before the scene opens, and after the outcome — *Only outcome* (victory, escape, defeat) narrows the end |
+| Game over | before the Game Over screen, while the world is still up |
+| Menu opened / closed | the menu comes up / goes away |
+| The party changes | an actor joins or leaves |
+| Boarding / leaving a vehicle | the player gets on / off — *Only vehicle* narrows it |
+
+Each moment has a **Condition switch** too, like the classic triggers. The moment's own data — which actor, which region, which map, the outcome — is readable in the event's commands under **Game Data** as `hook.*`: `hook.actor`, `hook.state`, `hook.region`, `hook.terrain`, `hook.map`, `hook.outcome`, `hook.vehicle`, `hook.x`, `hook.y`, `hook.old_level` / `hook.new_level`.
+
+A common event hooked to a moment queues like a called event: several moments happening at once run in order, and a moment that repeats quickly (steps) waits for the running pass instead of piling up.
+
+To react to *several* moments with one common event, open `rpg/common_events.json` and set its `trigger` to a list, for example `["on_step", "on_region_enter"]`.
+
+Example: a poison swampland. Paint region 4 over the marsh on the RPG tab's Regions, then make a common event with Trigger *Moment: enter a region*, *Region* 4:
+
+```
+◆ Text: The marsh air burns your lungs…
+◆ Change HP: entire party, −5
+◆ Play SE: poison
+```
+
 ## 6. Moving between maps in a cutscene
 
 **Transfer Player** with *Fade* set moves the player and fades on the way. To take other characters along, give them the same story switch as a page condition on the new map, or place them with **Set Event Location**.
@@ -98,7 +133,7 @@ Now any event can do `◆ Call Common Event: full_heal`. An item can run one too
 ## Try it yourself
 
 - Make the guard walk *with* the player to the castle: **Set Move Route** for both, without *Wait until done* on the first so they move together.
-- Start a rainstorm when the player enters the forest: a Parallel event that runs `Set Weather Effects: rain` and then **Erase Event** (so it only runs once per visit).
+- Start a rainstorm when the player enters the forest: a common event with Trigger *Moment: enter a map* and *Only map* the forest, that runs `Set Weather Effects: rain`. (The classic way still works: a Parallel event with a Condition switch, plus **Erase Event**.)
 - Show the map's name differently: **Change Map Name Display** turns the name box on and off.
 
 Next: [Lesson 6: The database](Lesson-6-The-Database.md).

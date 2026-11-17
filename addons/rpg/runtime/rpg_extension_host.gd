@@ -22,7 +22,9 @@ const LIFECYCLE := {
 	"battle_started": "on_battle_started", "battle_ended": "on_battle_ended",
 	"actor_levelled": "on_actor_levelled", "quitting": "on_quitting",
 	"message_opened": "on_message_opened", "message_char": "on_message_char", "message_closed": "on_message_closed",
-	"autosaved": "on_autosaved",
+	"autosaved": "on_autosaved", "game_over_started": "on_game_over_started",
+	"actor_state_changed": "on_actor_state_changed", "vehicle_entered": "on_vehicle_entered",
+	"vehicle_exited": "on_vehicle_exited",
 }
 ## Built-in main-menu commands (RPG Maker order); extension entries go before "options".
 const BUILTIN_MENU := ["item", "skill", "equip", "status", "options", "save", "game_end"]

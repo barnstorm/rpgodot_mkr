@@ -38,8 +38,12 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		if res == "hp" and RPGPartyUtil.get_res(b, "hp") <= 0 and b is Object and b.has_method("add_state"):
 			if ctx.rpg.rules is RPGRuleSystem:
 				ctx.rpg.rules.add_state(b, "knockout")
-			else:
+			elif not b.has_state("knockout"):
+				# The no-rules fallback of the knockout add (on_actor_ko, issue #52); the rule
+				# system's own add reports the change itself.
 				b.add_state("knockout")
+				if ctx.rpg.has_signal("actor_state_changed"):
+					ctx.rpg.actor_state_changed.emit(b, "knockout", true)
 		if str(pair[0]) != "":
 			ctx.state.notify_actor_changed(pair[0])
 	if enemy_side and ctx.battle != null and ctx.battle.valid():
