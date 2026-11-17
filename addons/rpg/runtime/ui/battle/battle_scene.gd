@@ -993,10 +993,21 @@ func _collapse(b: RPGBattler) -> void:
 	if not enemy_nodes.has(b):
 		return
 	var s: TextureRect = enemy_nodes[b]
-	var t := s.create_tween()
-	t.tween_property(s, "modulate", Color(1.6, 0.3, 0.3, 0.8), 0.12)
-	t.tween_property(s, "modulate", Color(1, 0.2, 0.2, 0.0), 0.35)
-	t.tween_callback(func(): s.visible = false)
+	match str(rules().collapse_kind(b) if rules() != null and rules().has_method("collapse_kind") else "normal"):
+		"none":
+			return
+		"instant":
+			s.visible = false
+		"boss":
+			var tb := s.create_tween()
+			tb.tween_property(s, "modulate", Color(2.2, 2.2, 2.2, 0.9), 0.15)
+			tb.tween_property(s, "modulate", Color(1, 1, 1, 0.0), 1.2)
+			tb.tween_callback(func(): s.visible = false)
+		_:
+			var t := s.create_tween()
+			t.tween_property(s, "modulate", Color(1.6, 0.3, 0.3, 0.8), 0.12)
+			t.tween_property(s, "modulate", Color(1, 0.2, 0.2, 0.0), 0.35)
+			t.tween_callback(func(): s.visible = false)
 
 
 func _update(delta: float) -> void:
@@ -1812,7 +1823,7 @@ func _show_actor_command(keep_cursor := false) -> void:
 	var b: RPGBattler = core.party[inputs[input_pos]]
 	_set_inputting(b)
 	var has_skills := false
-	for s in b.skills:
+	for s in (rules().known_skills(b) if rules() != null else b.skills):
 		if str(record("skills", str(s)).get("occasion", "always")) in BATTLE_OCCASIONS:
 			has_skills = true
 	cmd_list.set_items([
@@ -2050,7 +2061,7 @@ func _open_select(kind: String, b: RPGBattler, keep := false) -> void:
 	phase = kind
 	var items := []
 	if kind == "skill":
-		for s in b.skills:
+		for s in (rules().known_skills(b) if rules() != null else b.skills):
 			var rec := record("skills", str(s))
 			var cost: Dictionary = rec.get("cost", {})
 			var cost_text := ""

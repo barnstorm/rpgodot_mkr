@@ -56,18 +56,19 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 - HIT, EVA and CRI checks.
 - Class parameter curves (level 1 value, level 99 value and a growth shape).
 - The basis/extra/acceleration EXP curve.
-- Features: Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, and HP/MP Regen.
+- Features: Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Attack State, Attack Speed, Add/Seal Skill Type, Add/Seal Skill, Equip Weapon/Armor Type, Dual Wield, Seal Equip, Action Times+, Special Flags (Auto Battle, Guard, Substitute, Preserve TP), Collapse Effect, and HP/MP Regen.
 - Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.
 - Item and skill effects *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle).
 - MV/MZ scopes: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
 - The remaining Ex- and Sp-Parameters: *Counter Attack* and *Magic Reflection* in battle; *Target Rate*, *Guard Effect*, *Recovery Effect*, *Pharmacology*, *MP Cost Rate*, *Physical/Magic Damage Rate*, *Floor Damage* rate and *Experience* rate.
 - MV invocation fields: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss).
+- The rest of the Features: *Attack State* rides every normal attack, *Attack Speed* speeds them, *Add Skill* / *Seal Skill* change the skill list, *Equip Weapon/Armor Type* widen the class's equip lists, *Auto Battle* picks its own command, *Guard* halves damage without the command, *Substitute* covers a friend under a quarter of HP, and the *Collapse Effect* picks the death animation (normal, boss, instant, none).
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 
 With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace.
 
-Not covered yet: Special Flags; Fix Equip; and Attack State. Action Times+ repeats the same action.
+Not covered yet: Fix Equip. Action Times+ repeats the same action.
 
 ## Things still different
 

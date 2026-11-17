@@ -275,7 +275,7 @@ func inputs_needed() -> Array:
 		return out
 	for i in party.size():
 		var b: RPGBattler = party[i]
-		if b.is_active() and rules.can_act(b) and not _forced_next.has(b):
+		if b.is_active() and rules.can_act(b) and not _forced_next.has(b) and not _auto_battle(b):
 			out.append(i)
 	return out
 
@@ -297,7 +297,7 @@ func set_action(actor_index: int, action: Dictionary) -> bool:
 			if not can_escape:
 				return false
 		"skill":
-			if not b.skills.has(str(action.get("skill", ""))) or not rules.can_use(b, action):
+			if not rules.known_skills(b).has(str(action.get("skill", ""))) or not rules.can_use(b, action):
 				return false
 		"item":
 			if rules.resolve_action(b, action).is_empty():
@@ -447,7 +447,7 @@ func _build_queue() -> void:
 				a.action = _forced_next[a]
 				_forced_next.erase(a)
 			elif a.is_active() and rules.can_act(a) and a.action.is_empty():
-				a.action = {"kind": "attack", "target": -1}
+				a.action = _auto_battle_action(a) if _auto_battle(a) else {"kind": "attack", "target": -1}
 	var entries := []
 	var order := 0
 	for b in all_battlers():
@@ -749,6 +749,10 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 	var apply_one := func(t: RPGBattler) -> void:
 		if _counter_or_reflect(b, t, action, u, res):
 			return
+		var covered := _substitute_for(t, u)
+		if covered != t:
+			res.lines.append(rules.term("substitute", [covered.name, t.name]))
+			t = covered
 		var r := rules.apply_action(b, t, action)
 		res.effects.append({"target": t, "result": r})
 		res.lines.append_array(r.lines)
@@ -822,6 +826,61 @@ func _counter_or_reflect(user: RPGBattler, target: RPGBattler, action: Dictionar
 			res.lines.append_array(r.lines)
 			return true
 	return false
+
+
+## Whether `b` fights on its own (MV's Auto Battle special flag): it needs no command — its
+## action is chosen when its turn comes up.
+func _auto_battle(b: RPGBattler) -> bool:
+	return b != null and b.is_actor() and rules != null and rules.has_trait(b, "auto_battle")
+
+
+## MV's Auto Battle pick, used when an actor with the flag takes its turn: a usable recovery
+## skill is scored by the hurt it would mend (friends at half HP or below), an offensive one by
+## its formula against the first living foe — no variance, no criticals and, crucially, no draw
+## from the RNG, so a seeded battle plays out the same. Nothing scores above zero: a plain
+## attack, as MV falls back to.
+func _auto_battle_action(a: RPGBattler) -> Dictionary:
+	var foes: Array = active_enemies() if a.is_actor() else active_party()
+	var friends: Array = active_party() if a.is_actor() else active_enemies()
+	var foe: RPGBattler = foes[0] if not foes.is_empty() else null
+	var hurt: Array = friends.filter(func(f): return f.is_active() and _hp_percent(f) <= 50.0)
+	var best: Dictionary = {}
+	var best_score := 0
+	for sk in rules.known_skills(a):
+		var action := {"kind": "skill", "skill": sk, "target": -1}
+		if not rules.can_use(a, action):
+			continue
+		var u := rules.resolve_action(a, action)
+		if u.is_empty():
+			continue
+		var scope := str(u.get("scope", ""))
+		var score := 0
+		if scope.contains("enemy"):
+			if foe != null:
+				score = maxi(0, rules.formula_value(a, foe, action))
+		elif scope.contains("ally") and str(u.get("damage_type", "")) == "recover":
+			for f in hurt:
+				var missing: int = rules.max_resource(f, rules.life_resource()) - f.get_resource(rules.life_resource())
+				score += clampi(rules.formula_value(a, f, action), 0, missing)
+		if score > best_score:
+			best_score = score
+			best = action
+	return best if not best.is_empty() else {"kind": "attack", "target": -1}
+
+
+## MV's applySubstitute: a battler with the Substitute special flag covers a friend who is
+## dying (HP below a quarter) from a hit that is not certain — counterattacks and reflections
+## are settled first, then the covering battler takes the hit in the ally's place.
+func _substitute_for(target: RPGBattler, u: Dictionary) -> RPGBattler:
+	if str(u.get("hit_type", "certain")) == "certain" or not target.is_alive():
+		return target
+	if _hp_percent(target) >= 25.0:
+		return target
+	var side: Array = party if target.is_actor() else enemies
+	for m in side:
+		if m != target and m.is_active() and rules.can_act(m) and rules.has_trait(m, "substitute"):
+			return m
+	return target
 
 
 ## A random pick from `foes` as a 0-or-1-element list (MV's randomTarget): weighted by each
@@ -1079,7 +1138,8 @@ func atb_advance_to_next() -> void:
 
 ## True when actor `b` has a full gauge and waits for the player's command.
 func needs_input(b: RPGBattler) -> bool:
-	return b != null and b.is_actor() and ready_queue.has(b) and b.is_active() and rules.can_act(b) and b.action.is_empty() and not _forced_next.has(b)
+	return b != null and b.is_actor() and ready_queue.has(b) and b.is_active() and rules.can_act(b) \
+		and b.action.is_empty() and not _forced_next.has(b) and not _auto_battle(b)
 
 
 ## Full actors waiting for a command, in ready order.
@@ -1148,7 +1208,7 @@ func act(b: RPGBattler) -> Dictionary:
 		elif b.is_enemy():
 			b.action = choose_enemy_action(b)
 		elif b.action.is_empty():
-			b.action = {"kind": "attack", "target": -1}
+			b.action = _auto_battle_action(b) if _auto_battle(b) else {"kind": "attack", "target": -1}
 		if not _extra.has(b):
 			_extra[b] = 0 if str(b.action.get("kind", "")) == "escape" else maxi(1, rules.action_times(b)) - 1
 		res = _execute(b, given)
