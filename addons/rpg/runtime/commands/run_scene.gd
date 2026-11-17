@@ -13,6 +13,8 @@ static func descriptor() -> Dictionary:
 			{"key": "args", "kind": "object", "default": {}, "label": "Arguments", "fields": []},
 			{"key": "result", "kind": "ref", "ref": "variable", "default": "", "label": "Store result in"},
 			{"key": "timeout", "kind": "float", "default": 0.0, "min": 0.0, "max": 3600.0, "label": "Timeout (0 = none)"},
+			{"key": "pause_map", "kind": "bool", "default": true, "label": "Pause map",
+				"help": "Off for an overlay scene (a HUD) that runs on top of the live map"},
 			{"key": "on_cancel", "kind": "commands", "default": [], "label": "If cancelled"},
 		],
 	}
@@ -28,7 +30,7 @@ func child_lists(args: Dictionary) -> Array:
 
 func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var context := {"rpg": ctx.rpg, "state": ctx.state, "map_id": ctx.map_id(), "event_id": ctx.event_id()}
-	var r: Dictionary = await ctx.ui.run_contract_scene(str(args.scene), args.get("args", {}), context, ctx.token, float(args.get("timeout", 0.0)))
+	var r: Dictionary = await ctx.ui.run_contract_scene(str(args.scene), args.get("args", {}), context, ctx.token, float(args.get("timeout", 0.0)), bool(args.get("pause_map", true)))
 	match r.status:
 		"finished":
 			var var_id := str(args.get("result", ""))

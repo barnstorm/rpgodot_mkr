@@ -35,7 +35,7 @@ const PAGE_FIELDS := [
 		"help": "All conditions must be true for this page to be active. There is no limit."},
 	{"key": "graphic", "kind": "graphic", "default": null, "label": "Graphic"},
 	{"key": "movement", "kind": "object", "default": {"type": "fixed"}, "label": "Movement", "fields": [
-		{"key": "type", "kind": "choice", "options": ["fixed", "random", "approach", "custom"], "option_labels": ["Fixed", "Random", "Approach the player", "Custom route"], "default": "fixed", "label": "Type"},
+		{"key": "type", "kind": "choice", "options": ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"], "option_labels": ["Fixed", "Random", "Vertical", "Horizontal", "Approach the player", "Away from the player", "Custom route"], "default": "fixed", "label": "Type"},
 		{"key": "speed", "kind": "int", "default": 3, "min": 1, "max": 6, "label": "Speed (1-6)"},
 		{"key": "frequency", "kind": "int", "default": 3, "min": 1, "max": 5, "label": "Frequency (1-5)"},
 		{"key": "route", "kind": "route", "route_options": true, "default": null, "label": "Route", "show_if": {"key": "type", "equals": "custom"}},
@@ -45,6 +45,7 @@ const PAGE_FIELDS := [
 		{"key": "step_anim", "kind": "bool", "default": false, "label": "Stepping animation"},
 		{"key": "direction_fix", "kind": "bool", "default": false, "label": "Direction fix"},
 		{"key": "through", "kind": "bool", "default": false, "label": "Walk through"},
+		{"key": "forbid_overlap", "kind": "bool", "default": false, "label": "Forbid event overlap"},
 	]},
 	{"key": "priority", "kind": "choice", "options": ["below", "same", "above"], "option_labels": ["Below characters", "Same as characters", "Above characters"], "default": "same", "label": "Priority"},
 	{"key": "trigger", "kind": "choice", "options": ["action_button", "player_touch", "event_touch", "autorun", "parallel"], "option_labels": ["Action button", "Player touch", "Event touch", "Autorun", "Parallel"], "default": "action_button", "label": "Trigger"},

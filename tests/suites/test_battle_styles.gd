@@ -524,6 +524,30 @@ func test_states_that_skip_turns_still_work() -> void:
 	assert_false(r.ticks.is_empty(), "the state's end is reported with the turn")
 
 
+## #49: a state set to wear off at "action end" counts down right after its battler's action,
+## without waiting for the ATB turn to end.
+func test_action_end_states_wear_off_right_after_the_action() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	poison["turns_min"] = 1
+	poison["turns_max"] = 1
+	poison["auto_removal"] = "action_end"
+	var core := _core(["hero"], "slimes", "atb", 21)
+	var hero: RPGBattler = core.party[0]
+	assert_true(rules.add_state(hero, "poison"))
+	core.gauges[hero] = 0.99
+	for e in core.enemies:
+		core.gauges[e] = 0.0
+	core.begin_turn()
+	core.atb_advance_to_next()
+	assert_eq(core.ready_queue, [hero])
+	var r := core.act(hero)
+	assert_false(hero.has_state("poison"), "wears off right after the action")
+	var removed := []
+	for t in r.ticks:
+		removed.append_array(t.removed_states)
+	assert_eq(removed, ["poison"], "the wear-off is reported with the action")
+
+
 func test_atb_turn_counter_for_troop_pages() -> void:
 	var troop := {"id": "t", "can_escape": true, "members": [
 		{"enemy": "slime", "position": [100, 120]}, {"enemy": "bat", "position": [200, 120]}],
@@ -564,6 +588,44 @@ func test_atb_turn_counter_for_troop_pages() -> void:
 	assert_true(turns_seen >= 3, "several turns pass (%d)" % turns_seen)
 	assert_eq(page_turns, [2], "a 'turn 2' page runs once, in turn 2")
 	assert_eq(every_turns.slice(0, 3), [1, 2, 3], "an 'every turn' page runs once per turn")
+
+
+func test_turn_end_pages_in_timed_battles() -> void:
+	var troop := {"id": "t", "can_escape": true, "members": [
+		{"enemy": "slime", "position": [100, 120]}, {"enemy": "bat", "position": [200, 120]}],
+		"pages": [
+			{"id": "ends", "conditions": [{"kind": "turn_end"}], "span": "every_check", "commands": []},
+			{"id": "first", "conditions": [{"kind": "turn_end"}], "span": "once_per_battle", "commands": []}]}
+	for sys in ["atb", "ctb"]:
+		var core := _core(["hero", "mira"], troop, sys, 8)
+		var end_turns := []
+		var first_turns := []
+		core.checkpoint.connect(func(kind: String):
+			for p in core.eligible_battle_pages(kind):
+				if p.id == "ends":
+					end_turns.append(core.turn)
+				else:
+					first_turns.append(core.turn))
+		core.begin_turn()
+		var guard := 0
+		var turns_seen := 0
+		while core.battle_over() == "" and core.turn <= 3 and guard < 2000:
+			guard += 1
+			var b := core.next_auto_ready()
+			if b == null:
+				var a := core.next_input_actor()
+				if a != null:
+					core.set_action(core.party.find(a), {"kind": "guard"})
+					continue
+				core.atb_advance_to_next()
+				continue
+			var r := core.act(b)
+			if r.turn_end:
+				turns_seen += 1
+				core.begin_turn()
+		assert_eq(end_turns.slice(0, 3), [1, 2, 3], "%s: a turn end page runs when each turn ends" % sys)
+		assert_eq(first_turns, [1], "%s: a once-per-battle turn end page runs only after the first turn" % sys)
+		assert_true(turns_seen >= 3, "%s: several turns pass (%d)" % [sys, turns_seen])
 
 
 func test_ctb_turn_order_is_shown_and_kept() -> void:
@@ -915,11 +977,11 @@ func test_core_appear_brings_hidden_members_in() -> void:
 
 func test_core_appear_takes_back_a_win() -> void:
 	var core := _core(["hero"], _later_troop(), "turn", 4)
-	core.enemies[0].set_resource("hp", 0)
+	rules.add_state(core.enemies[0], "knockout")
 	assert_eq(core.battle_over(), "win", "every visible enemy has fallen")
 	assert_eq(core.appear(1).size(), 1)
 	assert_eq(core.battle_over(), "", "reinforcements: the battle goes on")
-	core.enemies[1].set_resource("hp", 0)
+	rules.add_state(core.enemies[1], "knockout")
 	assert_eq(core.battle_over(), "win")
 	assert_eq(int(core.rewards().exp), 12, "both slimes give their EXP")
 	# A result set from outside (abort battle) stays.
@@ -929,7 +991,7 @@ func test_core_appear_takes_back_a_win() -> void:
 	assert_eq(c2.battle_over(), "win", "a forced result is kept")
 	# A hidden member that never appears gives nothing.
 	var c3 := _core(["hero"], _later_troop(), "turn", 4)
-	c3.enemies[0].set_resource("hp", 0)
+	rules.add_state(c3.enemies[0], "knockout")
 	assert_eq(c3.battle_over(), "win")
 	assert_eq(int(c3.rewards().exp), 6, "only the slime that fought")
 

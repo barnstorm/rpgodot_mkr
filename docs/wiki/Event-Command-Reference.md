@@ -2,13 +2,14 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 81 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 88 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
 | Command | ID | Fields |
 | --- | --- | --- |
 | **Input Number** | `input_number` | Store in, Digits |
+| **Select Item** | `select_item` | Store in, Which items |
 | **Show Balloon Icon** | `show_balloon` | Character, Balloon, Wait until done |
 | **Show Choices** | `show_choices` | Choices, Cursor starts on, When cancelled, On cancel |
 | **Show Scrolling Text** | `show_scrolling_text` | Text, Speed, No fast forward |
@@ -20,22 +21,25 @@ There are 81 built-in commands. The *ID* is the command's `type` in the event JS
 | --- | --- | --- |
 | **Break Loop** | `break_loop` |  |
 | **Call Common Event** | `call_common_event` | Common event |
+| **Call Event** | `call_event` | Event (This event / Event ID / From a variable), Event ID, Holds the event's id, Page |
 | **Comment** | `comment` | Comment |
 | **Conditional Branch** | `if` | If, Then, Else |
+| **Despawn Event** | `despawn_event` | Event (an ID, this, or a variable holding an ID) |
 | **Erase Event** | `erase_event` |  |
 | **Exit Event Processing** | `exit_event` |  |
 | **Jump to Label** | `jump_to_label` | Label name |
 | **Label** | `label` | Label name |
 | **Loop** | `loop` | Repeat |
+| **Spawn Event** | `spawn_event` | Template event, Template map, Cell, Store its ID in |
 | **Wait** | `wait` | Seconds |
 
 ## Switches and variables
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Control Self Switch** | `set_self_switch` | Self switch, ON, Event (blank = this event) |
-| **Control Switch** | `set_switch` | Target (One switch / Range / Switch named by a variable), Switch or From/To or Variable, Set to |
-| **Control Variable** | `set_variable` | Target (One variable / Range / Variable named by a variable), Variable or From/To or Variable, Operation, Value |
+| **Control Self Switch** | `set_self_switch` | Action, Self switch, ON, Event (blank = this event), Map (blank = this map) |
+| **Control Switch** | `set_switch` | Switch, Set to |
+| **Control Variable** | `set_variable` | Target (One variable / Range / Indirect / Self variable), Variable, From, To, Holds the target's id, Name, Event (blank = this event), Map (blank = this map), Operation, Value |
 | **Get Location Info** | `get_location_info` | Store in, Info, Layer, X, Y |
 
 ## Party

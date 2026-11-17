@@ -300,6 +300,31 @@ func test_main_screen_menu_bar_drives_modes_tools_and_events() -> void:
 	await frames(1)
 
 
+## #73: the event list numbers the run order and Move up/down reorders the events file.
+func test_event_list_shows_run_order_and_moves_events() -> void:
+	var screen := RPGMainScreen.new()
+	screen.setup(null)
+	tree.root.add_child(screen)
+	await frames(2)
+	screen.open_map("town")
+	var path: String = screen.data.map_entry("town").events
+	var text := FileAccess.get_file_as_string(path)
+	assert_true(screen.event_list.item_count >= 2, "town has events")
+	assert_true(screen.event_list.get_item_text(0).begins_with("#1  "), "the first row is number one")
+	assert_true(screen.event_list.get_item_text(1).begins_with("#2  "), "rows are numbered in run order")
+	var second: String = str(screen.view.events()[1].id)
+	screen.view.select_event(second)
+	screen._move_event(-1)
+	assert_eq(str(screen.view.events()[0].id), second, "moved up a slot in the events file")
+	assert_eq(str(screen.event_list.get_item_metadata(0)), second, "the list follows")
+	assert_true(screen.event_list.get_item_text(0).begins_with("#1  "), "the list renumbers")
+	screen._move_event(1)
+	assert_eq(str(screen.view.events()[1].id), second, "moved back down")
+	assert_eq(FileAccess.get_file_as_string(path), text, "up then down leaves the events file as it was")
+	screen.queue_free()
+	await frames(1)
+
+
 func test_generate_dungeon_is_connected_and_undoable() -> void:
 	const DG := preload("res://addons/rpg/editor/map/rpg_dungeon_generator.gd")
 	var a: Dictionary = DG.generate(Vector2i(40, 30), 7)

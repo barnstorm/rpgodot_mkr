@@ -1,21 +1,28 @@
 class_name RPGMessageBox
 extends Control
-## Default message box: face, name, typewriter text with text codes, choices, number input and
-## a gold window. Replace it by pointing project.json "scenes.message_box" at a scene whose root
-## implements the same methods and signals.
+## Default message box: face, name, typewriter text with text codes, choices, number input, an
+## item picker and a gold window. Replace it by pointing project.json "scenes.message_box" at a
+## scene whose root implements the same methods and signals.
 ##
 ## Input as in RPG Maker MV: OK (or a click) while text types shows the rest of the page at once,
 ## the next one closes it, silently unless System "message_advance_sound" names a sound role.
-## Choices and the number dial repeat while a direction is held. Mouse: hover/click choices
-## (right click cancels when allowed); click a digit to select it, click it again above or below
-## its middle (or use the wheel) to change it, click elsewhere to enter the number.
+## RM2000/2003 Message Style lives here too: "don't cover the player" (avoid_player) moves a
+## top/bottom box to the other half of the screen, and "events continue" (events_continue) off
+## suspends the map while the pages show. Both per message and in System
+## (message_avoid_player / message_events_continue).
+## Choices, the number dial and the item picker repeat while a direction is held. Mouse:
+## hover/click choices (right click cancels when allowed); click a digit to select it, click it
+## again above or below its middle (or use the wheel) to change it, click elsewhere to enter the
+## number; the item picker works like the choice list.
 
 signal closed()
 signal choice_made(index: int)
 signal number_entered(value: int)
+signal item_selected(id: String)
 
 const BOX_H := 76
 const FACE := 48
+const ITEM_ROWS := 4
 const REPEAT_DELAY := 0.35
 const REPEAT_RATE := 0.08
 
@@ -26,20 +33,28 @@ var name_label: Label
 var text_label: RichTextLabel
 var choice_panel: Panel
 var choice_box: VBoxContainer
+var item_panel: Panel
+var item_box: VBoxContainer
 var number_label: Label
 var gold_panel: Panel
 var gold_label: Label
 var arrow: Label
 
-var mode := ""            # "", "text", "choices", "number"
+var mode := ""            # "", "text", "choices", "number", "items"
 var chars_per_sec := 40.0
 var _visible_f := 0.0
 var _waits: Array = []
 var _wait_left := 0.0
 var _await_key := false
 var _choices: Array = []
+## The params open_choices got, so labels re-expand with the same \E context.
+var _choice_info: Dictionary = {}
 var _choice_index := 0
 var _cancel_index := -1
+## The item picker's entries: [{id, name, count}], the cursor and the first row shown.
+var _items: Array = []
+var _item_index := 0
+var _item_page := 0
 var _digits := 1
 var _number := 0
 var _number_pos := 0
@@ -58,9 +73,15 @@ var _revealed := 0
 var _plain := ""
 ## Choices that can't be picked (Show Choices "enable" switch): index -> true.
 var _disabled: Dictionary = {}
-## Tests: when true, text closes at once and choices pick `auto_choice`.
+## Tests: when true, text closes at once, choices pick `auto_choice` and the item picker picks
+## `auto_item` (-1 cancels).
 var auto_advance := false
 var auto_choice := 0
+var auto_item := 0
+## RM2000/2003 Message Style: while a message's pages show with "events continue" off (the
+## default), the scheduler holds a scene pause — wandering NPCs stop and parallel events sleep
+## until the last page closes.
+var _holds_pause := false
 
 
 func _init() -> void:
@@ -105,6 +126,13 @@ func _ready() -> void:
 	choice_box.position = Vector2(8, 6)
 	choice_box.add_theme_constant_override("separation", 0)
 	choice_panel.add_child(choice_box)
+	item_panel = Panel.new()
+	item_panel.visible = false
+	add_child(item_panel)
+	item_box = VBoxContainer.new()
+	item_box.position = Vector2(8, 6)
+	item_box.add_theme_constant_override("separation", 0)
+	item_panel.add_child(item_box)
 	number_label = Label.new()
 	number_label.visible = false
 	number_label.add_theme_font_size_override("font_size", 14)
@@ -131,6 +159,7 @@ func is_open() -> bool:
 ## background (window|dim|transparent), gold_window (bool).
 func open_text(params: Dictionary) -> void:
 	_layout(params)
+	_set_map_pause(not _events_continue(params))
 	var parsed := RPGText.expand(str(params.get("text", "")), rpg, {"params": params})
 	text_label.text = parsed.bbcode
 	text_label.visible_characters = 0
@@ -176,6 +205,12 @@ func _reveal_to(count: int, instant: bool) -> void:
 
 func _layout(params: Dictionary) -> void:
 	var pos: String = params.get("position", "bottom")
+	# RM2000/2003's Prevent Hero Hiding: a top or bottom box moves to the other half of the screen
+	# when the player stands in its half. A middle box stays where it is.
+	if _avoid_player(params) and (pos == "top" or pos == "bottom"):
+		var py := _player_screen_y()
+		if py >= 0.0 and (py < 120.0) == (pos == "top"):
+			pos = "bottom" if pos == "top" else "top"
 	var y := 240 - BOX_H
 	if pos == "top":
 		y = 0
@@ -216,11 +251,65 @@ func _update_gold() -> void:
 		gold_label.text = "%d %s" % [rpg.state.gold, rpg.data.currency()]
 
 
+# --- message style (RM2000/2003 Message Style) -------------------------------------------------
+
+
+## The effective "don't cover the player": the message's choice, or the System default.
+func _avoid_player(params: Dictionary) -> bool:
+	var v := str(params.get("avoid_player", "keep"))
+	if v == "on" or v == "off":
+		return v == "on"
+	return _system_style("message_avoid_player", false)
+
+
+## The effective "events continue": the message's choice, or the System default. While pages show
+## with this off, the map is suspended (RM2000/2003's "Allow events to continue", unchecked by
+## default): autonomous movement stops and parallel events sleep. The message's own event chain
+## and the main queue keep running.
+func _events_continue(params: Dictionary) -> bool:
+	var v := str(params.get("events_continue", "keep"))
+	if v == "on" or v == "off":
+		return v == "on"
+	return _system_style("message_events_continue", false)
+
+
+func _system_style(key: String, fallback: bool) -> bool:
+	if rpg == null or rpg.get("data") == null:
+		return fallback
+	return bool(rpg.data.system.get(key, fallback))
+
+
+## Holds or releases the map suspension for the message (idempotent, also on a swapped box scene).
+func _set_map_pause(on: bool) -> void:
+	if on == _holds_pause:
+		return
+	if rpg == null or rpg.get("scheduler") == null:
+		_holds_pause = on
+		return
+	_holds_pause = on
+	if on:
+		rpg.scheduler.suspend_map("message")
+	else:
+		rpg.scheduler.resume_map("message")
+
+
+## The player's Y on the 320x240 screen, or -1 when no game is running.
+func _player_screen_y() -> float:
+	var game: Node = rpg.get("game") if rpg != null else null
+	if game == null or not ("map" in game) or game.map == null:
+		return -1.0
+	var p: Node = game.map.player
+	if p == null or not is_instance_valid(p):
+		return -1.0
+	return p.get_global_transform_with_canvas().origin.y
+
+
 ## Shows choices (the message box may stay open above them). Emits choice_made(index), or
 ## choice_made(cancel_index) on cancel when cancel_index >= 0. params.disabled: indices shown
 ## greyed out that buzz instead of being picked.
 func open_choices(labels: Array, params: Dictionary = {}) -> void:
 	_choices = labels
+	_choice_info = {"params": params}
 	_choice_index = clampi(int(params.get("default", 0)), 0, maxi(labels.size() - 1, 0))
 	_cancel_index = int(params.get("cancel_index", -1))
 	_disabled.clear()
@@ -232,7 +321,7 @@ func open_choices(labels: Array, params: Dictionary = {}) -> void:
 	var w := 60.0
 	for l in labels:
 		var lab := Label.new()
-		lab.text = "  " + RPGText.expand_plain(str(l), rpg)
+		lab.text = "  " + RPGText.expand_plain(str(l), rpg, _choice_info)
 		lab.add_theme_font_size_override("font_size", 11)
 		choice_box.add_child(lab)
 		w = maxf(w, 12 + lab.text.length() * 6.5)
@@ -255,7 +344,7 @@ func _refresh_choice_cursor() -> void:
 	var i := 0
 	for c in choice_box.get_children():
 		if c is Label:
-			c.text = ("▶ " if i == _choice_index else "  ") + RPGText.expand_plain(str(_choices[i]), rpg)
+			c.text = ("▶ " if i == _choice_index else "  ") + RPGText.expand_plain(str(_choices[i]), rpg, _choice_info)
 			c.modulate = Color(1, 1, 0.6) if i == _choice_index else Color.WHITE
 			if _disabled.has(i):
 				c.modulate = Color(0.6, 0.6, 0.65, 0.9) if i == _choice_index else Color(0.55, 0.55, 0.6, 0.7)
@@ -298,8 +387,10 @@ func force_close() -> void:
 	mode = ""
 	visible = false
 	choice_panel.visible = false
+	item_panel.visible = false
 	number_label.visible = false
 	gold_panel.visible = false
+	_set_map_pause(false)
 
 
 ## Hides the text window but keeps the box alive (between consecutive messages).
@@ -322,6 +413,8 @@ func _process(delta: float) -> void:
 			_process_choices(delta)
 		"number":
 			_process_number(delta)
+		"items":
+			_process_items(delta)
 	_clicked = false
 
 
@@ -376,6 +469,7 @@ func _finish_text() -> void:
 	_reveal_to(text_label.get_total_character_count(), true)
 	text_label.visible_characters = -1
 	mode = ""
+	_set_map_pause(false)
 	closed_frame = Engine.get_process_frames()
 	var se := advance_sound()
 	if se != "":
@@ -475,6 +569,106 @@ func move_digit(d: int) -> void:
 	_refresh_number()
 
 
+# --- item picker ------------------------------------------------------------------------------
+
+
+## Shows the party's items to pick one (Select Item), like the choice window: above the message
+## box when there is room, below otherwise, at the right edge. entries: [{id, name, count}].
+## Emits item_selected(id), or item_selected("") when the player cancels.
+func open_items(entries: Array) -> void:
+	_items = entries
+	_item_index = 0
+	_item_page = 0
+	var h := 12 + ITEM_ROWS * 15
+	item_panel.size = Vector2(168, h)
+	var base_y := panel.position.y if panel.visible else 240
+	item_panel.position = Vector2(320 - item_panel.size.x - 4, base_y - h - 2)
+	if item_panel.position.y < 0:
+		item_panel.position.y = panel.position.y + BOX_H + 2 if panel.visible else 240 - h
+	item_panel.visible = true
+	visible = true
+	mode = "items"
+	_held.clear()
+	_refresh_items()
+	if auto_advance:
+		var pick := -1  # an empty list can only be cancelled
+		if auto_item >= 0 and not _items.is_empty():
+			pick = clampi(auto_item, 0, _items.size() - 1)
+		_pick_item.call_deferred(pick)
+
+
+## Rebuilds the visible page of rows (name left, ×count right when there is more than one).
+func _refresh_items() -> void:
+	for c in item_box.get_children():
+		item_box.remove_child(c)  # out now: queue_free alone leaves it a child until the frame ends
+		c.queue_free()
+	var start := _item_page * ITEM_ROWS
+	for i in range(start, mini(start + ITEM_ROWS, _items.size())):
+		var it: Dictionary = _items[i]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name := Label.new()
+		name.text = ("▶ " if i == _item_index else "  ") + str(it.get("name", it.get("id", "")))
+		name.add_theme_font_size_override("font_size", 11)
+		row.add_child(name)
+		if int(it.get("count", 1)) > 1:
+			var spacer := Control.new()
+			spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(spacer)
+			var n := Label.new()
+			n.text = "×%d" % int(it.count)
+			n.add_theme_font_size_override("font_size", 11)
+			row.add_child(n)
+		row.modulate = Color(1, 1, 0.6) if i == _item_index else Color.WHITE
+		item_box.add_child(row)
+
+
+func _process_items(delta: float) -> void:
+	if _repeat("rpg_down", delta):
+		_move_item(1)
+	elif _repeat("rpg_up", delta):
+		_move_item(-1)
+	elif Input.is_action_just_pressed("rpg_ok"):
+		if _items.is_empty():
+			_play("buzzer")
+		else:
+			_play("decision")
+			_pick_item(_item_index)
+	elif Input.is_action_just_pressed("rpg_cancel"):
+		_play("cancel")
+		_pick_item(-1)
+
+
+func _move_item(d: int) -> void:
+	if _items.is_empty():
+		return
+	_item_index = posmod(_item_index + d, _items.size())
+	_item_page = _item_index / ITEM_ROWS
+	_play("cursor")
+	_refresh_items()
+
+
+## Picks entry `i`, or cancels when i < 0.
+func _pick_item(i: int) -> void:
+	mode = ""
+	closed_frame = Engine.get_process_frames()
+	item_panel.visible = false
+	item_selected.emit("" if i < 0 else str(_items[i].get("id", "")))
+
+
+## Index (in the whole list) of the picker row under `pos`, or -1.
+func _item_at(pos: Vector2) -> int:
+	var page_i := _item_page * ITEM_ROWS
+	for c in item_box.get_children():
+		if c is HBoxContainer:
+			var r := _local_rect(c, Rect2(Vector2.ZERO, c.size))
+			r.size.x = maxf(r.size.x, item_panel.size.x - 16)
+			if r.has_point(pos):
+				return page_i
+			page_i += 1
+	return -1
+
+
 # --- mouse ---------------------------------------------------------------------------------
 
 func _pointer_enabled() -> bool:
@@ -518,6 +712,29 @@ func pointer_event(ev: InputEvent) -> void:
 				_pick(_cancel_index)
 			elif button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
 				_move_choice(-1 if button == MOUSE_BUTTON_WHEEL_UP else 1)
+		"items":
+			var i := _item_at(ev.position)
+			if ev is InputEventMouseMotion:
+				if i >= 0 and i != _item_index:
+					_move_item(i - _item_index)
+			elif button == MOUSE_BUTTON_LEFT:
+				if i >= 0:
+					if i == _item_index:
+						if _items.is_empty():
+							_play("buzzer")
+						else:
+							_play("decision")
+							_pick_item(i)
+					else:
+						_move_item(i - _item_index)
+				elif _items.is_empty():
+					_play("cancel")
+					_pick_item(-1)
+			elif button == MOUSE_BUTTON_RIGHT:
+				_play("cancel")
+				_pick_item(-1)
+			elif button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
+				_move_item(-1 if button == MOUSE_BUTTON_WHEEL_UP else 1)
 		"number":
 			if button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
 				change_digit(1 if button == MOUSE_BUTTON_WHEEL_UP else -1)

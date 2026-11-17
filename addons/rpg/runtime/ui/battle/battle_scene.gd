@@ -212,7 +212,7 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 		rpg.state.change_items(id, "decrease", 1)
 		return true
 	core.item_refund = func(id: String) -> void: rpg.state.change_items(id, "increase", 1)
-	core.note_use = func(what: Dictionary): rpg.state.note_use(what)
+	core.last_used_recorder = func(d: Dictionary) -> void: rpg.state.record_last_used(d)
 	core.switch_reader = func(id: String) -> bool: return rpg.state.get_switch(id)
 	core.switch_setter = func(id: String, value: bool) -> void: rpg.state.set_switch(id, value)
 	core.condition_reader = extension_condition
@@ -1153,20 +1153,15 @@ func _run() -> void:
 					await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 				if not is_inside_tree():
 					return
+			# States that wear off at the battler's action end (MV's Action End timing).
+			await _show_ticks(r.get("ticks", []))
 			await _flush_checkpoints()
 			if r.escaped or core.battle_over() != "":
 				break
 			r = core.next_action()
 		if core.battle_over() != "":
 			break
-		for t in core.end_turn():
-			for l in t.lines:
-				await say(l, 0.45)
-			if int(t.get("damage", 0)) > 0:
-				popup(t.battler, str(t.damage), Color.WHITE, "slip")
-			if t.get("knocked_out", false) and t.battler.is_enemy():
-				_collapse(t.battler)
-			_refresh_status()
+		await _show_ticks(core.end_turn())
 		await _flush_checkpoints()
 		_refresh_status()
 		log_win.visible = false
@@ -1174,6 +1169,18 @@ func _run() -> void:
 			await get_tree().process_frame
 	outcome = core.battle_over()
 	await _end_battle()
+
+
+## Shows end-of-action / end-of-turn state effects (slip damage, states wearing off, a knockout).
+func _show_ticks(ticks: Array) -> void:
+	for t in ticks:
+		for l in t.lines:
+			await say(l, 0.45)
+		if int(t.get("damage", 0)) > 0:
+			popup(t.battler, str(t.damage), Color.WHITE, "slip")
+		if t.get("knocked_out", false) and t.battler.is_enemy():
+			_collapse(t.battler)
+	_refresh_status()
 
 
 ## A battle term from the rule system (Terms record "battle_<key>"), or `fallback` when the
@@ -1260,14 +1267,7 @@ func _timed_turn(b: RPGBattler) -> void:
 			await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 		if not is_inside_tree():
 			return
-	for t in r.get("ticks", []):
-		for l in t.lines:
-			await say(l, 0.45)
-		if int(t.get("damage", 0)) > 0:
-			popup(t.battler, str(t.damage), Color.WHITE, "slip")
-		if t.get("knocked_out", false) and t.battler.is_enemy():
-			_collapse(t.battler)
-	_refresh_status()
+	await _show_ticks(r.get("ticks", []))
 	await _flush_checkpoints()
 	if r.get("turn_end", false) and core.battle_over() == "":
 		core.begin_turn()

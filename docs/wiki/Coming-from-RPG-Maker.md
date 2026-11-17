@@ -34,18 +34,23 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Switch/Variable 0001 | Named switches and variables, e.g. `talked_to_king` |
 | `\V[1]`, `\N[1]` | `\V[talked_count]`, `\N[hero]` (an ID instead of a number) |
 | `\I[n]` (VX/MV message icon), the Icon field of items, skills and states | The same: `\I[64]` and the **Icon** field (a grid of the icon sheet, searchable by name). The starter icons are the kit's own (CC0), so their numbers differ from RPG Maker's IconSet |
-| Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch |
+| Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch — and they reach further: a self switch can be set on any event on any map (and reset per event or per map), and events have **self variables** (Control Variable's *Self variable* target, `\E[name]` in text) |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
+| Select Item (VX Ace/MV/MZ) | Select Item: key items, regular items or both; the chosen id lands in a text variable (ids are names, so 0/"none" on cancel) |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |
 | Label, Jump to Label | The same (*flow* category) |
+| Call Event (RM2000/2003) | **Call Event** runs a map event's page inline — this event, by ID, or the ID from a variable; the page's self switches belong to the called event. The common-event tab is **Call Common Event** |
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
 | Change Transparency, Change Map Name Display, Change Tileset, Change Parallax, Change Battle Back | The same commands |
 | Change Battle BGM, Change Victory ME, Stop SE, Change Window Skin, Get Location Info | The same commands |
 | Control Variables: Game Data / Random | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats) or **Random** |
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
+| Conditional Branch: the actor's HP / MP / level | Condition kind **Actor**: level, HP or SP (SP is MP), as a value or a percentage of the max, with any comparison |
+| Conditional Branch: Script (VX Ace/MV/MZ) | Condition kind **Formula**: the kit's formula language, e.g. `v.treasures >= 3` (no Ruby/JavaScript) |
+| Conditional Branch: what started the event / collision checks | **Started by** (action button, a touch, autorun, parallel, Call Event) and **Can pass** (a character can step N cells a direction), branch-only kinds |
 | Troops: Autoname | **Autoname** on the Enemy groups tab |
 | Actor Description, Status screen | Actor **Description**; on the Status screen, OK shows it |
 | Class parameter curves | Classes: each stat is **Per level** or **Curve** (level 1 / level 99 values and a shape), with a graph |
