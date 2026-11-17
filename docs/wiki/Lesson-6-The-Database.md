@@ -24,7 +24,7 @@ The stats you see (HP, SP, Strength…) come from the project's **rule system**.
 | --- | --- |
 | **Actors** | The heroes: name, nickname, description, class, starting and max level, walk sprite, face, battler and side-view battler, starting equipment, extra skills, stat bonuses, traits |
 | **Classes** | EXP curve, stat growth (per level, or a curve with a graph), skills learned at each level, which weapon and armour types can be equipped, traits |
-| **Skills** | Icon, skill type, cost, target, where it can be used, damage type, element, damage formula, hit %, variance, criticals, animation, battle message, effects |
+| **Skills** | Icon, skill type, cost, target, where it can be used, damage type, element, damage formula, hit %, variance, criticals, speed, repeats, TP gain (VX Ace/MV), animation, battle message, effects |
 | **Items** | Icon, price, consumed or not, key item, target, where it can be used, animation, effects |
 | **Weapons**, **Armour** | Icon, type (and slot for armour), price, stat changes, animation (weapons), traits |
 | **Enemies** | Battler picture and hue, level, stats, EXP, gold, item drops, action patterns, traits |
@@ -61,7 +61,7 @@ A class decides how its actors grow. Each stat is either **Per level** (a number
 3. **Price**: 150. **Consumed when used**: on. **Target**: one ally. **Usable**: always (menu and battle).
 4. **Effects**: change the *recover* effect to a bigger amount.
 
-Effects can recover HP or SP, deal damage, add or remove a state, raise a stat permanently (*grow*), teach a skill, or run a **common event**.
+Effects can recover HP or SP, deal damage, add or remove a state, raise a stat permanently (*grow*), teach a skill, grant TP (*Gain TP*), make the target leave the battle (*Special Effect: Escape* — whoever it hits is out of the fight, alone), or run a **common event**.
 
 ## 4. A spell
 
@@ -72,6 +72,8 @@ Effects can recover HP or SP, deal damage, add or remove a state, raise a stat p
 3. **Damage type**: *damage* (the others are *none*, *recover* and *drain*), **Affects**: HP. **Damage formula**: for example `a.int * 2 + 30 - b.mdef / 2`, where `a` is the user and `b` the target (the sample's *Fire* skill uses `a.int * 2 + 12 - b.mdef / 2`). Formulas use a small, safe expression language; they can't run arbitrary code.
 4. **Battle animation**: an animation, or one of the built-in effects (slash, fire, ice, thunder, heal, hit).
 5. Add the skill to a class's **Skills learned** at level 3.
+
+**Target** goes further than one/all: *N random enemies* (MV's multi-hit random scope — each of the 1-4 hits re-picks whoever is still standing, so one enemy can be struck twice), the *(dead or alive)* ally scopes that reach a fallen friend (a revive item), and *Everyone*, both sides at once.
 
 ## 5. Icons
 

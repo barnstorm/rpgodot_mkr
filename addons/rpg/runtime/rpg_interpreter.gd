@@ -41,6 +41,10 @@ var call_chain: Array[String] = []
 ## a battle suspends the map (RPG Maker's map scene), resuming at the same command when it closes.
 ## Main interpreters never sleep (the one that opened the screen is waiting on it).
 var suspends_with_map := false
+## True while this interpreter's parallel task is paused (its condition switch went off under the
+## classic rules): it sleeps at its current command until the flag clears, keeping its whole run
+## so it carries on at that command when the switch returns (RM2000/2003 behaviour).
+var paused := false
 
 var _frame := -1
 var _count := 0
@@ -189,10 +193,23 @@ func execute(cmd_data: Dictionary) -> RPGResult:
 		var why := registry.unavailable_reason(type)
 		return _fail("Unknown or unavailable command '%s'%s." % [type, (": " + why) if why != "" else ""])
 	var args := cmd.with_defaults(cmd_data)
+	# A pending page refresh runs before the commands that read the map's live state, so "turn on
+	# the switch, then move that event" acts on the new page within one list: under the classic
+	# rules before every command (RM2000/2003), MV-style only before Set Move Route. The per-frame
+	# refresh stays.
+	if rpg.refresh_pending() and (type == "move_route" or not _vx_ace_style_rules()):
+		rpg.process_refresh()
 	var r: Variant = await cmd.run(ctx, args)
 	if r is RPGResult:
 		return r
 	return RPGResult.ok(r)
+
+
+## True under the VX Ace style rules, whose event timing follows the newer RPG Makers (pages
+## refresh before Set Move Route only); the classic rules refresh before every command, as
+## RM2000/2003 do.
+func _vx_ace_style_rules() -> bool:
+	return str(rpg.data.project.get("rules", "classic")) == "vx_ace"
 
 
 ## The command after the current one in the innermost list (skipped lines ignored), or {}.
@@ -225,10 +242,10 @@ func _spend_budget() -> void:
 		_count = 1
 
 
-## A parallel sleeps here while a menu, shop, save screen or battle suspends the map, and
-## resumes at this exact command when the screen closes.
+## A parallel sleeps here while a menu, shop, save screen or battle suspends the map, or while its
+## task is paused, and resumes at this exact command when the screen closes or it is un-paused.
 func _sleep_while_suspended() -> void:
-	while rpg.scheduler.map_suspended() and not token.is_cancelled:
+	while (rpg.scheduler.map_suspended() or paused) and not token.is_cancelled:
 		await rpg.get_tree().process_frame
 
 

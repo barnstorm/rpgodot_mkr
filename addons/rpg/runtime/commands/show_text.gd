@@ -10,6 +10,8 @@ static func descriptor() -> Dictionary:
 			{"key": "name", "kind": "text", "label": "Speaker name", "default": ""},
 			{"key": "text", "kind": "multiline", "label": "Text", "default": "", "required": true, "help": "Codes: \\V[id] variable, \\N[actor] name, \\G currency, \\E[name] self variable, \\C[n] colour, \\. and \\| wait"},
 			{"key": "position", "kind": "choice", "options": ["bottom", "middle", "top"], "default": "bottom", "label": "Position"},
+			{"key": "avoid_player", "kind": "choice", "options": ["keep", "on", "off"], "option_labels": ["Keep (System)", "Never cover the player", "Stay put"], "default": "keep", "label": "Don't cover the player", "help": "RM2000/2003's Prevent Hero Hiding: a top or bottom box moves to the other half of the screen when the player stands in its half"},
+			{"key": "events_continue", "kind": "choice", "options": ["keep", "on", "off"], "option_labels": ["Keep (System)", "Events keep running", "Events pause"], "default": "keep", "label": "Other events during the message", "help": "RM2000/2003's Allow events to continue: with it off, wandering NPCs stop and parallel events sleep while the pages show"},
 			{"key": "background", "kind": "choice", "options": ["window", "dim", "transparent"], "default": "window", "label": "Background"},
 			{"key": "gold_window", "kind": "bool", "default": false, "label": "Show gold window"},
 		],

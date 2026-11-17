@@ -57,12 +57,16 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 - Class parameter curves (level 1 value, level 99 value and a growth shape).
 - The basis/extra/acceleration EXP curve.
 - Features: Element Rate, State Rate, Ex-Parameters, Add/Seal Skill Type, Dual Wield, Seal Equip, Action Times+, and HP/MP Regen.
+- Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.
+- Item and skill effects *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle).
+- MV/MZ scopes: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
+- MV invocation fields: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss).
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 
 With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace.
 
-Not covered yet: Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags; Party Abilities; Fix Equip; and Attack State. Action Times+ repeats the same action.
+Not covered yet: Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags; Fix Equip; and Attack State. Action Times+ repeats the same action.
 
 ## Things still different
 

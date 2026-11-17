@@ -300,6 +300,31 @@ func test_main_screen_menu_bar_drives_modes_tools_and_events() -> void:
 	await frames(1)
 
 
+## #73: the event list numbers the run order and Move up/down reorders the events file.
+func test_event_list_shows_run_order_and_moves_events() -> void:
+	var screen := RPGMainScreen.new()
+	screen.setup(null)
+	tree.root.add_child(screen)
+	await frames(2)
+	screen.open_map("town")
+	var path: String = screen.data.map_entry("town").events
+	var text := FileAccess.get_file_as_string(path)
+	assert_true(screen.event_list.item_count >= 2, "town has events")
+	assert_true(screen.event_list.get_item_text(0).begins_with("#1  "), "the first row is number one")
+	assert_true(screen.event_list.get_item_text(1).begins_with("#2  "), "rows are numbered in run order")
+	var second: String = str(screen.view.events()[1].id)
+	screen.view.select_event(second)
+	screen._move_event(-1)
+	assert_eq(str(screen.view.events()[0].id), second, "moved up a slot in the events file")
+	assert_eq(str(screen.event_list.get_item_metadata(0)), second, "the list follows")
+	assert_true(screen.event_list.get_item_text(0).begins_with("#1  "), "the list renumbers")
+	screen._move_event(1)
+	assert_eq(str(screen.view.events()[1].id), second, "moved back down")
+	assert_eq(FileAccess.get_file_as_string(path), text, "up then down leaves the events file as it was")
+	screen.queue_free()
+	await frames(1)
+
+
 func test_generate_dungeon_is_connected_and_undoable() -> void:
 	const DG := preload("res://addons/rpg/editor/map/rpg_dungeon_generator.gd")
 	var a: Dictionary = DG.generate(Vector2i(40, 30), 7)
@@ -353,6 +378,37 @@ func test_new_child_map_inherits_parent_settings_and_sound_choices() -> void:
 	assert_eq(RPGMapPropertiesDialog._sound_value(RPGMapPropertiesDialog.STOP), {"file": ""}, "stop = empty file")
 	assert_eq(RPGMapPropertiesDialog._sound_choice({"file": ""}), RPGMapPropertiesDialog.STOP)
 	assert_eq(RPGMapPropertiesDialog._sound_choice(null), RPGMapPropertiesDialog.KEEP)
+	await frames(1)
+
+
+## A map can override the System's battle start chances (#39): the dialog shows them, OK saves
+## them back, and encounter keys the dialog does not edit (region overrides) survive.
+func test_map_properties_battle_start_odds() -> void:
+	var dlg := RPGMapPropertiesDialog.new()
+	dlg.data = data
+	dlg.map_id = "meadow"
+	dlg.props = data.map_props("meadow").duplicate(true)
+	dlg.props["encounters"] = {"steps": 30, "groups": [], "start_odds": {"back_attack": 25}, "start_odds_regions": [{"regions": [3], "odds": {"pincer": 100}}]}
+	tree.root.add_child(dlg)
+	await frames(1)
+	assert_true(dlg._f.enc_odds_on.button_pressed, "the override checkbox is on for a map with chances")
+	assert_eq(int(dlg._f.enc_odds_back_attack.value), 25, "the chance is shown")
+	assert_eq(int(dlg._f.enc_odds_pincer.value), 0, "the others default to 0")
+	assert_true(dlg._f.enc_odds_initiative.editable, "the spins follow the checkbox")
+	dlg._f.enc_odds_surround.value = 10
+	var got := []
+	dlg.saved.connect(func(_id, props, _n): got.append(props))
+	dlg._on_ok()
+	assert_eq(got.size(), 1)
+	var enc: Dictionary = got[0].get("encounters", {})
+	assert_eq(enc.get("start_odds"), {"back_attack": 25, "surround": 10}, "the chances are saved")
+	assert_eq(enc.get("start_odds_regions"), [{"regions": [3], "odds": {"pincer": 100}}], "the region overrides survive")
+	# Off: no override is written, even with values in the spins.
+	dlg._f.enc_odds_on.button_pressed = false
+	assert_false(dlg._f.enc_odds_initiative.editable, "the spins lock when it is off")
+	dlg._on_ok()
+	assert_false(got[1].get("encounters", {}).has("start_odds"), "the override is dropped when off")
+	dlg.queue_free()
 	await frames(1)
 
 

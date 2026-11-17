@@ -212,11 +212,12 @@ func check_move(ch: Node, from: Vector2i, dir: Vector2i) -> String:
 
 
 ## Occupied: the cell holds (or is reserved by) the player, a follower, or an event whose
-## priority is "same as characters". Below/above events never block.
+## priority is "same as characters". Below/above events never block — unless the mover carries
+## RM2003's Forbid Event Overlap page option, which also keeps other events on its own layer out.
 func is_occupied(cell: Vector2i, except: Node = null) -> bool:
 	var c := normalize(cell)
 	if except != null and except.priority != "same":
-		return false
+		return "forbid_overlap" in except and bool(except.forbid_overlap) and _overlap_event_at(c, except)
 	var r: Node = reservations.get(c)
 	if r != null and r != except and is_instance_valid(r) and r.blocks():
 		return true
@@ -228,6 +229,28 @@ func is_occupied(cell: Vector2i, except: Node = null) -> bool:
 		if other.cell == c:
 			return true
 	return false
+
+
+## Forbid Event Overlap: another event stands on (or is stepping into) `c` on the mover's own
+## layer. Unlike blocks(), this looks at below/above events too — but only events: the player
+## and vehicles never block a below/above mover.
+func _overlap_event_at(c: Vector2i, mover: Node) -> bool:
+	var r: Node = reservations.get(c)
+	if r != null and r != mover and is_instance_valid(r) and _same_layer_event(r, mover):
+		return true
+	for other in map.characters():
+		if other == mover or not is_instance_valid(other):
+			continue
+		if _same_layer_event(other, mover) and other.cell == c:
+			return true
+	return false
+
+
+## An event with an active page on the mover's layer that is really there (not through, hidden
+## or without a page). For "same"-priority events this matches blocks().
+func _same_layer_event(ch: Node, mover: Node) -> bool:
+	return "event_id" in ch and str(ch.priority) == str(mover.priority) \
+		and ch.page_index >= 0 and not ch.through and not ch.is_hidden and ch.visible
 
 
 func occupant(cell: Vector2i, except: Node = null) -> Node:
@@ -246,6 +269,37 @@ func release(ch: Node, cell: Vector2i) -> void:
 	var c := normalize(cell)
 	if reservations.get(c) == ch:
 		reservations.erase(c)
+
+
+## Shortest way from `from` to `to` as a list of cells (excluding `from`, ending at `to`), four
+## directions, tile passability only — the way around characters is left to the step retries.
+## Breadth-first: on a uniform grid the first way found is a shortest one. Empty when there is
+## none (walled in, or the goal off the map).
+func path(from: Vector2i, to: Vector2i) -> Array:
+	var start := normalize(from)
+	var goal := normalize(to)
+	if start == Vector2i(-1, -1) or goal == Vector2i(-1, -1) or start == goal:
+		return []
+	var came := {start: start}
+	var queue: Array = [start]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		for d in DIRS:
+			var n: Vector2i = c + DIRS[d]
+			if not in_bounds(n) or came.has(n):
+				continue
+			if (passage(c) & BIT[d]) == 0 or (passage(n) & BIT[OPPOSITE[d]]) == 0:
+				continue
+			came[n] = c
+			if n == goal:
+				var out: Array = []
+				var p: Vector2i = n
+				while p != start:
+					out.push_front(p)
+					p = came[p]
+				return out
+			queue.append(n)
+	return []
 
 
 ## Nearest free cell within `max_dist` (for transfers that opt in to a fallback).

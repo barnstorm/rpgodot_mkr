@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 81 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 90 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -24,11 +24,13 @@ There are 81 built-in commands. The *ID* is the command's `type` in the event JS
 | **Call Event** | `call_event` | Event (This event / Event ID / From a variable), Event ID, Holds the event's id, Page |
 | **Comment** | `comment` | Comment |
 | **Conditional Branch** | `if` | If, Then, Else |
+| **Despawn Event** | `despawn_event` | Event (an ID, this, or a variable holding an ID) |
 | **Erase Event** | `erase_event` |  |
 | **Exit Event Processing** | `exit_event` |  |
 | **Jump to Label** | `jump_to_label` | Label name |
 | **Label** | `label` | Label name |
 | **Loop** | `loop` | Repeat |
+| **Spawn Event** | `spawn_event` | Template event, Template map, Cell, Store its ID in |
 | **Wait** | `wait` | Seconds |
 
 ## Switches and variables
@@ -75,6 +77,7 @@ There are 81 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Transparency** | `change_transparency` | Player is transparent |
 | **Change Vehicle Graphic** | `change_vehicle_graphic` | Vehicle, Graphic, Music while riding (blank = keep) |
 | **Get On/Off Vehicle** | `get_on_off_vehicle` |  |
+| **Memorize Place** | `memorize_place` | Store map in, Store x in, Store y in |
 | **Scroll Map** | `scroll_map` | Direction, Tiles, Speed, Wait until done |
 | **Set Event Location** | `set_event_location` | Event, Mode, Cell [x, y], Swap with event, Facing |
 | **Set Move Route** | `move_route` | Character, Route, Repeat, Skip if blocked, Wait until done |
@@ -121,10 +124,13 @@ There are 81 built-in commands. The *ID* is the command's `type` in the event JS
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Battle Processing** | `battle` | Enemy group, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage, Store outcome in, If won, If escaped, If lost |
+| **Battle Processing** | `battle` | Enemy group source (Enemy group / Enemy group named by a variable / Random encounter on this map), Enemy group, Variable, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage (normal / preemptive / surprise / initiative / back attack / surround / pincer — a pincer also blocks escaping; see [Lesson 7](Lesson-7-Battles.md)), Store outcome in, If won, If escaped, If lost |
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
 | **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |
+| **Transform Enemy** | `transform_enemy` | Enemy # (1 = first in the group), Transform into, HP (keep / percent / refill), Remove its states |
+| **Force Flee** | `force_flee` | Who flees (Enemy # / Every enemy / The party), Enemy # (1 = first in the group) |
+| **Force Action** | `force_action` | Subject (Enemy # / Actor), Enemy #, Actor, Uses (skill / item), Skill, Item, Target (last / random / #), Target #, Timing (right now / at its next turn) |
 | **End Battle** | `abort_battle` | Result (abort / win / lose), Give victory rewards |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |

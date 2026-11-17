@@ -12,9 +12,9 @@ What the kit doesn't do yet, and what hasn't been verified. This list is kept ho
 
 - **Front view draws no actors**, as in RPG Maker 2000 and VX Ace.
 - **Side view**: weapon sprites (2003 BattleWeapon, MV weapons) are not drawn. A party mixing sources (MV sheets, 2003 BattleCharSets, walk sprites) is drawn at the tallest figure's height.
-- **Preemptive and surprise** rates are a simple form of MV's; traits that change them (Raise Preemptive, Cancel Surprise) are not read.
+- **Preemptive and surprise** rates are a simple form of MV's; the party abilities *Raise Preemptive* and *Cancel Surprise* are read.
 - **ATB** has no *Auto* party command.
-- **VX Ace style rules** don't cover most Sp-Parameters, Counter Attack, Magic Reflection, Special Flags, Party Abilities, Fix Equip or Attack State. Action Times+ repeats the same action. Change Class keeps the level. Lowering a level keeps the stats gained.
+- **VX Ace style rules** don't cover most Sp-Parameters, Counter Attack, Magic Reflection, Special Flags, Fix Equip or Attack State. Action Times+ repeats the same action. Change Class keeps the level. Lowering a level keeps the stats gained.
 
 ## Screens
 

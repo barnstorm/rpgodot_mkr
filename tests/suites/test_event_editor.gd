@@ -388,6 +388,20 @@ func test_e23_graphic_draws_the_chosen_frame() -> void:
 	await frames(1)
 
 
+func test_e23_forbid_overlap_is_a_page_option_checkbox() -> void:
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup(RPGEventEditor.PAGE_FIELDS, data, registry, {"map_id": "town"})
+	var labels := []
+	for f in RPGEventEditor.PAGE_FIELDS[3].fields:
+		labels.append(str(f.get("label", "")))
+	assert_true(labels.has("Forbid event overlap"), "the option is on the page form: %s" % str(labels))
+	form.set_value({"options": {"forbid_overlap": true}})
+	assert_eq(form.get_value().get("options", {}).get("forbid_overlap", false), true, "the checkbox round-trips")
+	form.queue_free()
+	await frames(1)
+
+
 func test_e23_move_route_character_is_a_dropdown() -> void:
 	var form := RPGFormBuilder.for_command("move_route", registry, data, {"map_id": "town"})
 	tree.root.add_child(form)
@@ -400,6 +414,31 @@ func test_e23_move_route_character_is_a_dropdown() -> void:
 		var ids: Array = picker.entries().map(func(e): return e.id)
 		assert_has(ids, "town_house_door", "the map's events are listed")
 	form.queue_free()
+
+
+func test_e23_route_editor_covers_the_new_step_kinds() -> void:
+	var steps := [
+		{"slide": "forward"}, {"move_to": [3, 4]}, {"move_to": "player"},
+		{"call": {"method": "turn", "args": ["left"]}},
+		{"speed_up": true}, {"speed_down": true}, {"frequency_up": true}, {"frequency_down": true},
+		{"opacity_up": true}, {"opacity_down": true},
+	]
+	var want := [
+		"Slide forward", "Move to (3, 4)", "Move to player", "Call turn",
+		"Speed up", "Speed down", "Frequency up", "Frequency down",
+		"Opacity up", "Opacity down",
+	]
+	for i in steps.size():
+		assert_eq(RPGRouteEditor.describe(steps[i]), want[i], "step %s" % str(steps[i]))
+	# Every button in every tab makes a step that describes cleanly (no "? " placeholder).
+	var labels := []
+	for group in RPGRouteEditor.BUTTONS:
+		for b in group[1]:
+			labels.append(b[0])
+			assert_false(RPGRouteEditor.describe(b[1]).begins_with("? "), "%s describes its step" % b[0])
+	assert_has(labels, "Slide ↓")
+	assert_has(labels, "Move to…")
+	assert_has(labels, "Call…")
 
 
 func test_e23_condition_kinds_and_choices_summary() -> void:

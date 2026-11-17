@@ -130,6 +130,90 @@ func test_underfoot_touch_events_do_not_start_from_the_action_button() -> void:
 	assert_eq(env.rpg.get_variable("counter"), 1, "the plate's commands ran")
 
 
+# --- Failed steps re-fire touch events (#74) -------------------------------------------------------
+
+func test_bumping_into_a_touch_event_fires_it_again() -> void:
+	# A touch-triggered door answers every failed step into it while the player keeps pushing,
+	# as in RPG Maker. The once-per-cell rule is gone; the guard is the main-interpreter-busy
+	# rule: a bump while the run is going starts nothing.
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(6, 8))
+	p.force_turn("up")
+	var plate: RPGEvent = await _stage_plate(Vector2i(6, 7), "player_touch")
+	plate.data["pages"][0]["commands"].append({"type": "wait", "seconds": 0.4})
+	p._bump(Vector2i.UP)
+	await frames(2)
+	assert_eq(env.rpg.get_variable("counter"), 1, "the first failed step fires it")
+	p._bump(Vector2i.UP)
+	assert_eq(env.rpg.get_variable("counter"), 1, "a run in progress absorbs the next bump")
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 1, "the wait finished without a second run")
+	p._bump(Vector2i.UP)
+	assert_true(await env.settle())
+	await frames(2)
+	assert_eq(env.rpg.get_variable("counter"), 2, "bumping again once the run ended fires it again")
+
+
+# --- Same-frame page refresh (#77) -----------------------------------------------------------------
+
+func test_classic_rules_refresh_pages_before_each_command() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 1, "the command after the switch already sees the new page")
+
+
+func test_a_move_route_uses_the_new_page_in_the_same_list() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.data["pages"][1]["movement"] = {"type": "fixed", "speed": 6}
+	ev.data["pages"][1]["graphic"] = {"sheet": "door_wood", "facing": "down"}
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "move_route", "target": "chest", "wait": false, "steps": [{"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 1, "the move route saw the new page, same frame")
+	assert_eq(ev.speed, 6, "the new page's speed applied before the route")
+	assert_eq(str(ev.graphic.get("sheet", "")), "door_wood", "the new page's graphic applied")
+
+
+func test_mv_style_rules_flush_only_before_a_move_route() -> void:
+	env.rpg.data.project["rules"] = "vx_ace"
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.page_index, 0, "a plain command does not flush: MV refreshes on the next frame")
+	await frames(2)
+	assert_eq(ev.page_index, 1, "the per-frame refresh still applies the page")
+	var r2: RPGResult = await env.rpg.run_commands([
+		{"type": "set_self_switch", "event": "chest", "map": "town", "switch": "A", "value": false},
+		{"type": "move_route", "target": "chest", "wait": false, "steps": [{"step": "down"}]},
+	])
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(ev.page_index, 0, "the move route flushed the page back, same frame")
+
+
+func test_a_page_change_caused_by_the_running_event_does_not_stop_it() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.data["pages"][0]["commands"] = [
+		{"type": "set_self_switch", "switch": "A", "value": true},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(5, 6))
+	p.force_turn("up")
+	assert_true(p.check_action(), "the chest starts")
+	assert_true(await env.settle(), "the run finished (no error, no hang)")
+	assert_eq(env.rpg.get_variable("counter"), 1, "the command after the page change still ran")
+	assert_eq(ev.page_index, 1, "the chest ended on its new page")
+
+
 func test_autorun_runs_until_it_stops_itself() -> void:
 	env.rpg.set_switch("autorun_on", true)
 	assert_true(await env.settle())
@@ -149,6 +233,130 @@ func test_autorun_that_never_stops_is_reported() -> void:
 	env.rpg.data.common_events.erase("stuck")
 	await frames(3)
 	assert_eq(env.rpg._autorun_repeats, 0, "the chain counter resets once the player has control")
+
+
+# --- run order (#73) ---------------------------------------------------------------------------------
+
+
+## Events run in the events file's order (creation order), not alphabetical ID order (#73).
+func test_events_run_in_file_order_not_alphabetical() -> void:
+	assert_eq(env.game.map.event_order, ["town_house_door", "floor_plate", "autorun_evt", "parallel_evt", "chest", "zz_runs_first", "aa_runs_second"], "run order is the events file's order")
+
+
+## Two parallels writing one variable in the same frame: the one later in the file wins (#73).
+func test_two_parallels_writing_one_variable_give_the_file_order_result() -> void:
+	env.rpg.set_switch("order_on", true)
+	for i in 10:
+		await frames(1)
+	# zz_runs_first comes before aa_runs_second in the events file (the reverse of alphabetical),
+	# so aa_runs_second writes last in each pass.
+	assert_eq(env.rpg.get_variable("order_var"), 2, "the file-order-last parallel writes last")
+	env.rpg.set_switch("order_on", false)
+
+
+## Autorun common events are picked in common_events.json's order, likewise (#73).
+func test_autorun_common_events_run_in_file_order() -> void:
+	# "touched" gates nothing in the fixture, so the map's order-test parallels stay out of this.
+	env.rpg.data.common_events["zz_ce"] = {"id": "zz_ce", "name": "ZZ", "trigger": "autorun", "switch": "touched", "commands": [
+		{"type": "set_variable", "id": "order_var", "operation": "set", "value": 1},
+		{"type": "set_switch", "id": "touched", "value": "off"}
+	]}
+	env.rpg.data.common_events["aa_ce"] = {"id": "aa_ce", "name": "AA", "trigger": "autorun", "switch": "touched", "commands": [
+		{"type": "set_variable", "id": "order_var", "operation": "set", "value": 2},
+		{"type": "set_switch", "id": "touched", "value": "off"}
+	]}
+	env.rpg.set_switch("touched", true)
+	for i in 60:
+		await frames(1)
+		if env.rpg.get_variable("order_var") != 0:
+			break
+	assert_eq(env.rpg.get_variable("order_var"), 1, "zz_ce is first in the file, so it runs (alphabetically aa_ce would)")
+	env.rpg.data.common_events.erase("zz_ce")
+	env.rpg.data.common_events.erase("aa_ce")
+
+
+# --- spawn and despawn events (#66) -----------------------------------------------------------------
+
+
+func test_spawned_events_behave_like_placed_ones() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("last_spawn"), "chest_2", "the copy gets a fresh ID")
+	var copy: RPGEvent = env.game.map.get_event("chest_2")
+	assert_true(copy != null, "the copy lives on the map")
+	assert_eq(copy.cell, Vector2i(10, 7), "placed where the command said")
+	# It runs like a placed one: open it with the action button.
+	var p: RPGPlayer = env.game.player
+	p.place(Vector2i(10, 8))
+	p.force_turn("up")
+	assert_true(p.check_action())
+	assert_true(await env.settle())
+	assert_eq(env.rpg.get_variable("counter"), 100, "the copy's commands ran")
+	assert_eq(copy.page_index, 1, "its own self switch A moved it to page 2")
+	assert_eq(env.game.map.get_event("chest").page_index, 0, "the template is untouched")
+
+
+func test_a_spawned_copy_comes_from_any_map_and_survives_map_changes_and_saves() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "blocker", "map": "house_inside", "position": [4, 4]},
+	], {"kind": "api", "id": "spawn2"})
+	assert_true(r.is_ok(), str(r))
+	# "blocker" is free on town (it lives on house_inside), so the copy keeps the template's ID.
+	var copy_id := str(env.rpg.state.spawned_events.get("town", [])[0].get("id", ""))
+	assert_eq(copy_id, "blocker", "the ID is only numbered when the plain one is taken")
+	var tr: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var back: RPGResult = await env.game.transfer("town", Vector2i(12, 8), "up", "none")
+	assert_true(back.is_ok(), str(back))
+	var copy: RPGEvent = env.game.map.get_event(copy_id)
+	assert_true(copy != null, "the copy came back with the map")
+	assert_eq(copy.cell, Vector2i(4, 4), "where it was spawned")
+	await env.settle()
+	assert_true(env.rpg.saves.save(20).is_ok(), "save")
+	var away: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(away.is_ok(), str(away))
+	var lr: RPGResult = await env.rpg.saves.load_slot(20)
+	assert_true(lr.is_ok(), str(lr))
+	assert_true(env.game.map.get_event(copy_id) != null, "the copy rides through a save")
+	if FileAccess.file_exists(env.rpg.saves.slot_path(20)):
+		DirAccess.remove_absolute(env.rpg.saves.slot_path(20))
+
+
+func test_despawn_removes_a_spawned_copy_for_good() -> void:
+	await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn3"})
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "despawn_event", "event": {"variable": "last_spawn"}},
+	], {"kind": "api", "id": "despawn"})
+	assert_true(r.is_ok(), str(r))
+	assert_true(env.game.map.get_event("chest_2") == null, "gone from the map")
+	assert_true(env.rpg.state.spawned_events.get("town", []).is_empty(), "forgotten in the state")
+	# Not even a map change brings it back (a placed event would return, like after Erase Event).
+	var tr: RPGResult = await env.game.transfer("house_inside", Vector2i(5, 5), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var back: RPGResult = await env.game.transfer("town", Vector2i(12, 8), "up", "none")
+	assert_true(back.is_ok(), str(back))
+	assert_true(env.game.map.get_event("chest_2") == null, "still gone after a round trip")
+	assert_true(env.game.map.get_event("chest") != null, "the template stays")
+
+
+func test_despawning_the_running_event_lets_it_finish() -> void:
+	await env.rpg.run_commands([
+		{"type": "spawn_event", "template": "chest", "position": [10, 7], "into_variable": "last_spawn"},
+	], {"kind": "api", "id": "spawn4"})
+	var copy: RPGEvent = env.game.map.get_event("chest_2")
+	# Its own commands remove it first, then keep going: the run must finish, not die mid-list.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "despawn_event", "event": "this"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 5},
+	], {"kind": "event", "map": "town", "event": "chest_2"}, copy)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 5, "the commands after the despawn ran")
+	assert_true(env.game.map.get_event("chest_2") == null, "the copy is gone")
+	assert_true(copy.erased, "the running one was hidden, not freed mid-run")
 
 
 func test_event_debug_info_explains_pages() -> void:
@@ -325,6 +533,58 @@ func test_typed_variables() -> void:
 	assert_false(st.set_switch("not_a_switch", true), "unknown switch refused")
 
 
+
+## Locations read from variables (#16): Memorize Place stores where the player stands, Transfer
+## Player and Set Vehicle Location accept {variable} maps and operand cells, and a bad runtime
+## destination is an error that names the map.
+func test_locations_from_variables_and_memorize_place() -> void:
+	for v in ["warp_map", "warp_x", "warp_y"]:
+		env.rpg.data.variables[v] = {"id": v, "label": v.capitalize(), "type": "int" if v != "warp_map" else "string"}
+		env.rpg.data.state_defs["variables"].append({"id": v, "label": v.capitalize(), "type": "int" if v != "warp_map" else "string"})
+	# Memorize where the player starts.
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "memorize_place", "map_variable": "warp_map", "x_variable": "warp_x", "y_variable": "warp_y"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(str(env.rpg.get_variable("warp_map")), "town", "the map id is memorized")
+	assert_eq(int(env.rpg.get_variable("warp_x")), 12, "the x is memorized")
+	assert_eq(int(env.rpg.get_variable("warp_y")), 8, "the y is memorized")
+	# A variable-held map and operand cells send the player there and back again.
+	r = await env.rpg.run_commands([
+		{"type": "transfer_player", "to": {"map": "town", "position": [3, 2]}}])
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	r = await env.rpg.run_commands([
+		{"type": "memorize_place", "map_variable": "warp_map", "x_variable": "warp_x", "y_variable": "warp_y"},
+		{"type": "transfer_player", "to": {"map": "town", "position": [0, 5]}},
+		{"type": "transfer_player", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}, "fade": "none"}])
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	assert_eq(env.game.player.cell, Vector2i(3, 2), "recall returns to the memorized cell")
+	# A map variable naming no map is a runtime error that names it.
+	env.rpg.state.set_variable("warp_map", "nowhere")
+	r = await env.rpg.run_commands([
+		{"type": "transfer_player", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}, "fade": "none"}])
+	assert_false(r.is_ok(), "a transfer to no map fails")
+	assert_true(r.message.contains("nowhere"), r.message)
+	# Set Vehicle Location accepts the same shape (and checks the resolved map).
+	env.rpg.state.set_variable("warp_map", "town")
+	r = await env.rpg.run_commands([
+		{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": {"variable": "warp_map"}, "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}}])
+	assert_true(r.is_ok(), str(r))
+	env.rpg.state.set_variable("warp_map", "nowhere")
+	r = await env.rpg.run_commands([
+		{"type": "set_vehicle_location", "vehicle": "boat", "to": {"map": {"variable": "warp_map"}, "position": [1, 1]}}])
+	assert_false(r.is_ok(), "parking on no map fails")
+	assert_true(r.message.contains("nowhere"), r.message)
+	# Set Event Location's cells were already operands; a variable cell still places the event.
+	env.rpg.state.set_variable("warp_x", 4)
+	env.rpg.state.set_variable("warp_y", 2)
+	r = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "chest", "position": [{"variable": "warp_x"}, {"variable": "warp_y"}]}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.game.map.get_event("chest").cell, Vector2i(4, 2))
+
+
 func test_blocked_movement_is_deterministic() -> void:
 	var p: RPGPlayer = env.game.player
 	p.place(Vector2i(12, 8))
@@ -411,6 +671,25 @@ func test_game_data_character_map_party() -> void:
 	assert_eq(str(env.rpg.state.game_data({"kind": "party_member", "slot": 4})), "")
 	# No running map context: character and map id explain themselves.
 	assert_eq(env.rpg.state.game_data({"kind": "map_id"}), "", "needs a command context")
+	# Screen position is in pixels.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": {"game_data": {"kind": "character", "target": "player", "field": "screen_x"}}}], {"kind": "api", "id": "gd3"})
+	assert_true(r.is_ok(), str(r))
+	assert_true(int(env.rpg.get_variable("ticks")) >= 0, "screen x is a pixel number")
+	# An unknown character reads 0 and names the problem.
+	r = await env.rpg.run_commands([
+		{"type": "set_variable", "id": "ticks", "operation": "set", "value": {"game_data": {"kind": "character", "target": "nobody", "field": "x"}}}], {"kind": "api", "id": "gd4"})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("ticks")), 0)
+	assert_true(env.rpg.state.errors.back().contains("nobody"), env.rpg.state.errors.back())
+	# The leader's equipped item per slot (the slot name is the field).
+	var hero: Variant = env.rpg.state.actor("hero")
+	if hero != null and "equips" in hero:
+		hero.equips["weapon"] = "stick"
+		assert_eq(str(env.rpg.state.game_data({"kind": "actor", "id": "hero", "field": "weapon"})), "stick")
+	# Enemy stats are only readable during a battle.
+	assert_eq(env.rpg.state.game_data({"kind": "enemy", "index": 0, "field": "hp"}), 0)
+	assert_true(env.rpg.state.errors.back().contains("battle"), env.rpg.state.errors.back())
 
 
 func test_game_data_counters_and_last_used() -> void:
@@ -851,6 +1130,260 @@ func test_movement_frequency_paces_the_beats() -> void:
 	assert_eq(held, 60, "frequency 1 paces the beats slowly")
 
 
+# --- Forbid Event Overlap (#64) ------------------------------------------------------------------
+
+## Restages an event's page 0 (its priority and options) and re-applies it in place.
+func _stage_page(ev: RPGEvent, priority: String, options: Dictionary) -> void:
+	ev.data["pages"][0]["priority"] = priority
+	ev.data["pages"][0]["options"] = options
+	ev.apply_page(0)
+
+
+## Places floor_plate, the fixture's below-priority event, somewhere out of the way.
+func _place_plate(at: Vector2i) -> RPGEvent:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "floor_plate", "position": [at.x, at.y]},
+	])
+	assert_true(r.is_ok(), str(r))
+	return env.game.map.get_event("floor_plate")
+
+
+func test_forbid_overlap_keeps_two_below_events_apart() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "the same-layer event blocks")
+	assert_false(mover.step(Vector2i.LEFT), "the step is refused")
+	assert_eq(mover.cell, Vector2i(7, 6), "the mover stays put")
+
+
+func test_below_events_share_a_cell_without_the_option() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {})
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "below events overlap by default")
+	assert_true(mover.step(Vector2i.LEFT), "the step is taken")
+	while mover.moving:
+		await frames(1)
+	assert_eq(mover.cell, Vector2i(6, 6), "both events end up on the same cell")
+	assert_eq(target.cell, Vector2i(6, 6))
+
+
+func test_walk_through_overrides_forbid_overlap() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true, "through": true})
+	assert_true(mover.through, "the page option applied")
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "through ignores the other event")
+
+
+func test_the_player_does_not_block_a_below_event_with_forbid_overlap() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	# The player starts on (12, 8).
+	var mover: RPGEvent = await _place_chest(Vector2i(11, 8))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.RIGHT), "", "only events block, not the player")
+
+
+func test_forbid_overlap_only_blocks_the_movers_own_layer() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var mover: RPGEvent = await _place_chest(Vector2i(7, 6))
+	var target: RPGEvent = await _place_plate(Vector2i(6, 6))
+	_stage_page(mover, "below", {"forbid_overlap": true})
+	_stage_page(target, "above", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "", "an above event is another layer")
+	_stage_page(target, "below", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "a below event is the mover's layer")
+	# Same-priority events have always blocked each other; the option changes nothing there.
+	_stage_page(mover, "same", {})
+	_stage_page(target, "same", {})
+	assert_eq(mm.check_move(mover, mover.cell, Vector2i.LEFT), "occupied", "same-priority events always block")
+
+
+func test_forbid_overlap_follows_the_active_page() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(7, 6))
+	_stage_page(ev, "below", {"forbid_overlap": true})
+	assert_true(ev.forbid_overlap, "page 0 carries the option")
+	_stage_page(ev, "below", {})
+	assert_false(ev.forbid_overlap, "a page without it clears the flag")
+	ev.apply_page(-1)
+	assert_false(ev.forbid_overlap, "no active page clears the flag")
+	_stage_page(ev, "below", {"forbid_overlap": true})
+	assert_true(ev.forbid_overlap, "the option applies again on the next page change")
+
+
+# --- Move route step kinds (#65) -----------------------------------------------------------------
+
+## Runs a move route on the chest and returns when it is done.
+func _route(steps: Array, extra := {}) -> RPGResult:
+	var cmd := {"type": "move_route", "target": "chest", "steps": steps}
+	cmd.merge(extra)
+	return await env.rpg.run_commands([cmd])
+
+
+## A tiny inline tileset: one source holding a floor tile (passage 15) and a wall tile (passage 0).
+## The fixture map has no tiles, so tests that need walls bring their own.
+func _floor_and_wall_tileset() -> Array:
+	var tex := PlaceholderTexture2D.new()
+	tex.size = Vector2(32, 16)
+	var src := TileSetAtlasSource.new()
+	src.texture = tex
+	src.texture_region_size = Vector2i(16, 16)
+	src.create_tile(Vector2i(0, 0))
+	src.create_tile(Vector2i(1, 0))
+	var ts := TileSet.new()
+	ts.tile_size = Vector2i(16, 16)
+	ts.add_custom_data_layer()
+	ts.set_custom_data_layer_name(0, "passage")
+	ts.set_custom_data_layer_type(0, TYPE_INT)
+	var sid := ts.add_source(src)
+	src.get_tile_data(Vector2i(0, 0), 0).set_custom_data("passage", 15)
+	src.get_tile_data(Vector2i(1, 0), 0).set_custom_data("passage", 0)
+	return [ts, sid]
+
+
+## Paints a wall tile on the cell so routes and pathfinding have something to go around. The whole
+## map gets a floor of passage-15 tiles first: with no layer used every empty cell reads 15, but
+## once any cell holds a tile, empty cells read 0 — one painted wall would wall off the map.
+func _wall_at(at: Vector2i) -> void:
+	var map: Node = env.game.map
+	if map.tile_layers.is_empty():
+		# The fixture map has no Layer1..Layer4 (an empty list reads as fully open) — add one.
+		var fresh := TileMapLayer.new()
+		fresh.name = "Layer1"
+		map.add_child(fresh)
+		map.tile_layers.append(fresh)
+		map.movement.invalidate()
+	var ts_sid: Array = _floor_and_wall_tileset()
+	var layer: TileMapLayer = map.tile_layers[0]
+	layer.tile_set = ts_sid[0]
+	var s: Vector2i = map.size
+	for y in s.y:
+		for x in s.x:
+			layer.set_cell(Vector2i(x, y), ts_sid[1], Vector2i(0, 0))
+	layer.set_cell(at, ts_sid[1], Vector2i(1, 0))
+	map.movement.invalidate()
+	assert_eq(map.movement.passage(at), 0, "the cell is a wall now")
+
+
+func test_slide_steps_keep_moving_until_blocked() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	var ev: RPGEvent = await _place_chest(Vector2i(6, 3))
+	var r: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell.x, 6, "a slide stays in its column")
+	assert_true(ev.cell.y > 4, "it slid more than one cell")
+	assert_false(mm.can_move(ev, ev.cell, Vector2i.DOWN), "it stopped because the way is blocked")
+
+
+func test_slide_steps_stop_at_a_blocking_event() -> void:
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [6, 10]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	var ev: RPGEvent = await _place_chest(Vector2i(6, 3))
+	var r: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(6, 9), "the door stops the slide one cell short")
+	var r2: RPGResult = await _route([{"slide": "down"}])
+	assert_true(r2.is_ok(), str(r2))
+	assert_eq(ev.cell, Vector2i(6, 9), "a slide that starts blocked moves nowhere")
+
+
+func test_speed_and_frequency_steps_move_one_notch_and_clamp() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.speed = 6
+	assert_true((await _route([{"speed_up": true}])).is_ok())
+	assert_eq(ev.speed, 6, "speed 6 cannot go higher")
+	ev.speed = 1
+	assert_true((await _route([{"speed_down": true}])).is_ok())
+	assert_eq(ev.speed, 1, "speed 1 cannot go lower")
+	ev.speed = 4
+	assert_true((await _route([{"speed_up": true}, {"speed_down": true}, {"speed_up": true}])).is_ok())
+	assert_eq(ev.speed, 5, "up, down and up from 4")
+	ev.frequency = 5
+	assert_true((await _route([{"frequency_up": true}])).is_ok())
+	assert_eq(ev.frequency, 5, "frequency 5 cannot go higher")
+	ev.frequency = 1
+	assert_true((await _route([{"frequency_down": true}])).is_ok())
+	assert_eq(ev.frequency, 1, "frequency 1 cannot go lower")
+	ev.frequency = 3
+	assert_true((await _route([{"frequency_down": true}])).is_ok())
+	assert_eq(ev.frequency, 2, "frequency steps are one notch")
+
+
+func test_opacity_steps_move_32_and_clamp() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.opacity = 200
+	assert_true((await _route([{"opacity_up": true}])).is_ok())
+	assert_eq(ev.opacity, 232, "up is 32 more")
+	assert_true((await _route([{"opacity_up": true}])).is_ok())
+	assert_eq(ev.opacity, 255, "clamped at fully visible")
+	ev.opacity = 10
+	assert_true((await _route([{"opacity_down": true}])).is_ok())
+	assert_eq(ev.opacity, 0, "clamped at fully transparent")
+
+
+func test_move_to_walks_the_shortest_way_and_goes_around_walls() -> void:
+	var mm: RPGMovement = env.game.map.movement
+	_wall_at(Vector2i(4, 5))
+	var way: Array = mm.path(Vector2i(4, 3), Vector2i(4, 7))
+	assert_eq(way.size(), 6, "the wall makes the way two cells longer")
+	assert_false(way.has(Vector2i(4, 5)), "the way avoids the wall")
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": [4, 7]}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(4, 7), "the chest walked around the wall to the goal")
+	assert_eq(mm.path(Vector2i(4, 3), Vector2i(99, 99)), [], "a goal off the map has no way")
+
+
+func test_move_to_walks_to_an_events_cell_and_stops_beside_the_player() -> void:
+	# The door starts at (12, 7), inside the shortest-way region to the player — move it out so the
+	# player is the only character the way has to stop for.
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [2, 12]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	await _place_plate(Vector2i(6, 6))
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": "floor_plate"}])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(6, 6), "a below-priority event's cell can be entered")
+	var r2: RPGResult = await _route([{"move_to": [4, 3]}, {"move_to": "player"}])
+	assert_true(r2.is_ok(), str(r2))
+	assert_ne(ev.cell, env.game.player.cell, "it does not step onto the player")
+	assert_eq(absi(ev.cell.x - env.game.player.cell.x) + absi(ev.cell.y - env.game.player.cell.y), 1,
+		"it arrives beside the player, as close as the way allows")
+
+
+func test_move_to_gives_up_with_skip_when_the_way_is_held() -> void:
+	var r0: RPGResult = await env.rpg.run_commands([
+		{"type": "set_event_location", "event": "town_house_door", "position": [4, 5]},
+	])
+	assert_true(r0.is_ok(), str(r0))
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	var r: RPGResult = await _route([{"move_to": [4, 7]}], {"skip_if_blocked": true})
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.cell, Vector2i(4, 4), "the door blocks the way and the skip rule gives up")
+
+
+func test_call_step_runs_a_method_and_skips_a_missing_one() -> void:
+	var ev: RPGEvent = env.game.map.get_event("chest")
+	ev.facing = "down"
+	var r: RPGResult = await _route([
+		{"call": {"method": "turn", "args": ["left"]}},
+		{"call": {"method": "no_such_method"}},
+		{"turn": "right"},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(ev.facing, "right", "the call step turned left, the missing method was skipped, the route went on")
+
+
 # --- Forced move routes (#71) -------------------------------------------------------------------
 
 func test_a_forced_route_takes_over_a_random_walk() -> void:
@@ -979,6 +1512,178 @@ func test_page_change_resets_a_custom_route_when_the_new_page_differs() -> void:
 	for i in 20:
 		await frames(1)
 	assert_eq(ev.cell, Vector2i(4, 4), "the rest of the old route never plays")
+
+
+# --- Wait for All Movement / Halt All Movement (#59) ----------------------------------------------
+
+
+func test_wait_for_movement_waits_for_every_forced_route() -> void:
+	# Two routes started without waiting (an event and the player): the command returns only
+	# after both finished. The player's mid-route wait makes "still running" deterministic.
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var ev_start := ev.cell
+	var p: RPGPlayer = env.game.player
+	var p_start := p.cell
+	var outcome: Array = []
+	var run := func() -> void:
+		outcome.append(await env.rpg.run_commands([
+			{"type": "move_route", "target": "chest", "wait": false,
+				"steps": [{"step": "down"}, {"step": "down"}, {"step": "down"}, {"step": "down"}]},
+			{"type": "move_route", "target": "player", "wait": false,
+				"steps": [{"step": "right"}, {"step": "right"}, {"wait": 1.0}, {"step": "right"}, {"step": "right"}]},
+			{"type": "wait_for_movement"},
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+		]))
+	run.call()
+	await frames(4)
+	assert_eq(env.rpg.get_variable("counter"), 0, "the wait has not returned while a route runs")
+	assert_true(p.is_route_forced(), "the player's route is parked on its mid-route wait")
+	var done: bool = await _wait_until(func(): return int(env.rpg.get_variable("counter")) >= 1)
+	assert_true(done, "Wait for All Movement returned when the routes finished")
+	var finished: bool = await _wait_until(func(): return outcome.size() > 0)
+	assert_true(finished, "the command list finished")
+	assert_true(outcome[0].is_ok(), str(outcome[0]))
+	assert_eq(ev.cell, ev_start + Vector2i(0, 4), "the event's route played out")
+	assert_eq(p.cell, p_start + Vector2i(4, 0), "the player's route played out")
+	assert_false(ev.is_route_forced() or p.is_route_forced(), "no route is running any more")
+
+
+func test_wait_for_movement_ignores_repeating_routes() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false, "repeat": true,
+			"steps": [{"step": "down"}, {"step": "up"}]},
+		{"type": "wait_for_movement"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 1, "a repeating route does not block the wait")
+	assert_true(ev.is_route_forced(), "the repeating route keeps looping")
+	ev.cancel_forced_route("test done")
+	await frames(2)
+
+
+func test_wait_for_movement_returns_at_once_with_no_routes_running() -> void:
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "wait_for_movement"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	])
+	assert_true(r.is_ok(), str(r))
+	assert_eq(env.rpg.get_variable("counter"), 1, "nothing to wait for: returned at once")
+
+
+func test_halt_movement_cancels_every_forced_route() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var p: RPGPlayer = env.game.player
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+		{"type": "move_route", "target": "player", "wait": false,
+			"steps": [{"step": "up"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced() and p.is_route_forced(), "both routes are parked mid-route")
+	var halted: RPGResult = await env.rpg.run_commands([{"type": "halt_movement"}])
+	assert_true(halted.is_ok(), str(halted))
+	assert_false(ev.is_route_forced(), "the event's route was halted")
+	assert_false(p.is_route_forced(), "the player's route was halted")
+	var ev_at := ev.cell
+	var p_at := p.cell
+	await frames(10)
+	assert_eq(ev.cell, ev_at, "the halted event never moves again")
+	assert_eq(p.cell, p_at, "the halted player never moves again")
+
+
+func test_halt_movement_ends_an_event_waiting_on_its_route() -> void:
+	# The halt comes from a parallel event: the main interpreter is the one parked in the waiting
+	# Move Route, and the scheduler's queue would not start a second main list beside it.
+	env.rpg.data.common_events["halter"] = {"trigger": "parallel", "switch": "clock_on",
+		"commands": [{"type": "halt_movement"}]}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var outcome: Array = []
+	var waiting := func() -> void:
+		outcome.append(await env.rpg.run_commands([
+			{"type": "move_route", "target": "chest", "wait": true,
+				"steps": [{"step": "down"}, {"wait": 30.0}]},
+		]))
+	waiting.call()
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the route is parked mid-route")
+	env.rpg.set_switch("clock_on", true)
+	var ended: bool = await _wait_until(func(): return outcome.size() > 0)
+	assert_true(ended, "the waiting command list ended with the halt")
+	assert_true(outcome[0].is_cancelled(), "the waiting Move Route was cancelled: %s" % str(outcome[0]))
+	env.rpg.set_switch("clock_on", false)
+	await frames(2)
+
+
+func test_halt_movement_resumes_autonomous_movement() -> void:
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	ev.move_type = "random"
+	ev._move_wait = 0.0
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the forced route is parked mid-route")
+	await env.rpg.run_commands([{"type": "halt_movement"}])
+	var parked := ev.cell
+	var stepped := await _await_step(ev)
+	assert_ne(stepped, parked, "the random walk resumed after the halt")
+
+
+func test_wait_for_movement_blocks_a_parallel_event_until_routes_finish() -> void:
+	env.rpg.data.common_events["mover"] = {
+		"trigger": "parallel", "switch": "clock_on",
+		"commands": [
+			{"type": "wait_for_movement"},
+			{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+		],
+	}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 1.0}, {"step": "down"}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	env.rpg.set_switch("clock_on", true)
+	await frames(6)
+	assert_eq(env.rpg.get_variable("counter"), 0, "the parallel's pass is blocked in the wait")
+	var done: bool = await _wait_until(func(): return int(env.rpg.get_variable("counter")) >= 1)
+	assert_true(done, "the parallel carried on once the route finished")
+	env.rpg.set_switch("clock_on", false)
+	await frames(3)
+
+
+func test_halt_movement_works_in_an_autorun_event() -> void:
+	env.rpg.data.common_events["halter"] = {
+		"trigger": "autorun", "switch": "clock_on",
+		"commands": [
+			{"type": "halt_movement"},
+			{"type": "set_switch", "id": "clock_on", "value": "off"},
+		],
+	}
+	var ev: RPGEvent = await _place_chest(Vector2i(4, 3))
+	ev.frequency = 5
+	var r: RPGResult = await env.rpg.run_commands([
+		{"type": "move_route", "target": "chest", "wait": false,
+			"steps": [{"step": "down"}, {"wait": 30.0}]},
+	])
+	assert_true(r.is_ok(), str(r))
+	await frames(4)
+	assert_true(ev.is_route_forced(), "the forced route is parked mid-route")
+	env.rpg.set_switch("clock_on", true)
+	var halted: bool = await _wait_until(func(): return not ev.is_route_forced())
+	assert_true(halted, "the autorun event halted the route")
 
 
 func test_page_change_keeps_a_custom_route_index_when_the_route_is_the_same() -> void:
@@ -1132,6 +1837,263 @@ func test_an_overlay_scene_can_opt_out_of_the_pause() -> void:
 	var during: int = env.rpg.state.get_variable("ticks")
 	await env.tree.create_timer(0.3).timeout
 	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel kept running under the overlay")
+
+
+# --- Show Text message style (#62) ----------------------------------------------------------------
+
+## Opens a message in the background (auto_advance off) and holds it open until the test calls
+## box._finish_text().
+func _hold_message(extra: Dictionary = {}) -> void:
+	var p := {"type": "show_text", "text": "held"}
+	p.merge(extra)
+	env.rpg.run_commands([p])
+
+
+func test_avoid_player_swaps_a_top_or_bottom_box_away_from_the_player() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	# The player starts low on the screen (row 8 of 15, y≈128 of 240): a top box stays put...
+	_hold_message({"position": "top", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "player low: a top box stays")
+	box._finish_text()
+	# ...and a bottom box flips to the top.
+	_hold_message({"position": "bottom", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "player low: a bottom box flips to the top")
+	box._finish_text()
+	# The player walks up (row 3, y≈48): now a top box flips down and a bottom box stays.
+	env.game.player.place(Vector2i(12, 3))
+	await frames(1)
+	_hold_message({"position": "top", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "player high: a top box flips to the bottom")
+	box._finish_text()
+	_hold_message({"position": "bottom", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "player high: a bottom box stays")
+	box._finish_text()
+	# A middle box never moves, and without avoid_player nothing flips.
+	_hold_message({"position": "middle", "avoid_player": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 82, "a middle box stays in the middle")
+	box._finish_text()
+	_hold_message({"position": "top"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "without avoid_player a top box stays while the player is high")
+	box._finish_text()
+
+
+func test_avoid_player_can_come_from_the_system_settings() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.game.player.place(Vector2i(12, 3))
+	await frames(1)
+	env.rpg.data.system["message_avoid_player"] = true
+	_hold_message({"position": "top"})  # "keep" (the default) reads the System setting
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 164, "keep + System on: the top box flips to the bottom")
+	box._finish_text()
+	_hold_message({"position": "top", "avoid_player": "off"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_eq(int(box.get("panel").position.y), 0, "a message's off wins over the System default")
+	box._finish_text()
+
+
+func test_a_message_pauses_parallels_and_wandering_npcs_by_default() -> void:
+	# RM2000/2003 default: "Allow events to continue" off, so the map sleeps behind the pages.
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	var ev := await _place_chest(Vector2i(4, 3))
+	ev.move_type = "vertical"
+	ev.frequency = 5
+	ev._move_wait = 0.0
+	await _await_step(ev)
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "the map is suspended while the message shows")
+	var frozen: int = env.rpg.state.get_variable("ticks")
+	await frames(3)  # an in-flight NPC step finishes before its cell is pinned
+	var parked := ev.cell
+	await env.tree.create_timer(0.3).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), frozen, "the parallel slept during the message")
+	assert_eq(ev.cell, parked, "the wandering NPC did not move during the message")
+	box._finish_text()
+	await env.tree.create_timer(0.3).timeout
+	assert_false(env.rpg.scheduler.map_suspended(), "the map resumed when the message closed")
+	assert_true(env.rpg.state.get_variable("ticks") > frozen, "the parallel resumed")
+	var moved := await _await_step(ev)
+	assert_true(moved != parked, "the NPC resumed walking")
+
+
+func test_events_continue_keeps_everything_running_during_the_message() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.set_switch("parallel_on", true)
+	await env.tree.create_timer(0.2).timeout
+	var ev := await _place_chest(Vector2i(4, 3))
+	ev.move_type = "vertical"
+	ev.frequency = 5
+	ev._move_wait = 0.0
+	await _await_step(ev)
+	_hold_message({"events_continue": "on"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_false(env.rpg.scheduler.map_suspended(), "events_continue on: the map is not suspended")
+	var during: int = env.rpg.state.get_variable("ticks")
+	await env.tree.create_timer(0.2).timeout
+	assert_true(env.rpg.state.get_variable("ticks") > during, "the parallel ticked during the message")
+	var before := ev.cell
+	var moved := await _await_step(ev)
+	assert_true(moved != before, "the NPC kept walking during the message")
+	box._finish_text()
+
+
+func test_events_continue_can_come_from_the_system_settings() -> void:
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	env.rpg.data.system["message_events_continue"] = true
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_false(env.rpg.scheduler.map_suspended(), "keep + System on: events continue")
+	box._finish_text()
+	_hold_message({"events_continue": "off"})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "a message's off wins over the System default")
+	box._finish_text()
+
+
+func test_choices_do_not_hold_the_pause() -> void:
+	# The pause covers only the text pages: choices never hold one, so the map runs while the
+	# player picks (RM2000/2003 pauses for neither, MV/MZ for none of it).
+	var box: Control = env.rpg.ui.message_box
+	env.rpg.ui.auto_advance = false
+	_hold_message({})
+	await _wait_until(func(): return box.mode == "text")
+	assert_true(env.rpg.scheduler.map_suspended(), "the text pages hold the pause")
+	box._finish_text()
+	box.open_choices(["yes", "no"])
+	assert_false(env.rpg.scheduler.map_suspended(), "choices do not hold the pause")
+	box.force_close()
+
+
+# --- Parallel common events: switch off and map change (#78) -------------------------------------
+
+
+func _wait_until(cond: Callable, max_frames := 300) -> bool:
+	for i in max_frames:
+		if cond.call():
+			return true
+		await tree.process_frame
+	return cond.call()
+
+
+## A "clock" parallel common event on its own switch (parallel_on would drag the fixture map's
+## parallel_evt in too): ticks once per pass, waits, and counter marks passes that reached the end
+## of the list. self_off ends the list by turning the switch off.
+func _clock_event(wait_s: float, self_off: bool) -> Dictionary:
+	var cmds: Array = [
+		{"type": "set_variable", "id": "ticks", "operation": "add", "value": 1},
+		{"type": "wait", "seconds": wait_s},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+	if self_off:
+		cmds.append({"type": "set_switch", "id": "clock_on", "value": "off"})
+	return {"trigger": "parallel", "switch": "clock_on", "commands": cmds}
+
+
+func test_classic_rules_pause_a_parallel_common_event_and_resume_it() -> void:
+	# The door project runs the classic rules, where a condition switch going off freezes the run
+	# at its current command and a later switch-on carries on exactly there (RM2000/2003).
+	env.rpg.data.common_events["clock"] = _clock_event(1.5, true)
+	env.rpg.set_switch("clock_on", true)
+	await env.tree.create_timer(0.4).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "one pass started")
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "it is mid-wait")
+	env.rpg.set_switch("clock_on", false)
+	await env.tree.create_timer(0.6).timeout
+	var task: RPGScheduler.ParallelTask = env.rpg.scheduler.parallels.get("common:clock")
+	assert_true(task != null and task.paused, "the run is paused in place, not discarded")
+	await env.tree.create_timer(1.2).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "the wait stays frozen while paused")
+	env.rpg.set_switch("clock_on", true)
+	var finished: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("counter")) >= 1)
+	assert_true(finished, "the pass carried on where it stopped")
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "it did not restart from the top")
+
+
+func test_mv_rules_discard_a_parallel_common_event_and_restart_it_from_the_top() -> void:
+	env.rpg.rules.definition["parallel_switch_off"] = "restart"
+	env.rpg.data.common_events["clock"] = _clock_event(1.5, false)
+	env.rpg.set_switch("clock_on", true)
+	await env.tree.create_timer(0.4).timeout
+	assert_eq(env.rpg.state.get_variable("ticks"), 1, "one pass started")
+	env.rpg.set_switch("clock_on", false)
+	var gone: bool = await _wait_until(func(): return not env.rpg.scheduler.parallels.has("common:clock"))
+	assert_true(gone, "the run was discarded, not paused (MV behaviour)")
+	env.rpg.set_switch("clock_on", true)
+	var again: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(again, "the event started again from the top")
+
+
+func test_classic_rules_keep_a_parallel_common_event_running_across_a_map_change() -> void:
+	env.rpg.data.common_events["clock"] = _clock_event(0.05, false)
+	env.rpg.set_switch("clock_on", true)
+	var ticking: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(ticking, "the clock is ticking")
+	var task: Object = env.rpg.scheduler.parallels["common:clock"]
+	var before: int = env.rpg.state.get_variable("ticks")
+	var r: RPGResult = await env.game.transfer("house_inside", Vector2i(1, 1), "down", "none")
+	assert_true(r.is_ok(), str(r))
+	await env.settle()
+	assert_true(env.rpg.scheduler.parallels.get("common:clock") == task, "the same task kept running across the transfer")
+	var grew: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) > before)
+	assert_true(grew, "it never stopped ticking")
+
+
+func test_mv_rules_restart_a_parallel_common_event_on_a_map_change() -> void:
+	env.rpg.rules.definition["parallel_map_change"] = "restart"
+	# One pass stuck in a long wait: a second tick can only come from a fresh start.
+	env.rpg.data.common_events["clock"] = _clock_event(30.0, false)
+	env.rpg.set_switch("clock_on", true)
+	var started: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 1)
+	assert_true(started, "the clock is ticking")
+	var r: RPGResult = await env.game.transfer("house_inside", Vector2i(1, 1), "down", "none")
+	assert_true(r.is_ok(), str(r))
+	var restarted: bool = await _wait_until(func(): return int(env.rpg.state.get_variable("ticks")) >= 2)
+	assert_true(restarted, "the common event restarted from the top on the new map")
+
+
+## The fixture's parallel_evt page re-written into a transfer plus a trailing command, so the test
+## can see whether the pass continues after the map it belongs to has unloaded.
+func _porter_commands() -> Array:
+	return [
+		{"type": "transfer_player", "to": {"map": "house_inside", "position": [1, 1]}, "fade": "none"},
+		{"type": "set_variable", "id": "counter", "operation": "add", "value": 1},
+	]
+
+
+func test_the_rm2000_option_lets_a_transferring_map_parallel_finish_its_pass() -> void:
+	var ev: RPGEvent = env.game.map.get_event("parallel_evt")
+	ev.data["pages"][0]["commands"] = _porter_commands()
+	env.rpg.rules.definition["parallel_map_event_survives_map_change"] = true
+	env.rpg.set_switch("parallel_on", true)
+	var done: bool = await _wait_until(func(): return env.game.map != null and env.game.map.map_id == "house_inside" and int(env.rpg.state.get_variable("counter")) >= 1)
+	assert_true(done, "the pass finished on the new map (counter=%d)" % env.rpg.state.get_variable("counter"))
+	await env.tree.create_timer(0.3).timeout
+	assert_false(env.rpg.scheduler.parallels.has("event:town:parallel_evt"), "the spared task stopped once its pass ended")
+
+
+func test_without_the_option_a_transferring_map_parallel_stops_mid_pass() -> void:
+	var ev: RPGEvent = env.game.map.get_event("parallel_evt")
+	ev.data["pages"][0]["commands"] = _porter_commands()
+	env.rpg.set_switch("parallel_on", true)
+	var arrived: bool = await _wait_until(func(): return env.game.map != null and env.game.map.map_id == "house_inside" and not env.game.transferring)
+	assert_true(arrived, "the transfer itself completed")
+	await env.tree.create_timer(0.3).timeout
+	assert_eq(env.rpg.state.get_variable("counter"), 0, "the pass did not continue after its map unloaded (MV behaviour)")
+	assert_false(env.rpg.scheduler.parallels.has("event:town:parallel_evt"), "the task was cancelled with its map")
 
 
 # --- Call Event (#60) ---------------------------------------------------------------------------

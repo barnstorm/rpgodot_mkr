@@ -220,7 +220,7 @@ The first command runs every suite; the second runs a single suite. You can also
 godot --headless --path . --script res://tests/run_tests.gd -- --suite=interpreter
 ```
 
-There are 538 tests in 30 suites:
+There are 638 tests in 34 suites:
 
 | Suite | What it covers |
 | --- | --- |
@@ -228,8 +228,9 @@ There are 538 tests in 30 suites:
 | `save` | Save and load, migration, refusing to save during an event |
 | `import` | 2000/2003 ChipSet decoding and autotile patterns against fixtures; RPG Maker folder import findings from the real RTPs (water row, palette transparency, JPG, XP/VX/MV window skins, skipped folders, game over, tileset ids) |
 | `formula`, `rules` | Safe formulas and the Classic and OSR rule systems |
-| `battle_core` | Turn order, AI, rewards and battle events |
+| `battle_core` | Turn order, AI, rewards and battle events; the Escape effect on a party member (lone escaper ends the fight) and on an enemy (leaves with no rewards); MV/MZ scopes — N random enemies (a hit per re-rolled pick), the (dead or alive) ally scopes, Everyone; MV invocation fields — Speed in the turn-order roll, Repeat 1-9 (a random scope re-picks per repeat, a dead target keeps its remaining repeats), TP Gain charged once per use |
 | `battle_styles` | Front and side view, turn / ATB / CTB: defaults, side-view placement, the battler graphic chain (MV sheet, 2003 BattleCharSet, walk sprite), motions, ATB fill order, wait and active time, the turn counter for troop pages, preemptive and surprise (encounter rolls, Battle Processing), escape, passing the turn, spacing and mixed-source heights, auto battles in every combination |
+| `party_abilities` | VX Ace / MV party abilities, a trait any member carries for the whole party: Encounter Half and Encounter None on the map, Cancel Surprise and Raise Preemptive in the encounter roll, Gold Double and Drop Item Double in the rewards |
 | `extension_hooks` | Extension hooks: entry scripts and game signals, settings, save sections, menu and options entries, text codes, condition kinds, custom fields, map overlay layers and character attachments |
 | `plugins_wave1` | Kit plugins: menu & options plus, message codes plus, letter sounds, gab window, save & autosave plus (off by default, saves) |
 | `plugins_wave2` | Kit plugins: quest journal and tracker, lighting and time of day, item crafting; plugin Database record types and map/event-page plugin fields |
@@ -243,7 +244,7 @@ There are 538 tests in 30 suites:
 | `runtime_regressions` | Edge cases from a runtime review: a parallel event that transfers the player, failed transfers and loads, fades after a reset, self switches after a fading transfer, Erase Event across saves, pictures and BGS after a load |
 | `commands_maker` | The RPG Maker commands added for the tutorials: Show Animation, Change Actor Graphic / Name / Level / EXP / Skills / Equipment / Class, transparency, battle music, tileset, parallax, battle background, Get Location Info, Stop SE, window skin |
 | `vehicles` | Boat, ship and airship: boarding, water rules, landing, riding through save and load |
-| `rules_vx_ace` | The VX Ace style rules: stat curves, damage formulas, HIT/EVA/CRI, TP, Features |
+| `rules_vx_ace` | The VX Ace style rules: stat curves, damage formulas, HIT/EVA/CRI, TP, Features, the Gain TP effect |
 | `states_walking` | States while walking: removal after N steps (not in a vehicle), slip damage and regeneration every 20 steps, 2000-style changes every N steps, the 1 HP floor and game over with Knockout by slip damage, damage floors, step counters through save and load, the Database fields and checks |
 | `database_ui` | Database forms: vehicles, conditions, operand modes, tile picker, class curves, Autoname, a project with no rpg folder, maker view release; editor-QA fixes: reload after Create, Ctrl+S, per-tab problem checks, type dropdowns, rename blocking, plain starting values, currency hint, title image and start facing |
 | `event_editor` | Editor-QA fixes in the event editor and quick events: starter sounds in VX/MV projects, steady form layout, uncommitted new events, 1-based JSON lines, readable event search, dialogs stepping aside for map picks, the character frame preview, new Conditional Branch kinds (with runtime support) |
@@ -290,7 +291,7 @@ Helper scripts:
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 79 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
+| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 90 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
 | 2 | Asset import (2000/2003) | Done for ChipSet, CharSet, FaceSet and System graphic, with passability overrides that survive reimport. The ChipSet layout follows public docs plus fixtures; see *Limitations* |
 | 3 | Main window and map editor | Done. Map tree and properties, all painting tools, autotiles, 4 layers, regions, shadows, event mode, overlays, Playtest |
 | 4 | Event editor | Done. Pages, form-built commands, pickers, move route editor, quick events, `project` extension |
@@ -299,7 +300,7 @@ Helper scripts:
 | 7 | Tools | Done. Event searcher, sound test, resources with pack licences, extensions with New command, deploy checks with jump-to-fix. The export itself uses Godot's export dialog and the included preset |
 | 8 | XP, VX/Ace, MV/MZ profiles | Done, with the gaps listed in each decoder file: XP autotiles and tilesets; VX/MV A1–A5 and B–E at 32/48 px; XP and `$` character sheets; 96/144 px faces; golden-fixture tests. VX/MV deep sea, A1 decorations and transparent A2 kinds (bushes, forests, holes) are painted over a hidden base layer (the sea, or the ground already there), as RPG Maker layers them. 2000/2003 deep water rounds its corners against shallow water with the ChipSet's blend pieces. Not decoded: A2 table legs. An importer copies a maker's own RPG Maker folders in. For MV/MZ it reads RPG Maker's passability (`data/Tilesets.json`); for an XP project it reads `Data/Tilesets.rxdata` (tileset names, autotiles, passability, priorities, terrain tags); an XP RTP has no database, so autotiles are paired only where the file names are clear, and the rest is reported. VX/Ace passability lives in a binary database that is not read. Verified on a real RPG Maker MV install (6 tilesets, 503 files) |
 | 9 | Starter template | Done with a substitute pack. *Create RPG project* builds a starter project, and there is a [maker guide](addons/rpg/docs/MAKER_GUIDE.md). The sample game uses a generated CC0 pack, **not** the EasyRPG RTP |
-| 10 | Custom rule systems | Done. Rules data, safe formulas, `rules.gd`, capability checks, the OSR example, a **VX Ace style** rule system (Ace stats, TP, damage formulas, Features), and a migration preview with backup when switching. Mapping old stats onto new ones is not automated: old values are kept, not converted |
+| 10 | Custom rule systems | Done. Rules data, safe formulas, `rules.gd`, capability checks, the OSR example, a **VX Ace style** rule system (Ace stats, TP, damage formulas, Features, Party Abilities), and a migration preview with backup when switching. Mapping old stats onto new ones is not automated: old values are kept, not converted |
 | 11 | Character generator, tutorials | Character generator not started. Instead of new tutorials, there is a guide to following the official RPG Maker VX / VX Ace tutorials in RPG Kit |
 
 ## Limitations and things not verified
@@ -314,9 +315,9 @@ Helper scripts:
 - **ChipSet layout.** The RPG Maker 2000/2003 ChipSet layout was rebuilt from public descriptions, with golden fixtures for our own sheets. Real third-party ChipSets may expose layout assumptions; the importer keeps per-tile overrides for that.
 - **No RTP.** No RPG Maker RTP is bundled. Makers who own RPG Maker can import their own RTP or project art (Tools > Resources). The importer has been run on the official 2000, 2003, XP and VX Ace RTPs and on real MV projects; MZ has not been tried on real files.
 - **Larger screens.** VX/Ace and MV-style projects use a 544×416 or 816×624 game screen. The map fills it, but the menus, messages and battle screen are laid out for 320×240 and scaled up to fit.
-- **VX Ace rules.** Not covered: Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags; Party Abilities. Action Times+ repeats the same action. Change Class keeps the level rather than a separate EXP total per class. Lowering a level keeps the stats gained on the way up.
+- **VX Ace rules.** Not covered: Sp-Parameters other than critical rate; Counter Attack and Magic Reflection; Special Flags. Action Times+ repeats the same action. Change Class keeps the level rather than a separate EXP total per class. Lowering a level keeps the stats gained on the way up.
 - **Actor battlers.** Front view draws no actors. Side view draws the *Side-view battler* (or Change Actor Graphic's battler image when it is a side-view sheet), else the walk sprite. A party of one source keeps its maker's proportions (MV sheets shrink to the 320×240 layout like MV enemies); a party mixing sources is drawn at the tallest figure's height. Actors are spaced from their visible figures so the one in front hides at most a third of the one behind (up to 40% on a crowded stage, then all shrink). The 2003 pose rows were worked out from the 2003 RTP sheets. Weapon sprites (2003 BattleWeapon, MV weapons) are not drawn.
-- **Preemptive and surprise.** Random encounters roll them with a simple form of MV's rates: 5% preemptive and 3% surprise when the party's average agility is at least the troop's, else 3% and 5%, from one roll. Battle Processing has an *Advantage* choice (default normal). Ability traits that change the rates (MV's Raise Preemptive, Cancel Surprise) are not read.
+- **Preemptive and surprise.** Random encounters roll them with a simple form of MV's rates: 5% preemptive and 3% surprise when the party's average agility is at least the troop's, else 3% and 5%, from one roll. Battle Processing has an *Advantage* choice (default normal). The party abilities Raise Preemptive (×4 first strike) and Cancel Surprise (no ambush) shape them.
 - **ATB.** Shift or Tab (or a click on another full actor's row or figure) passes the command to the next full actor, as in 2003. There is no "Auto" party command.
 - **Gamepad.** D-pad and left stick (deadzone 0.5) move; A is OK, B and Back cancel, X dashes, Start and Y open or close the menu (MV maps Y to the menu). Mapped and tested with injected events, not on hardware.
 - **Mouse and touch.** As in RPG Maker MV/MZ: hover moves a menu cursor, a click on the selected entry is OK, right click is Cancel, the wheel scrolls; a click advances a message; clicking the map walks there and clicking an event next to the player talks to it. Turn it off with the project setting `rpg/input/mouse = false` or System `"mouse_input": false`.

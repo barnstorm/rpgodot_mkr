@@ -178,3 +178,79 @@ func test_load_restores_pictures_and_bgs() -> void:
 		assert_true(absf(s.scale.x - 1.5) < 0.01, "scale kept")
 		assert_eq(str(s.get_meta("picture_name", "")), pic)
 	assert_eq(str(env.rpg.audio.current_bgs.get("file", "")), "res://assets/starter/Sound/cancel.wav", "BGS restored")
+
+
+# --- Same-map transfers (#75) ----------------------------------------------------------------------
+
+func test_same_map_transfer_moves_the_player_without_rebuilding() -> void:
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8))
+	assert_true(r.is_ok())
+	var before: RPGMap = env.game.map
+	var tr: RPGResult = await env.game.transfer("town", Vector2i(14, 12), "right", "none")
+	assert_true(tr.is_ok(), str(tr))
+	assert_eq(env.game.player.cell, Vector2i(14, 12))
+	assert_eq(env.game.player.facing, "right")
+	assert_true(env.game.map == before, "the live map instance is kept, not rebuilt")
+	assert_false(env.game.transferring)
+	assert_false(env.rpg.scheduler.input_locked(), "input lock released")
+
+
+func test_erased_events_stay_erased_across_a_same_map_transfer() -> void:
+	_add_event("town", "chest75", [6, 6], "action_button", [{"type": "text", "text": "A chest."}], "same")
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8))
+	assert_true(r.is_ok())
+	var chest: Node = env.game.map.get_event("chest75")
+	assert_true(chest != null and not chest.erased)
+	chest.erase_event()
+	var tr: RPGResult = await env.game.transfer("town", Vector2i(6, 6), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	var again: Node = env.game.map.get_event("chest75")
+	assert_true(again == chest, "same event node, not a reloaded copy")
+	assert_true(again.erased, "the erase survives the transfer")
+	assert_eq(again.page_index, -1, "the chest stays hidden")
+
+
+func test_a_running_parallel_is_not_restarted_by_a_same_map_transfer() -> void:
+	_add_event("town", "ticker75", [9, 0], "parallel", [
+		{"type": "set_variable", "id": "ticks", "operation": "add", "value": 1},
+		{"type": "wait", "seconds": 0.02}])
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8))
+	assert_true(r.is_ok())
+	var started: bool = await _wait_until(func(): return env.rpg.scheduler.parallels.has("event:town:ticker75") and int(env.rpg.get_variable("ticks")) >= 1)
+	assert_true(started, "the ticker is running")
+	var task: Object = env.rpg.scheduler.parallels["event:town:ticker75"]
+	var tr: RPGResult = await env.game.transfer("town", Vector2i(14, 12), "down", "none")
+	assert_true(tr.is_ok(), str(tr))
+	assert_true(env.rpg.scheduler.parallels.has("event:town:ticker75"), "the parallel survived the transfer")
+	assert_true(env.rpg.scheduler.parallels["event:town:ticker75"] == task, "the same task kept running, not a restart")
+	var still: bool = await _wait_until(func(): return int(env.rpg.get_variable("ticks")) >= 3)
+	assert_true(still, "and it kept ticking")
+
+
+func test_same_map_transfer_still_plays_its_fade() -> void:
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8))
+	assert_true(r.is_ok())
+	var t0 := Time.get_ticks_msec()
+	var tr: RPGResult = await env.game.transfer("town", Vector2i(14, 12), "down", "black")
+	assert_true(tr.is_ok(), str(tr))
+	var dt := Time.get_ticks_msec() - t0
+	assert_true(dt >= 400, "the fade out and back in play (took %d ms)" % dt)
+	assert_false(env.rpg.screen.is_faded, "and it fades back in")
+	assert_eq(env.rpg.screen.fade_rect.color.a, 0.0)
+
+
+func test_same_map_transfer_onto_an_occupied_cell_fails_without_moving_the_player() -> void:
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8))
+	assert_true(r.is_ok())
+	var before: RPGMap = env.game.map
+	var bad: RPGResult = await env.game.transfer("town", Vector2i(5, 5), "down", "none")
+	assert_true(bad.is_error(), "elder_door's cell is occupied")
+	assert_eq(env.game.player.cell, Vector2i(12, 8), "the player did not move")
+	assert_true(env.game.map == before, "the map was not touched")
+	assert_false(env.game.transferring)
+	assert_false(env.rpg.scheduler.input_locked(), "input lock released")
+	# With a fallback distance the transfer lands next to the blocker instead.
+	var good: RPGResult = await env.game.transfer("town", Vector2i(5, 5), "down", "none", 2)
+	assert_true(good.is_ok(), str(good))
+	assert_ne(env.game.player.cell, Vector2i(5, 5), "the fallback moved the player beside the door")
+	assert_true(env.game.player.cell.distance_to(Vector2i(5, 5)) <= 2.0, "within the fallback distance: %s" % env.game.player.cell)

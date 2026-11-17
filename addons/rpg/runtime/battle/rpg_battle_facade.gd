@@ -6,7 +6,8 @@ extends RefCounted
 ## The battle scene creates it when it starts and clears it when the fight ends, so commands
 ## (battle events, common events called from them) and extensions never have to reach into the
 ## scene's internals. Documented methods are stable within a minor version; anything prefixed
-## `_` may change. Awaitable methods (`reveal`, `message`) return when their effect is done.
+## `_` may change. Awaitable methods (`reveal`, `perform`, `message`) return when their effect
+## is done.
 ##
 ##   if rpg.battle != null:
 ##       var slime = rpg.battle.add_enemy("slime", Vector2(120, 150))
@@ -67,6 +68,52 @@ func add_enemy(enemy_id: String, position := Vector2(160, 120)) -> RPGBattler:
 	var b: RPGBattler = c.add_enemy(enemy_id, position)
 	if b != null:
 		s.refresh_after_event()
+	return b
+
+
+## Force Action, right now: battler `b` performs the skill or item `action` at once, outside
+## the turn order (its own pending action is kept, and a timed battle's gauge is untouched).
+## Awaits the action's presentation. Returns the action's result, or {} when the battler could
+## not act (dead, hidden, restricted) — nothing happens then.
+func perform(b: RPGBattler, action: Dictionary) -> Dictionary:
+	var s := scene()
+	var c := core()
+	if s == null or c == null:
+		return {}
+	var res: Dictionary = c.force(b, action, "now")
+	if res.is_empty():
+		return {}
+	await s.show_action(res)
+	for ce_id in res.get("common_events", []):
+		var ce: Dictionary = s.rpg.data.common_events.get(str(ce_id), {})
+		if not ce.is_empty():
+			await s.run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
+		if not s.is_inside_tree():
+			break
+	s.refresh_after_event()
+	return res
+
+
+## Force Action, at its next turn: `b` uses `action` instead of choosing one when its next turn
+## comes (the player is not asked for it). Returns true when it was queued.
+func queue(b: RPGBattler, action: Dictionary) -> bool:
+	var c := core()
+	if c == null:
+		return false
+	return c.force(b, action, "turn")
+
+
+## Transform Enemy: the troop member at `member_index` (1-based, troop order) becomes an enemy
+## built from record `enemy_id`, keeping its slot (position, turn state) and "A"/"B" suffix.
+## `hp_policy`: "keep" carries resources over clamped to the new maximum, "percent" carries their
+## share over, "refill" starts full. States are kept unless `clear_states`. Awaits the transform
+## effect; returns the battler, or null when the member or record does not exist.
+func transform(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
+	var s := scene()
+	var c := core()
+	if s == null or c == null:
+		return null
+	var b: RPGBattler = await s.transform_enemy(member_index - 1, enemy_id, hp_policy, clear_states)
 	return b
 
 

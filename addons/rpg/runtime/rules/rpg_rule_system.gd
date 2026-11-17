@@ -42,6 +42,11 @@ const DEFAULT_TERMS := {
 	"escape": "The party escaped!",
 	"escape_fail": "Couldn't escape!",
 	"no_escape": "There is no escape!",
+	"flee": "%1 flees!",
+	"observe": "%1 is observing.",
+	"charge": "%1 is charging up!",
+	"self_destruct": "%1 self-destructs!",
+	"transform": "%1 transformed!",
 	"appear": "%1 appears!",
 	"victory": "Victory!",
 	"defeat": "The party has fallen...",
@@ -214,6 +219,25 @@ func death_state() -> String:
 ## Whether slip damage can knock out by default; a state's slip "can_kill" overrides it per state.
 func slip_knockout() -> bool:
 	return bool(definition.get("slip_knockout", true))
+
+
+## What a parallel common event's condition switch going off does to its run: "pause" freezes it
+## at its current command and carries on there when the switch returns (RM2000/2003); "restart"
+## discards the run, and the event starts from the top when the switch returns (MV).
+func parallel_switch_off() -> String:
+	return str(definition.get("parallel_switch_off", "restart"))
+
+
+## What a map change does to a running parallel common event: "keep" lets it run on across the
+## transfer (RM2000/2003); "restart" discards it and it starts from the top on the new map (MV).
+func parallel_map_change() -> String:
+	return str(definition.get("parallel_map_change", "keep"))
+
+
+## RM2000-style option: the parallel map event that runs a transfer keeps executing on the new map
+## (its current pass finishes there); by default, like MV, it stops with its map.
+func parallel_map_event_survives_map_change() -> bool:
+	return bool(definition.get("parallel_map_event_survives_map_change", false))
 
 
 func has_capability(cap: String) -> bool:
@@ -393,6 +417,25 @@ func has_trait(b: RPGBattler, kind: String, id: String = "") -> bool:
 		if id == "" or str(t.get("id", "")) == id:
 			return true
 	return false
+
+
+## Party abilities (VX Ace / MV): a trait on any member of `party` applies to the whole party —
+## Encounter Half / Encounter None, Cancel Surprise, Raise Preemptive.
+func party_has_trait(party: Array, kind: String) -> bool:
+	for b in party:
+		if b is RPGBattler and has_trait(b, kind):
+			return true
+	return false
+
+
+## Product of every member's percent traits of `kind`: Gold Double at 200 doubles, two members
+## carrying it quadruple, as MV's gold rate does.
+func party_trait_rate(party: Array, kind: String) -> float:
+	var rate := 1.0
+	for b in party:
+		if b is RPGBattler:
+			rate *= trait_rate(b, kind)
+	return rate
 
 
 func attack_element(b: RPGBattler) -> String:
@@ -684,7 +727,8 @@ func new_enemy_battler(enemy_id: String) -> RPGBattler:
 	b.base = (rec.get("stats", {}) as Dictionary).duplicate(true)
 	for a in rec.get("actions", []):
 		var sk := str(a.get("skill", ""))
-		if sk != "" and not sk in ["attack", "guard", "wait", "escape"] and not b.skills.has(sk):
+		# The 2003 basic actions are not skills; everything else names a skill record.
+		if sk != "" and not sk in ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"] and not b.skills.has(sk):
 			b.skills.append(sk)
 	_apply_level_formulas(b, "on_create_enemy")
 	recover_all(b)
@@ -1191,6 +1235,22 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 				return {}
 			u = rec2.duplicate(true)
 			u.kind = "item"
+		"self_destruct":
+			# The 2003 basic action: the monster's life for damage to the party. The definition
+			# (rules.json "self_destruct") can tune the formula like any skill.
+			u = (definition.get("self_destruct", {}) as Dictionary).duplicate(true)
+			u.kind = "self_destruct"
+			u.id = "self_destruct"
+			if not u.has("name"):
+				u.name = "Self-Destruct"
+			if not u.has("scope"):
+				u.scope = "all_enemies"
+			if not u.has("formula"):
+				u.formula = "a.hp"
+			if not u.has("hit"):
+				u.hit = 100
+			if not u.has("hit_type"):
+				u.hit_type = "certain"
 		_:
 			return {}
 	# Extra fields every action has in formulas (rules.json "usable_defaults", e.g. tp_gain: 0).
@@ -1214,6 +1274,10 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 	u.scope = str(u.get("scope", "one_enemy"))
 	u.cost = u.get("cost", {})
 	u.speed = u.get("speed", 0)
+	# VX Ace/MV invocation fields: Repeat (the battle core applies the action that many times)
+	# and TP Gain (charged to the user through the rules' gain_on_use).
+	u.repeats = u.get("repeats", 1)
+	u.tp_gain = u.get("tp_gain", 0)
 	return u
 
 
@@ -1222,7 +1286,7 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 	if not can_act(user):
 		return false
 	var kind := str(action.get("kind", ""))
-	if kind in ["guard", "wait", "escape", "attack"]:
+	if kind in ["guard", "wait", "escape", "attack", "observe", "charge", "transform", "self_destruct"]:
 		return true
 	var u := resolve_action(user, action)
 	if u.is_empty():
@@ -1270,6 +1334,12 @@ func action_times(b: RPGBattler) -> int:
 	return n
 
 
+## Charge Up (2003): the multiplier a stored charge gives the monster's next attack. A public
+## step, so a rule system (rules.gd) can make charging stronger or weaker.
+func charge_multiplier(b: RPGBattler) -> float:
+	return 2.0
+
+
 func pay_cost(user: RPGBattler, action: Dictionary) -> void:
 	if str(action.get("kind", "")) != "skill":
 		return
@@ -1277,6 +1347,17 @@ func pay_cost(user: RPGBattler, action: Dictionary) -> void:
 	var cost: Dictionary = u.get("cost", {})
 	for res_id in cost:
 		user.set_resource(res_id, maxi(0, user.get_resource(res_id) - int(cost[res_id])))
+
+
+## Resources the user gains for using the action: "gain_on_use" formula, a = the user,
+## s = the action (e.g. TP "s.tp_gain * a.tcr / 100"). VX Ace/MV charge this once per use —
+## not per target or repeat, and even on a miss — so callers run it beside pay_cost and it
+## returns the gains as {resource: amount}.
+func gain_on_use(user: RPGBattler, action: Dictionary) -> Dictionary:
+	if not _has_resource_key("gain_on_use"):
+		return {}
+	var env := {"a": _snap_of(user), "v": variables, "rng": rng, "s": resolve_action(user, action)}
+	return _gain_resources(user, "gain_on_use", env)
 
 
 ## Order value for the turn queue (higher acts first): rules "turn_order.speed" formula plus
@@ -1412,17 +1493,18 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 ##  removed_states, resisted_states, knocked_out, revived, lines: [String], text, error}.
 ## `damage` is life lost (>= 0), `recovered` is life regained; `changes` maps every resource
 ## to its net change. Only when non-empty: `charged` (target resources gained from taking damage,
-## included in `changes`) and `user_changes` (user resources gained from the hit, e.g. TP).
+## included in `changes`). The user's own use charge (e.g. TP) is not part of this per-target
+## result — see gain_on_use(), which callers run once per use.
 func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> Dictionary:
 	var res := {"hit": false, "evaded": false, "damage": 0, "recovered": 0, "resource": life_resource(),
 		"critical": false, "element_rate": 1.0, "added_states": [], "removed_states": [], "resisted_states": [],
 		"added_buffs": [], "added_debuffs": [], "removed_buffs": [],
-		"knocked_out": false, "revived": false, "changes": {}, "lines": [], "text": "", "error": ""}
+		"knocked_out": false, "revived": false, "escape": false, "changes": {}, "lines": [], "text": "", "error": ""}
 	var u := resolve_action(user, action)
 	if u.is_empty():
 		res.error = "unknown action %s" % str(action)
 		return _finish(res)
-	var for_dead: bool = u.scope in ["one_dead_ally", "all_dead_allies"]
+	var for_dead: bool = u.scope in ["one_dead_ally", "all_dead_allies", "one_ally_any", "all_allies_any"]
 	if target.is_dead() and not for_dead:
 		res.lines.append(term("nothing"))
 		return _finish(res)
@@ -1455,8 +1537,9 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 	# flat `amount`; add_state / remove_state: `chance` % (default 100); add_buff / add_debuff /
 	# remove_buff / remove_debuff: `id` = stat, `turns` for the adds (a debuff rolls its chance
 	# against the Debuff Rate traits and the luck factor); grow: a permanent stat increase
-	# (`id` = stat, `amount`); learn_skill: `id` = skill; common_event: run once after the action
-	# by the caller (common_events()).
+	# (`id` = stat, `amount`); learn_skill: `id` = skill; gain_tp: flat TP on the target;
+	# escape: the target leaves the battle (the core carries it out); common_event: run once
+	# after the action by the caller (common_events()).
 	for e in u.effects:
 		if not (e is Dictionary):
 			continue
@@ -1498,6 +1581,14 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 					if not res.has("learned"):
 						res["learned"] = []
 					res.learned.append(sk)
+			"gain_tp":
+				# Flat TP on the target (VX Ace / MV); rules without a TP resource ignore it.
+				if not target.is_dead() and _res_order.has("tp"):
+					_change(target, "tp", int(_num(e.get("amount"), 0.0)))
+			"escape":
+				# The Special Effect: Escape is carried out by the battle core (whoever it hits
+				# leaves the fight), not here — the core owns the field and the result.
+				res.escape = true
 			"add_buff":
 				var bstat := str(e.get("id", ""))
 				if add_buff(target, bstat, maxi(1, int(_num(e.get("turns"), 5.0)))):
@@ -1547,13 +1638,6 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		res.damage = int(d.value)
 	res.recovered = maxi(0, int(res.changes.get(life_resource(), 0)))
 	_describe(user, target, u, d, res)
-	# Resources the user gains when the action hits: "gain_on_use" formula, a = the user,
-	# b = the target, s = the action (e.g. TP "s.tp_gain * a.tcr / 100").
-	if _has_resource_key("gain_on_use"):
-		var uenv := {"a": _snap_of(user), "b": target.snapshot(), "v": variables, "s": u, "rng": rng}
-		var gained := _gain_resources(user, "gain_on_use", uenv)
-		if not gained.is_empty():
-			res["user_changes"] = gained
 	return _finish(res)
 
 

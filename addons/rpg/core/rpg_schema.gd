@@ -19,7 +19,11 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 	defs["cell"] = {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}
 	defs["location"] = {
 		"type": "object", "required": ["map", "position"],
-		"properties": {"map": {"$ref": "#/$defs/id"}, "position": {"$ref": "#/$defs/cell"}},
+		"properties": {
+			# The map is an id, or a variable holding one (#16: Memorize / Recall Place).
+			"map": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "object", "required": ["variable"], "properties": {"variable": {"$ref": "#/$defs/id"}}}]},
+			"position": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/operand"}},
+		},
 	}
 	defs["operand"] = {"oneOf": [
 		{"type": "number"},
@@ -51,6 +55,14 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"switch": {"$ref": "#/$defs/id"}, "value": {"type": "boolean"}, "sound": {"$ref": "#/$defs/sound"},
 			"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 			"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"}, "hide": {"type": "boolean"},
+			"slide": {"type": "string"},
+			"move_to": {"oneOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "string"}]},
+			"call": {"type": "object", "required": ["method"], "properties": {
+				"method": {"type": "string"}, "args": {"type": "array"},
+			}},
+			"speed_up": {"type": "boolean"}, "speed_down": {"type": "boolean"},
+			"frequency_up": {"type": "boolean"}, "frequency_down": {"type": "boolean"},
+			"opacity_up": {"type": "boolean"}, "opacity_down": {"type": "boolean"},
 		},
 	}
 	defs["route"] = {"oneOf": [
@@ -100,6 +112,7 @@ static func events_schema(registry: RPGCommandRegistry) -> Dictionary:
 			"options": {"type": "object", "properties": {
 				"walk_anim": {"type": "boolean"}, "step_anim": {"type": "boolean"},
 				"direction_fix": {"type": "boolean"}, "through": {"type": "boolean"},
+				"forbid_overlap": {"type": "boolean"},
 			}},
 			"priority": {"enum": ["below", "same", "above"]},
 			"trigger": {"enum": ["action_button", "player_touch", "event_touch", "autorun", "parallel"]},

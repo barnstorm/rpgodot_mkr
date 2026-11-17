@@ -315,7 +315,7 @@ static func page_structure(pg: Dictionary, registry: RPGCommandRegistry, file: S
 	if not (opts is Dictionary):
 		out.append(problem("error", file, rec, "options", pp + "/options", "Options must be an object.", ""))
 	else:
-		for k in ["walk_anim", "step_anim", "direction_fix", "through"]:
+		for k in ["walk_anim", "step_anim", "direction_fix", "through", "forbid_overlap"]:
 			if opts.has(k) and typeof(opts[k]) != TYPE_BOOL:
 				out.append(problem("error", file, rec, "options", "%s/options/%s" % [pp, k], "Option '%s' must be true or false." % k, ""))
 	if not PAGE_PRIORITIES.has(str(pg.get("priority", "same"))):
@@ -377,8 +377,31 @@ static func _enemy_appear_checks(tr: Dictionary, list: Variant, registry: RPGCom
 		)
 
 
+## Transform Enemy in a troop's battle events: the enemy number must be a member of the group.
+## The "into" enemy record itself is checked like any ref (missing record = error) by the
+## reference pass.
+static func _transform_enemy_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
+	if registry == null or not (list is Array):
+		return
+	var rec := str(tr.get("id", ""))
+	var members: Variant = tr.get("members", [])
+	if not (members is Array):
+		return
+	registry.walk(list, func(c: Dictionary, p: String) -> void:
+		if str(c.get("type", "")) != "transform_enemy":
+			return
+		var n := int(c.get("enemy", 1)) if typeof(c.get("enemy", 1)) in [TYPE_INT, TYPE_FLOAT] else 0
+		if n < 1 or n > members.size():
+			out.append(problem("error", file, rec, "enemy", path + p.replace(".", "/") + "/enemy",
+				"Transform Enemy: enemy group '%s' has no enemy #%d." % [rec, n], "Pick a number from 1 to %d." % members.size()))
+		)
+
+
 ## The party commands' enemy target in a troop's battle events (Change HP/SP, Change State,
-## Recover All): the enemy number must be a member of the group.
+## Recover All), and the enemy numbers of Force Flee and Force Action: the number must be a
+## member of the group. Change HP/SP, Change State, Recover All and Force Flee reach an enemy
+## through their target selector; Force Action names the member directly (its subject choice),
+## so it skips that gate. Transform Enemy has its own check just above.
 static func _enemy_target_checks(tr: Dictionary, list: Variant, registry: RPGCommandRegistry, file: String, path: String, out: Array) -> void:
 	if registry == null or not (list is Array):
 		return
@@ -387,9 +410,13 @@ static func _enemy_target_checks(tr: Dictionary, list: Variant, registry: RPGCom
 	if not (members is Array):
 		return
 	registry.walk(list, func(c: Dictionary, p: String) -> void:
-		if not ["change_hp_mp", "change_state", "recover_all"].has(str(c.get("type", ""))):
+		var ctype := str(c.get("type", ""))
+		if not ["change_hp_mp", "change_state", "recover_all", "force_flee", "force_action"].has(ctype):
 			return
-		if str(c.get("target", "party")) != "enemy":
+		if ctype == "force_action":
+			if str(c.get("subject", "enemy")) != "enemy":
+				return
+		elif str(c.get("target", "party")) != "enemy":
 			return
 		var n := int(c.get("enemy_index", 1)) if typeof(c.get("enemy_index", 1)) in [TYPE_INT, TYPE_FLOAT] else 0
 		if n < 1 or n > members.size():
@@ -417,6 +444,7 @@ static func _troop_structure(tr: Dictionary, registry: RPGCommandRegistry, file:
 			_condition_structure(pg.conditions[k], file, rec, "%s/conditions/%d" % [pp, k], out, "battle_page")
 		_commands_structure(pg.get("commands", []), registry, file, rec, pp + "/commands", out, "battle")
 		_enemy_appear_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
+		_transform_enemy_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 		_enemy_target_checks(tr, pg.get("commands", []), registry, file, pp + "/commands", out)
 
 
@@ -583,6 +611,24 @@ static func _operand_structure(v: Variant, file: String, rec: String, path: Stri
 	out.append(problem("error", file, rec, "value", path, "A value must be a number, {\"variable\": id}, {\"pointer\": id}, {\"random\": [a, b]}, {\"game_data\": {...}} or {\"self_variable\": {...}}.", ""))
 
 
+## A location is {map, position}: the map is an id or names a variable, the cell is two operands
+## (#16: Memorize / Recall Place). Parts that come from variables are dynamic and checked at
+## runtime instead.
+static func _location_structure(v: Variant, file: String, rec: String, path: String, out: Array) -> void:
+	if not (v is Dictionary) or not v.has("map") or not (v.get("position") is Array) or v.position.size() != 2:
+		out.append(problem("error", file, rec, "value", path, "A location must be {\"map\": id or {\"variable\": id}, \"position\": [x, y]}.", ""))
+		return
+	if typeof(v.map) == TYPE_STRING and str(v.map) != "":
+		# A fixed map id: checked against the project's maps in references().
+		pass
+	elif v.map is Dictionary and RPGIds.is_valid(v.map.get("variable")):
+		pass
+	else:
+		out.append(problem("error", file, rec, "map", path + "/map", "The map must be an ID or {\"variable\": id}.", ""))
+	for i in 2:
+		_operand_structure(v.position[i], file, rec, "%s/position/%d" % [path, i], out)
+
+
 ## Structure of a {game_data: {...}} operand: the kind must exist and its fields must be plausible.
 ## IDs inside game data name records; references() checks those separately.
 static func _game_data_structure(g: Dictionary, file: String, rec: String, path: String, out: Array) -> void:
@@ -672,12 +718,20 @@ static func command_structure(c: Dictionary, registry: RPGCommandRegistry, file 
 		match str(f.get("kind", "")):
 			"operand":
 				_operand_structure(c[k], file, rec, "%s/%s" % [path, k], out)
+			"location":
+				_location_structure(c[k], file, rec, "%s/%s" % [path, k], out)
 			"facing":
 				if not FACINGS.has(str(c[k])):
 					out.append(problem("error", file, rec, k, "%s/%s" % [path, k], "Unknown facing '%s'." % c[k], "Use down, left, right, up or keep."))
 			"ref":
 				if typeof(c[k]) != TYPE_STRING:
 					out.append(problem("error", file, rec, k, "%s/%s" % [path, k], "'%s' must be an ID." % f.get("label", k), ""))
+	# A group named by a variable (#38) can only be checked when the battle starts, so say so
+	# instead of staying quiet about it.
+	if type == "battle" and str(c.get("troop_source", "troop")) == "variable":
+		out.append(problem("warning", file, rec, "variable", "%s/variable" % path,
+			"Battle Processing: the enemy group comes from variable '%s', so it is only checked when the battle starts." % c.get("variable", "?"),
+			"Put an enemy group's ID in the variable before the battle (Set Variable or a plugin)."))
 	return out
 
 
@@ -743,6 +797,18 @@ static func _add_ref(acc: Dictionary, ctx: Dictionary, kind: String, holder: Var
 		return
 	acc.refs.append({"kind": kind, "id": id, "file": ctx.file, "record": ctx.record, "field": field if field != "" else str(key),
 		"path": path, "holder": holder, "key": key, "access": access, "hidden": hidden or ctx.hidden, "map": ctx.map})
+
+
+## The variables an operand reads ({variable: id}, or {pointer: id} which reads the named
+## variable first), for used-by listings.
+static func _operand_refs(v: Variant, ctx: Dictionary, path: String, acc: Dictionary, field: String) -> void:
+	if not (v is Dictionary):
+		return
+	for k in ["variable", "pointer"]:
+		if str(v.get(k, "")) != "":
+			_add_ref(acc, ctx, "variable", v, k, "%s/%s" % [path, k], "read", false, field)
+	if v.get("self_variable") is Dictionary and str(v.self_variable.get("map", "")) != "":
+		_add_ref(acc, ctx, "map", v.self_variable, "map", path + "/self_variable/map", "read", false, field)
 
 
 static func _event_refs(ev: Dictionary, base: String, ctx: Dictionary, registry: RPGCommandRegistry, acc: Dictionary) -> void:
@@ -822,22 +888,25 @@ static func _field(f: Dictionary, siblings: Array, holder: Variant, key: Variant
 			_add_ref(acc, ctx, kind, holder, key, path, access, false, str(f.get("key", key)))
 		"location":
 			if v is Dictionary:
-				_add_ref(acc, ctx, "map", v, "map", path + "/map", "read", false, str(f.get("key", key)))
-				acc.locations.append({"map": str(v.get("map", "")), "position": v.get("position"), "file": ctx.file, "record": ctx.record, "path": path, "hidden": ctx.hidden})
+				# A fixed map id is checked against the project's maps; a variable-held one (#16)
+				# is dynamic - it reads the variable instead and is resolved at runtime.
+				if typeof(v.get("map")) == TYPE_STRING:
+					_add_ref(acc, ctx, "map", v, "map", path + "/map", "read", false, str(f.get("key", key)))
+				elif v.get("map") is Dictionary and str(v.map.get("variable", "")) != "":
+					_add_ref(acc, ctx, "variable", v.map, "variable", path + "/map/variable", "read", false, str(f.get("key", key)))
+				if v.get("position") is Array:
+					for i in v.position.size():
+						if v.position[i] is Dictionary:
+							_operand_refs(v.position[i], ctx, "%s/position/%d" % [path, i], acc, str(f.get("key", key)))
+				acc.locations.append({"map": v.get("map"), "position": v.get("position"), "file": ctx.file, "record": ctx.record, "path": path, "hidden": ctx.hidden})
 		"condition":
 			_cond_refs(v, path, ctx, acc)
 		"operand":
-			if v is Dictionary and v.has("variable"):
-				_add_ref(acc, ctx, "variable", v, "variable", path + "/variable", "read", false, str(f.get("key", key)))
-			elif v is Dictionary and v.has("pointer"):
-				_add_ref(acc, ctx, "variable", v, "pointer", path + "/pointer", "read", false, str(f.get("key", key)))
-			elif v is Dictionary and v.get("self_variable") is Dictionary and str(v.self_variable.get("map", "")) != "":
-				_add_ref(acc, ctx, "map", v.self_variable, "map", path + "/self_variable/map", "read", false, str(f.get("key", key)))
+			_operand_refs(v, ctx, path, acc, str(f.get("key", key)))
 		"operand_pair":
 			if v is Array:
 				for i in v.size():
-					if v[i] is Dictionary and v[i].has("variable"):
-						_add_ref(acc, ctx, "variable", v[i], "variable", "%s/%d/variable" % [path, i], "read", false, str(f.get("key", key)))
+					_operand_refs(v[i], ctx, "%s/%d" % [path, i], acc, str(f.get("key", key)))
 		"sound":
 			if v is Dictionary and typeof(v.get("file")) == TYPE_STRING and v.file != "":
 				acc.assets.append({"kind": str(f.get("res", "sound")), "also": f.get("res_also", []), "name": v.file, "file": ctx.file, "record": ctx.record, "path": path + "/file", "hidden": ctx.hidden})
@@ -1014,9 +1083,19 @@ static func _db_refs(t: String, d: Dictionary, ctx: Dictionary, registry: RPGCom
 				var acts: Variant = r.get("actions", [])
 				if acts is Array:
 					for j in acts.size():
-						if acts[j] is Dictionary and not ["attack", "guard", "wait", "escape"].has(str(acts[j].get("skill", ""))):
-							_add_ref(acc, ctx, "skill", acts[j], "skill", "%s/actions/%d/skill" % [base, j], "read", false, "actions")
-						var cond: Variant = acts[j].get("condition") if acts[j] is Dictionary else null
+						if not (acts[j] is Dictionary):
+							continue
+						var a: Dictionary = acts[j]
+						# The 2003 basic actions are not skills; transform names an enemy record.
+						var a_skill := str(a.get("skill", ""))
+						if a.has("skill") and not ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"].has(a_skill):
+							_add_ref(acc, ctx, "skill", a, "skill", "%s/actions/%d/skill" % [base, j], "read", false, "actions")
+						if a_skill == "transform" and a.has("enemy"):
+							_add_ref(acc, ctx, "enemy", a, "enemy", "%s/actions/%d/enemy" % [base, j], "read", false, "actions")
+						for skey in ["switch_on", "switch_off"]:
+							if a.has(skey):
+								_add_ref(acc, ctx, "switch", a, skey, "%s/actions/%d/%s" % [base, j, skey], "read", false, "actions")
+						var cond: Variant = a.get("condition")
 						if cond is Dictionary:
 							var ck := str(cond.get("kind", "always"))
 							if ck == "switch" and cond.has("id"):
@@ -1284,11 +1363,19 @@ static func _reference_problems(acc: Dictionary, reg: Dictionary, data: RPGProje
 			mp["ref_id"] = r.id
 			out.append(mp)
 	for l in acc.locations:
-		if l.hidden or not reg.map.has(l.map):
+		if l.hidden:
+			continue
+		# A map or cell held in variables is dynamic - it resolves at runtime, so there is
+		# nothing static to check (#16).
+		if not (l.map is String):
+			continue
+		if not reg.map.has(l.map):
 			continue
 		var pos: Variant = l.position
 		if not (pos is Array) or pos.size() != 2:
 			out.append(problem("error", l.file, l.record, "position", l.path, "The destination on map '%s' has no valid cell." % l.map, "Pick the cell again."))
+			continue
+		if typeof(pos[0]) not in [TYPE_INT, TYPE_FLOAT] or typeof(pos[1]) not in [TYPE_INT, TYPE_FLOAT]:
 			continue
 		var size := _map_size(reg, data, l.map)
 		var x := int(pos[0])
@@ -1408,6 +1495,14 @@ static func full(data: RPGProjectData, registry: RPGCommandRegistry, files: Dict
 						out.append(problem("warning", path, str(ce.get("id", "")), "switch", "common_events/%d/switch" % i,
 							"Common event '%s' runs as %s but has no condition switch, so it always runs." % [ce.get("id", ""), ce.get("trigger")],
 							"Pick a condition switch."))
+	# VX Ace style rules: Set Vehicle Location cannot move the vehicle the party rides (it stays
+	# with the player, as in MV); the classic rules move the party with it (RM2000/2003).
+	if str(data.project.get("rules", "classic")) == "vx_ace":
+		for c in acc.commands:
+			if str(c.cmd.get("type", "")) == "set_vehicle_location":
+				out.append(problem("warning", c.file, c.record, "vehicle", c.path + "/vehicle",
+					"Set Vehicle Location cannot move the %s while the party rides it under these rules; it stays with the player." % str(c.cmd.get("vehicle", "boat")),
+					"The classic rules move the party with it; otherwise make the party get off first."))
 	out.append_array(database_values(files))
 	out.append_array(image_map_problems(files, data))
 	return out

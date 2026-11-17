@@ -715,6 +715,10 @@ static func preview_text(text: String, p_data: RPGProjectData) -> String:
 
 func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var hb := HBoxContainer.new()
+	var mode := OptionButton.new()
+	mode.add_item("Fixed place")
+	mode.add_item("From variables")
+	mode.tooltip_text = "From variables: the map, x and y are read from variables at runtime (Memorize / Recall Place)"
 	var map := RPGRefPicker.new("map", data, [], false)
 	map.custom_minimum_size.x = 140
 	var x := SpinBox.new()
@@ -728,15 +732,35 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var pick := Button.new()
 	pick.text = "Pick on map…"
 	pick.tooltip_text = "Open the destination map and click the tile to land on"
+	# The "From variables" controls: where the map, x and y are read from (#16).
+	var vmap := RPGRefPicker.new("variable", data, [], false)
+	var vx := RPGRefPicker.new("variable", data, [], false)
+	var vy := RPGRefPicker.new("variable", data, [], false)
+	for pair in [[vmap, "map"], [vx, "x"], [vy, "y"]]:
+		pair[0].tooltip_text = "The variable holding the %s" % pair[1]
+	hb.add_child(mode)
 	hb.add_child(map)
 	hb.add_child(x)
 	hb.add_child(y)
+	hb.add_child(vmap)
+	hb.add_child(vx)
+	hb.add_child(vy)
 	hb.add_child(pick)
 	var state := {"v": null}
+	var apply_mode := func() -> void:
+		var fixed := mode.selected == 0
+		for c in [map, x, y, pick]:
+			c.visible = fixed
+		for c in [vmap, vx, vy]:
+			c.visible = not fixed
 	var read := func() -> Variant:
 		var out: Dictionary = state.v.duplicate(true) if state.v is Dictionary else {}
-		out["map"] = str(map.get_value())
-		out["position"] = [int(x.value), int(y.value)]
+		if mode.selected == 1:
+			out["map"] = {"variable": str(vmap.get_value())}
+			out["position"] = [{"variable": str(vx.get_value())}, {"variable": str(vy.get_value())}]
+		else:
+			out["map"] = str(map.get_value())
+			out["position"] = [int(x.value), int(y.value)]
 		return out
 	var emit := func(_a = null) -> void:
 		state.v = read.call()
@@ -744,11 +768,25 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	map.value_changed.connect(emit)
 	x.value_changed.connect(emit)
 	y.value_changed.connect(emit)
+	vmap.value_changed.connect(emit)
+	vx.value_changed.connect(emit)
+	vy.value_changed.connect(emit)
+	mode.item_selected.connect(func(_i: int) -> void:
+		apply_mode.call()
+		emit.call())
 	var setter := func(v: Variant) -> void:
 		state.v = v
-		if v is Dictionary:
+		var p: Variant = v.get("position", [0, 0]) if v is Dictionary else [0, 0]
+		var from_vars: bool = (v is Dictionary and v.get("map") is Dictionary) or (p is Array and p.any(func(i): return i is Dictionary))
+		mode.select(1 if from_vars else 0)
+		apply_mode.call()
+		if from_vars:
+			vmap.set_value(str(v.map.get("variable", "")) if v is Dictionary and v.map is Dictionary else "")
+			for pair in [[vx, 0], [vy, 1]]:
+				var item: Variant = p[pair[1]] if p is Array and p.size() > pair[1] else null
+				pair[0].set_value(str(item.variable) if item is Dictionary and item.has("variable") else "")
+		elif v is Dictionary:
 			map.set_value(str(v.get("map", "")))
-			var p: Variant = v.get("position", [0, 0])
 			if p is Array and p.size() == 2:
 				x.set_value_no_signal(float(p[0]))
 				y.set_value_no_signal(float(p[1]))
@@ -756,6 +794,7 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 			map.set_value("")
 			x.set_value_no_signal(0)
 			y.set_value_no_signal(0)
+	apply_mode.call()
 	pick.pressed.connect(func():
 		var cb := func(map_id: String, cell: Vector2i) -> void:
 			if map_id == "":

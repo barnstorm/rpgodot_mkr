@@ -42,6 +42,9 @@ var party: Array[String] = []
 var actors: Dictionary = {}
 ## Persistent per-event changes: "map/event" -> {position, facing}
 var event_changes: Dictionary = {}
+## Runtime-spawned event copies (#66): map id -> Array of event data. The map rebuilds these on
+## top of the placed events, so a spawned copy survives map changes and saves like a placed one.
+var spawned_events: Dictionary = {}
 var followers_visible := true
 ## Vehicles: {boat|ship|airship: {map, position: [x, y], facing}} and the one being ridden ("").
 var vehicles: Dictionary = {}
@@ -122,6 +125,7 @@ func new_game() -> void:
 	self_switches.clear()
 	self_variables.clear()
 	event_changes.clear()
+	spawned_events.clear()
 	extension_sections.clear()
 	inventory = {"items": {}, "weapons": {}, "armors": {}}
 	party.clear()
@@ -903,6 +907,7 @@ func to_dict() -> Dictionary:
 		"party": Array(party),
 		"actors": actor_data,
 		"event_changes": event_changes.duplicate(true),
+		"spawned_events": spawned_events.duplicate(true),
 		"followers_visible": followers_visible,
 		"vehicles": vehicles.duplicate(true),
 		"riding": riding,
@@ -945,6 +950,7 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 		else:
 			actors[id] = actor_data[id]
 	event_changes = d.get("event_changes", {}).duplicate(true)
+	spawned_events = d.get("spawned_events", {}).duplicate(true) if d.get("spawned_events") is Dictionary else {}
 	followers_visible = bool(d.get("followers_visible", true))
 	# Saves from before vehicles existed start with the vehicles where a new game has them.
 	vehicles = d.get("vehicles", {}).duplicate(true) if d.get("vehicles") is Dictionary else (RPGVehicles.initial_state(data) if data else {})

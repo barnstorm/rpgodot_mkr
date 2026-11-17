@@ -7,15 +7,19 @@ extends RefCounted
 ## (rpg/project.json "custom_fields": {type: [{key, kind, label, ...}]}).
 ## Fields marked "formula": true get a Test button in the Database screen.
 
-const SCOPES := ["none", "one_enemy", "all_enemies", "one_ally", "all_allies", "user", "one_dead_ally", "all_dead_allies"]
+const SCOPES := ["none", "one_enemy", "all_enemies", "random_enemies", "one_ally", "one_ally_any",
+	"all_allies", "all_allies_any", "user", "one_dead_ally", "all_dead_allies", "everyone"]
+const SCOPE_LABELS := ["None", "One enemy", "All enemies", "N random enemies", "One ally",
+	"One ally (dead or alive)", "All allies", "All allies (dead or alive)", "The user",
+	"One dead ally", "All dead allies", "Everyone (both sides)"]
 const OCCASIONS := ["always", "battle", "menu", "never"]
 const DAMAGE_TYPES := ["none", "damage", "recover", "drain"]
 const HIT_TYPES := ["certain", "physical", "magical"]
 const RESTRICTIONS := ["none", "cannot_act", "attack_enemy", "attack_anyone", "attack_ally"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 ## Effect kinds (RPGRuleSystem.apply_action) and their labels.
-const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "common_event"]
-const EFFECT_LABELS := ["Recover", "Damage", "Add State", "Remove State", "Grow (raise a stat)", "Learn Skill", "Common Event"]
+const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "gain_tp", "escape", "common_event"]
+const EFFECT_LABELS := ["Recover", "Damage", "Add State", "Remove State", "Grow (raise a stat)", "Learn Skill", "Gain TP", "Special Effect: Escape", "Common Event"]
 ## Buff effect kinds, shown only when the rule system's rules.json has a "buffs" config (VX Ace/MV;
 ## Classic's halve/double stat changes are states, so it has none).
 const BUFF_EFFECT_KINDS := ["add_buff", "add_debuff", "remove_buff", "remove_debuff"]
@@ -87,7 +91,9 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
 				_type_field("skill_type", "Skill type", type_lists, "skill_types"),
 				_obj("cost", "Cost", _resource_fields(resources)),
-				_c("scope", "Target", SCOPES, "one_enemy"), _c("occasion", "Usable", OCCASIONS, "always"),
+				_c("scope", "Target", SCOPES, "one_enemy").merged({"option_labels": SCOPE_LABELS}),
+				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
+				_c("occasion", "Usable", OCCASIONS, "always"),
 				_c("damage_type", "Damage type", DAMAGE_TYPES, "damage"),
 				_c("resource", "Affects", _ids(resources), "hp"),
 				_type_field("element", "Element", type_lists, "elements"),
@@ -95,17 +101,23 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					"help": "a = user, b = target, v.<variable>. Helpers: min, max, clamp, roll(\"1d6\"), mod(x)..."},
 				_i("hit", "Hit %", 100, 0, 100), _c("hit_type", "Hit type", HIT_TYPES, "certain"),
 				_i("variance", "Variance %", 15, 0, 100), _b("critical", "Can be critical", false),
+				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast skill acts first"}),
+				_i("repeats", "Repeats", 1, 1, 9),
 				_animation_field(), _t("message", "Message (%1 = user)"),
 				_effects(resources, stats, rule_def),
-			]
+			] + _tp_gain_field(resources)
 		"items":
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
 				_i("price", "Price", 0, 0, 9999999), _b("consumable", "Consumed when used", true), _b("key_item", "Key item", false),
-				_c("scope", "Target", SCOPES, "one_ally"), _c("occasion", "Usable", OCCASIONS, "always"),
+				_c("scope", "Target", SCOPES, "one_ally").merged({"option_labels": SCOPE_LABELS}),
+				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
+				_c("occasion", "Usable", OCCASIONS, "always"),
+				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast item acts first"}),
+				_i("repeats", "Repeats", 1, 1, 9),
 				_animation_field(),
 				_effects(resources, stats, rule_def),
-			]
+			] + _tp_gain_field(resources)
 		"weapons":
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
@@ -130,8 +142,16 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					{"key": "id", "kind": "ref", "ref": "item", "ref_from": "kind", "label": "Item"},
 					_i("chance", "Chance %", 10, 0, 100)]},
 				{"key": "actions", "kind": "list", "default": [], "label": "Action patterns", "item_fields": [
-					{"key": "skill", "kind": "ref", "ref": "skill", "allow": ["attack", "guard", "wait", "escape"], "default": "attack", "label": "Skill"},
+					{"key": "skill", "kind": "ref", "ref": "skill", "allow": ["attack", "double_attack", "guard", "observe", "charge", "self_destruct", "escape", "transform", "wait"], "default": "attack", "label": "Action",
+						"help": "A skill, or one of the 2003 basic actions: Attack, Double Attack (two hits), Guard, Observe (nothing, a message), Charge Up (the next attack hits harder), Self Destruct (the monster's remaining HP as damage to the party, then it falls), Escape (it leaves the battle and its rewards), Transform (it becomes the enemy below)."},
+					{"key": "enemy", "kind": "ref", "ref": "enemy", "default": "", "label": "Becomes",
+						"show_if": {"key": "skill", "equals": "transform"},
+						"help": "The enemy record this one turns into when the action runs."},
 					_i("rating", "Rating", 5, 1, 10),
+					{"key": "switch_on", "kind": "ref", "ref": "switch", "default": "", "label": "Switch ON",
+						"help": "Turned on when this action is used (2003's phase chaining: \"after using Charge Up, switch 12 ON enables the big attack\")."},
+					{"key": "switch_off", "kind": "ref", "ref": "switch", "default": "", "label": "Switch OFF",
+						"help": "Turned off when this action is used."},
 					{"key": "condition", "kind": "object", "default": {"kind": "always"}, "label": "Condition", "fields": _enemy_condition_fields()}]},
 				_traits(trait_kinds, type_lists, stats),
 			]
@@ -144,7 +164,9 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					_ref("enemy", "enemy", "Enemy"),
 					{"key": "position", "kind": "point", "default": [160, 120], "min": 0, "max": 9999, "label": "Position (pixels)",
 						"help": "The enemy's centre on the 320x240 battle screen. Drag it in the picture above."},
-					_b("hidden", "Appears later", false)]},
+					_b("hidden", "Appears later", false),
+					_i("appear_chance", "Appear %", 100, 0, 100).merged({"show_if": {"key": "hidden", "equals": false},
+						"help": "The chance this enemy is in the fight when it starts (RPG Maker's random appearance). One that misses its roll can still be brought in with Enemy Appear, and at least one member always fights."})]},
 				{"key": "pages", "kind": "list", "default": [], "label": "Battle events", "item_fields": [
 					_t("id", "Page ID"), _t("name", "Name"),
 					{"key": "conditions", "kind": "list", "item_kind": "condition", "battle": true, "default": [], "label": "Conditions"},
@@ -264,6 +286,17 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					"help": "Turn based is the 2000/VX Ace battle. ATB is 2003 / MZ Time Progress. CTB shows the coming turn order on screen."},
 				{"key": "atb_mode", "kind": "choice", "options": ["wait", "active"], "option_labels": ["Wait (time stops while choosing)", "Active (time keeps running)"], "default": "wait", "label": "ATB mode",
 					"show_if": {"key": "battle_system", "equals": "atb"}},
+				_obj("battle_start_odds", "Battle start chances", [
+					_i("initiative", "Initiative %", 0, 0, 100),
+					_i("back_attack", "Back attack %", 0, 0, 100),
+					_i("surround", "Surround %", 0, 0, 100),
+					_i("pincer", "Pincer %", 0, 0, 100),
+				]).merged({"help": "Chance of each RM2003 battle start on a random encounter; the chances add up and the rest are normal starts. All 0: the MV preemptive/surprise roll instead. A map's encounters can override these (Map Properties)."}),
+				{"key": "defeat_event", "kind": "ref", "ref": "common_event", "default": "", "label": "Defeat handler",
+					"help": "A common event that takes the place of Game Over when the party loses (2003): an inn, a 'you blacked out and crawled back' scene. Blank: Game Over as usual."},
+				{"key": "defeat_transfer", "kind": "location", "default": null, "label": "Defeat transfer",
+					"help": "Where the party is taken before the defeat handler runs. Blank: they stay where they fell."},
+				{"key": "defeat_facing", "kind": "facing", "default": "keep", "label": "Defeat facing"},
 			]
 	if type in ["switches", "variables"]:
 		return f
@@ -509,6 +542,14 @@ static func _type_list_field(key: String, label: String, lists: Dictionary, list
 
 
 ## Skills, items and weapons: an Animations record or a built-in effect.
+## VX Ace/MV "TP Gain": charged to the user on use (the rules' gain_on_use), so the field exists
+## only when the rule system has a TP resource (Classic has none).
+static func _tp_gain_field(resources: Array) -> Array:
+	if resources.any(func(r): return str(r.get("id", "")) == "tp"):
+		return [_i("tp_gain", "TP gain", 0, 0, 100)]
+	return []
+
+
 static func _animation_field() -> Dictionary:
 	var names := {}
 	for b in BUILTIN_ANIMATIONS:
@@ -631,8 +672,10 @@ static func _enemy_condition_fields() -> Array:
 ## Recover / Damage: resource, % of its maximum and a flat amount; Add / Remove State: the state
 ## and a chance %; Add Buff / Add Debuff: the stat and how many turns it lasts (a debuff rolls
 ## its chance against the Debuff Rate traits and luck); Remove Buff / Remove Debuff: the stat;
-## Grow: a stat and how much; Learn Skill: the skill; Common Event: the common event (run after
-## the item or skill is used). Buff kinds appear only when the rule system has a "buffs" config.
+## Grow: a stat and how much; Learn Skill: the skill; Gain TP: flat TP (rules with a TP
+## resource); Special Effect: Escape: the target leaves the battle; Common Event: the common
+## event (run after the item or skill is used). Buff kinds appear only when the rule system has
+## a "buffs" config.
 static func _effects(resources: Array = [], stats: Array = [], rule_def: Dictionary = {}) -> Dictionary:
 	var res_ids := _ids(resources)
 	var res_labels := _labels(resources)
@@ -664,6 +707,7 @@ static func _effects(resources: Array = [], stats: Array = [], rule_def: Diction
 			"show_if": {"key": "kind", "equals": ["recover", "damage"]}},
 		{"key": "amount", "kind": "variant", "by": "kind", "default": 0, "label": "Amount", "cases": {
 			"recover": amounts, "damage": amounts,
+			"gain_tp": {"kind": "int", "default": 0, "min": 0, "max": 100, "label": "TP"},
 			"grow": {"kind": "int", "default": 1, "min": -9999, "max": 9999, "label": "Raise by"}}},
 		{"key": "turns", "kind": "int", "default": 5, "min": 1, "max": 99, "label": "Turns",
 			"show_if": {"key": "kind", "equals": ["add_buff", "add_debuff"]}},

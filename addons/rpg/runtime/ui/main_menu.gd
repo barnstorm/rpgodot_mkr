@@ -26,7 +26,7 @@ const COMMAND_FALLBACK := {"item": "Items", "skill": "Skills", "equip": "Equip",
 const HP_COLOUR := Color(1.0, 0.62, 0.25)
 const SP_COLOUR := Color(0.38, 0.68, 1.0)
 const FIELD_OCCASIONS := ["always", "menu", "field"]
-const ALLY_SCOPES := ["one_ally", "all_allies", "one_dead_ally", "all_dead_allies", "self", "user"]
+const ALLY_SCOPES := ["one_ally", "one_ally_any", "all_allies", "all_allies_any", "one_dead_ally", "all_dead_allies", "self", "user"]
 
 var mode := "command"
 var pending := ""                # skill, equip or status while choosing an actor
@@ -663,7 +663,7 @@ func open_target(u: Dictionary) -> void:
 
 
 func _all_targets() -> bool:
-	return str(using.get("scope", "")) in ["all_allies", "all_dead_allies"]
+	return str(using.get("scope", "")) in ["all_allies", "all_allies_any", "all_dead_allies"]
 
 
 func _place_target_cursor() -> void:
@@ -744,6 +744,8 @@ func use_item(id: String, targets: Array) -> bool:
 		return false
 	if bool(record("items", id).get("consumable", true)):
 		rpg.state.change_items(id, "decrease", 1)
+	rules().gain_on_use(user, {"kind": "item", "item": id})
+	_note_use({"item": id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
 	play("heal")
@@ -764,6 +766,8 @@ func use_skill(user: Object, skill_id: String, targets: Array) -> bool:
 	if not effect:
 		return false
 	rules().pay_cost(user, action)
+	rules().gain_on_use(user, action)
+	_note_use({"skill": skill_id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
 	rpg.state.notify_actor_changed(user.id)
@@ -773,6 +777,17 @@ func use_skill(user: Object, skill_id: String, targets: Array) -> bool:
 
 func _had_effect(r: Dictionary) -> bool:
 	return RPGRuleSystem.had_effect(r)
+
+
+## Records the "last used" game data (#54): what was used, who used it, and the first target.
+func _note_use(what: Dictionary, user: Object, targets: Array) -> void:
+	if user != null and "id" in user:
+		what["actor"] = str(user.id)
+	for t in targets:
+		if t != null and "id" in t:
+			what["target_actor"] = str(t.id)
+			break
+	rpg.state.record_last_used(what)
 
 
 ## Reserves the action's Common Event effects (once per use, not per target). True when any.
