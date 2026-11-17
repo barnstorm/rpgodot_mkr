@@ -793,7 +793,7 @@ func _toggle_overlay() -> void:
 ## Ends the current game and goes back to the title screen.
 func return_to_title() -> void:
 	await rpg.scheduler.cancel_all("return to title")
-	rpg.ui.close_all()
+	rpg.ui.close_all({"battle": "close"})
 	rpg.screen.clear_all()
 	_stop_routes("return to title")
 	if map != null:
@@ -824,7 +824,7 @@ const LOAD_FALLBACK_DISTANCE := 64
 ## Loads a game from save data (already validated by the save service).
 func load_from(save: Dictionary) -> RPGResult:
 	await rpg.scheduler.cancel_all("load game")
-	rpg.ui.close_all()
+	rpg.ui.close_all({"battle": "close"})
 	rpg.screen.clear_all()
 	_make_player()
 	_first_map_after_start = true

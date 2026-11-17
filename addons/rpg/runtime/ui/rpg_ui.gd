@@ -286,11 +286,25 @@ func scene_open() -> bool:
 	return not scene_stack.is_empty()
 
 
-func close_all() -> void:
-	for n in scene_stack:
-		if is_instance_valid(n):
-			n.queue_free()
-	scene_stack.clear()
+## Closes every open screen (#23): menus, shops, Run Scene overlays… The battle screen is left
+## running by default — a Battle command is waiting for it, and closing it under that wait would
+## strand the event. opts.battle decides otherwise: an outcome ("escape") asks the screen to
+## finish with it (its force_finish, when it has one), and "close" frees it — the Battle command
+## then returns an error (reported with its event and command) instead of waiting forever.
+func close_all(opts := {}) -> void:
+	for n in scene_stack.duplicate():
+		if not is_instance_valid(n):
+			scene_stack.erase(n)
+			continue
+		if str(n.get_meta("rpg_scene_id", "")) == "battle":
+			var rule := str(opts.get("battle", "keep"))
+			if rule == "keep":
+				continue
+			if rule != "close" and n.has_method("force_finish"):
+				n.force_finish(rule)
+				continue
+		n.queue_free()
+		scene_stack.erase(n)
 	if message_box and message_box.has_method("force_close"):
 		message_box.force_close()
 
@@ -298,14 +312,18 @@ func close_all() -> void:
 ## Runs a scene that follows the Run Scene contract: start(args, context), then exactly one of
 ## finished(result) / cancelled(reason). Returns {status: "finished"|"cancelled"|"timeout"|"error", value}.
 ## While it runs the map is suspended (parallels and wandering NPCs sleep, as behind a battle);
-## pass pause_map = false for an overlay scene (a HUD) that runs on top of the live map.
-func run_contract_scene(path: String, args: Dictionary, context: Variant, token: RPGCancelToken, timeout := 0.0, pause_map := true) -> Dictionary:
+## pass pause_map = false for an overlay scene (a HUD) that runs on top of the live map. scene_id
+## tags the screen (rpg_scene_id meta) so close_all can recognize it — "battle" is the one it
+## treats specially. A screen freed without finishing ends the wait with an error (#23).
+func run_contract_scene(path: String, args: Dictionary, context: Variant, token: RPGCancelToken, timeout := 0.0, pause_map := true, scene_id := "") -> Dictionary:
 	var node := open_scene(path)
 	if node == null:
 		return {"status": "error", "value": "Scene '%s' could not be opened." % path}
 	if not node.has_signal("finished") or not node.has_signal("cancelled"):
 		close_scene(node)
 		return {"status": "error", "value": "Scene '%s' must declare signals finished(result) and cancelled(reason)." % path}
+	if scene_id != "":
+		node.set_meta("rpg_scene_id", scene_id)
 	var r := rpg()
 	r.scheduler.lock_input("scene")
 	if pause_map:
@@ -315,6 +333,8 @@ func run_contract_scene(path: String, args: Dictionary, context: Variant, token:
 	if timeout > 0.0:
 		timer = get_tree().create_timer(timeout, false)
 		sigs.append(timer.timeout)
+	var freed_at := sigs.size()
+	sigs.append(node.tree_exited)
 	var w := RPGWaiter.any(sigs)
 	if node.has_method("start"):
 		node.start(args, context)
@@ -323,6 +343,8 @@ func run_contract_scene(path: String, args: Dictionary, context: Variant, token:
 	if pause_map:
 		r.scheduler.resume_map("scene")
 	close_scene(node)
+	if int(res[0]) == freed_at:
+		return {"status": "error", "value": "The %s screen was closed before it finished." % (scene_id if scene_id != "" else "'%s'" % path)}
 	match res[0]:
 		0: return {"status": "finished", "value": res[1]}
 		1: return {"status": "cancelled", "value": res[1]}
