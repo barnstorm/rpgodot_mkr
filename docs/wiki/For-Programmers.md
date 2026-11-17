@@ -116,6 +116,8 @@ Any scene with a `start(args, context)` method that emits `finished(result)` or 
 
 The title, menu, shop, save, name input, game over, options, debug and battle screens are scripts in `addons/rpg/runtime/ui/`. Point `rpg/project.json` `"scenes"` at your own to replace any of them. The battle can also be replaced per map (Map properties > Battle scene) or per Battle Processing command.
 
+A replacement battle scene should call `rpg.screen.enter_battle(stage, flash_rect)` when its field is built — a `Control` holding the backdrop and the battlers, and a full-field `ColorRect` for flashes above them but below the windows — and `rpg.screen.exit_battle()` when the fight ends. While registered, the Tint / Flash / Shake Screen commands act on that stage instead of the map, and the map's own screen state resumes untouched afterwards.
+
 ## Battle hooks
 
 The default battle calls hooks you can use from an entry script (`on_<hook>`) or by connecting to the `RPG` signal of the same name:
