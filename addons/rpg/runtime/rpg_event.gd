@@ -26,6 +26,10 @@ var _route_running := false
 ## Token of the custom-route pass in flight (cancelled when a page change resets the index).
 var _custom_token: RPGCancelToken = null
 var _locked_facing := ""
+## The facing a stored position came with (a loaded game, or a kept Set Event Location). The
+## first page applied after setup would turn the event to its graphic's facing; this is put
+## back on top of it once.
+var _stored_facing := ""
 ## What last started this event (debug inspector).
 var last_trigger := ""
 
@@ -42,6 +46,7 @@ func setup(p_map: Node, p_data: Dictionary) -> void:
 		place(Vector2i(int(change.position[0]), int(change.position[1])))
 	if change.has("facing"):
 		facing = change.facing
+		_stored_facing = str(change.facing)
 	# Older saves stored "erased" here by mistake; it is ignored (erasing is temporary).
 
 
@@ -92,6 +97,9 @@ func apply_page(idx: int) -> void:
 	step_anim = bool(opts.get("step_anim", false))
 	direction_fix = false
 	set_graphic(page.get("graphic"))
+	if _stored_facing != "":
+		force_turn(_stored_facing)
+		_stored_facing = ""
 	direction_fix = bool(opts.get("direction_fix", false))
 	through = bool(opts.get("through", false))
 	forbid_overlap = bool(opts.get("forbid_overlap", false))
@@ -289,9 +297,20 @@ func _on_blocked(dir: Vector2i) -> void:
 		trigger_touch(true)
 
 
-func save_change() -> void:
+## Stores where this event stands now, so a game saved on this map loads with it there. The
+## entry lasts for this visit only: the next time the map is set up for a transfer the event is
+## back at its editor position, as in RPG Maker (issue #155). `keep` (Set Event Location's Keep)
+## makes this position the one it returns to instead, until another Keep replaces it.
+func save_change(keep := false) -> void:
 	# Erase Event lasts until the map reloads, so "erased" is not persisted.
-	map.rpg.state.event_changes[map_id + "/" + event_id] = {"position": [cell.x, cell.y], "facing": facing}
+	var key := map_id + "/" + event_id
+	var entry := {"position": [cell.x, cell.y], "facing": facing}
+	var kept: Variant = map.rpg.state.event_changes.get(key, {}).get("keep")
+	if keep:
+		entry["keep"] = {"position": [cell.x, cell.y], "facing": facing}
+	elif kept is Dictionary:
+		entry["keep"] = kept
+	map.rpg.state.event_changes[key] = entry
 
 
 ## For the debug screen's event inspector ("why doesn't my event start?"): the active page and,

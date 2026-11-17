@@ -427,6 +427,10 @@ func transfer(map_id: String, pos: Vector2i, facing := "keep", fade := "black", 
 	if old_map != null:
 		world.remove_child(old_map)
 	world.add_child(new_map)
+	# A new visit sets the map up from the editor's positions; a loaded game (rebuild) puts the
+	# events back where they stood when it was saved.
+	if not rebuild:
+		rpg.state.reset_event_changes(map_id)
 	new_map.start(rpg)
 	# 7. Place the player and followers (a transfer onto an occupied cell fails unless it opts in).
 	if player == null:

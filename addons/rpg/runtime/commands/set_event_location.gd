@@ -11,6 +11,8 @@ static func descriptor() -> Dictionary:
 			{"key": "position", "kind": "operand_pair", "default": [0, 0], "label": "Cell [x, y]", "show_if": {"key": "mode", "equals": "position"}},
 			{"key": "swap_with", "kind": "text", "default": "", "label": "Swap with event", "show_if": {"key": "mode", "equals": "swap"}},
 			{"key": "facing", "kind": "facing", "default": "keep", "label": "Facing"},
+			{"key": "keep", "kind": "bool", "default": false, "label": "Keep",
+				"help": "Off, as in RPG Maker: the event is back at its editor position the next time the map loads. On: it returns to this place instead."},
 		],
 	}
 
@@ -34,7 +36,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		ev.place(other.cell)
 		other.place(c)
 		other.set_meta("persist", true)
-		other.save_change()
+		other.save_change(bool(args.get("keep", false)))
 	else:
 		var p: Array = args.get("position", [0, 0])
 		var cell := Vector2i(int(ctx.operand(p[0])), int(ctx.operand(p[1])))
@@ -43,5 +45,5 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		ev.place(cell)
 	ev.force_turn(str(args.get("facing", "keep")))
 	ev.set_meta("persist", true)
-	ev.save_change()
+	ev.save_change(bool(args.get("keep", false)))
 	return RPGResult.ok()

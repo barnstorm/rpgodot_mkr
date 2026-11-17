@@ -105,7 +105,7 @@ records how long the wait took, in tenths of a second.
 | **Get On/Off Vehicle** | `get_on_off_vehicle` |  |
 | **Memorize Place** | `memorize_place` | Store map in, Store x in, Store y in |
 | **Scroll Map** | `scroll_map` | Direction, Tiles, Speed, Wait until done |
-| **Set Event Location** | `set_event_location` | Event, Mode, Cell [x, y], Swap with event, Facing |
+| **Set Event Location** | `set_event_location` | Event, Mode, Cell [x, y], Swap with event, Facing, Keep (off, as in RPG Maker: the event is back at its editor position the next time the map loads; on: it returns to this place instead) |
 | **Set Move Route** | `move_route` | Character, Route, Repeat, Skip if blocked, Wait until done |
 | **Set Vehicle Location** | `set_vehicle_location` | Vehicle, Location, Facing |
 | **Transfer Player** | `transfer_player` | Destination, Facing, Fade, If occupied, use the nearest free cell within |

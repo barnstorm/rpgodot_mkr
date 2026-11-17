@@ -459,6 +459,21 @@ func party_battlers() -> Array:
 	return out
 
 
+## A map is being set up for a new visit (a transfer, not a loaded game): its events go back to
+## their editor positions and facings, as in RPG Maker, where only self switches outlive the map
+## (issue #155). An event that a Set Event Location told to Keep its place returns there instead.
+func reset_event_changes(map_id: String) -> void:
+	var prefix := map_id + "/"
+	for key in event_changes.keys():
+		if not str(key).begins_with(prefix):
+			continue
+		var kept: Variant = event_changes[key].get("keep") if event_changes[key] is Dictionary else null
+		if kept is Dictionary and kept.get("position") is Array and kept.position.size() >= 2:
+			event_changes[key] = {"position": kept.position.duplicate(), "facing": str(kept.get("facing", "down")), "keep": kept}
+		else:
+			event_changes.erase(key)
+
+
 ## Map overrides set by event commands for `map_id` (see map_overrides), or {}.
 func map_override(map_id: String) -> Dictionary:
 	var o: Variant = map_overrides.get(map_id)

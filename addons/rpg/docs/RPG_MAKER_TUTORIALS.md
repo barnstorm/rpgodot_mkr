@@ -42,6 +42,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules). With *Allow knockout*, a change that leaves the whole party down on the map is Game Over and the event stops, as in RPG Maker (a trap that can kill); the same goes for Change State adding the knockout state. A System *Defeat handler* takes the place of that Game Over |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
+| Set Event Location; events return to their editor positions when the map loads | The same. A move by Set Event Location or a move route lasts for the visit, a transfer inside the map moves nothing, and a game saved on the map loads with the events where they stood. **Keep** on Set Event Location (not in RPG Maker) makes the event return to that place instead. Older versions of the kit kept every Set Event Location for good |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |
 | Label, Jump to Label | The same (*flow* category) |
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
