@@ -1182,6 +1182,10 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 	u.scope = str(u.get("scope", "one_enemy"))
 	u.cost = u.get("cost", {})
 	u.speed = u.get("speed", 0)
+	# VX Ace/MV invocation fields: Repeat (the battle core applies the action that many times)
+	# and TP Gain (charged to the user through the rules' gain_on_use).
+	u.repeats = u.get("repeats", 1)
+	u.tp_gain = u.get("tp_gain", 0)
 	return u
 
 
@@ -1251,6 +1255,17 @@ func pay_cost(user: RPGBattler, action: Dictionary) -> void:
 	var cost: Dictionary = u.get("cost", {})
 	for res_id in cost:
 		user.set_resource(res_id, maxi(0, user.get_resource(res_id) - int(cost[res_id])))
+
+
+## Resources the user gains for using the action: "gain_on_use" formula, a = the user,
+## s = the action (e.g. TP "s.tp_gain * a.tcr / 100"). VX Ace/MV charge this once per use —
+## not per target or repeat, and even on a miss — so callers run it beside pay_cost and it
+## returns the gains as {resource: amount}.
+func gain_on_use(user: RPGBattler, action: Dictionary) -> Dictionary:
+	if not _has_resource_key("gain_on_use"):
+		return {}
+	var env := {"a": _snap_of(user), "v": variables, "rng": rng, "s": resolve_action(user, action)}
+	return _gain_resources(user, "gain_on_use", env)
 
 
 ## Order value for the turn queue (higher acts first): rules "turn_order.speed" formula plus
@@ -1386,7 +1401,8 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 ##  removed_states, resisted_states, knocked_out, revived, lines: [String], text, error}.
 ## `damage` is life lost (>= 0), `recovered` is life regained; `changes` maps every resource
 ## to its net change. Only when non-empty: `charged` (target resources gained from taking damage,
-## included in `changes`) and `user_changes` (user resources gained from the hit, e.g. TP).
+## included in `changes`). The user's own use charge (e.g. TP) is not part of this per-target
+## result — see gain_on_use(), which callers run once per use.
 func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> Dictionary:
 	var res := {"hit": false, "evaded": false, "damage": 0, "recovered": 0, "resource": life_resource(),
 		"critical": false, "element_rate": 1.0, "added_states": [], "removed_states": [], "resisted_states": [],
@@ -1507,13 +1523,6 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		res.damage = int(d.value)
 	res.recovered = maxi(0, int(res.changes.get(life_resource(), 0)))
 	_describe(user, target, u, d, res)
-	# Resources the user gains when the action hits: "gain_on_use" formula, a = the user,
-	# b = the target, s = the action (e.g. TP "s.tp_gain * a.tcr / 100").
-	if _has_resource_key("gain_on_use"):
-		var uenv := {"a": _snap_of(user), "b": target.snapshot(), "v": variables, "s": u, "rng": rng}
-		var gained := _gain_resources(user, "gain_on_use", uenv)
-		if not gained.is_empty():
-			res["user_changes"] = gained
 	return _finish(res)
 
 

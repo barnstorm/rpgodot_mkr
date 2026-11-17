@@ -97,9 +97,11 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 					"help": "a = user, b = target, v.<variable>. Helpers: min, max, clamp, roll(\"1d6\"), mod(x)..."},
 				_i("hit", "Hit %", 100, 0, 100), _c("hit_type", "Hit type", HIT_TYPES, "certain"),
 				_i("variance", "Variance %", 15, 0, 100), _b("critical", "Can be critical", false),
+				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast skill acts first"}),
+				_i("repeats", "Repeats", 1, 1, 9),
 				_animation_field(), _t("message", "Message (%1 = user)"),
 				_effects(resources, stats),
-			]
+			] + _tp_gain_field(resources)
 		"items":
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
@@ -107,9 +109,11 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_c("scope", "Target", SCOPES, "one_ally").merged({"option_labels": SCOPE_LABELS}),
 				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
 				_c("occasion", "Usable", OCCASIONS, "always"),
+				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast item acts first"}),
+				_i("repeats", "Repeats", 1, 1, 9),
 				_animation_field(),
 				_effects(resources, stats),
-			]
+			] + _tp_gain_field(resources)
 		"weapons":
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
@@ -534,6 +538,14 @@ static func _type_list_field(key: String, label: String, lists: Dictionary, list
 
 
 ## Skills, items and weapons: an Animations record or a built-in effect.
+## VX Ace/MV "TP Gain": charged to the user on use (the rules' gain_on_use), so the field exists
+## only when the rule system has a TP resource (Classic has none).
+static func _tp_gain_field(resources: Array) -> Array:
+	if resources.any(func(r): return str(r.get("id", "")) == "tp"):
+		return [_i("tp_gain", "TP gain", 0, 0, 100)]
+	return []
+
+
 static func _animation_field() -> Dictionary:
 	var names := {}
 	for b in BUILTIN_ANIMATIONS:

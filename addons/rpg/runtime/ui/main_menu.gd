@@ -744,6 +744,7 @@ func use_item(id: String, targets: Array) -> bool:
 		return false
 	if bool(record("items", id).get("consumable", true)):
 		rpg.state.change_items(id, "decrease", 1)
+	rules().gain_on_use(user, {"kind": "item", "item": id})
 	_note_use({"item": id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
@@ -765,6 +766,7 @@ func use_skill(user: Object, skill_id: String, targets: Array) -> bool:
 	if not effect:
 		return false
 	rules().pay_cost(user, action)
+	rules().gain_on_use(user, action)
 	_note_use({"skill": skill_id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
