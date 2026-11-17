@@ -92,7 +92,7 @@ func _wait_until(cond: Callable, seconds := 10.0) -> bool:
 
 
 ## Lets the battle play itself out (in the turn system the open command is confirmed first).
-func _finish(scene: Node, out: Dictionary) -> void:
+func _finish(scene, out: Dictionary) -> void:
 	scene.auto = true
 	var end := Time.get_ticks_msec() + 20000
 	while not out.has("r") and Time.get_ticks_msec() < end:
