@@ -776,13 +776,17 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			res["common_events"] = ces
 
 
-## Targets for a usable (resolved skill/item/attack) by its scope.
+## Targets for a usable (resolved skill/item/attack) by its scope. MV/MZ scopes: "random_enemies"
+## draws `random_count` (1-4) picks up front, re-rolling from the living each time, so the same
+## enemy can be hit twice; the "(dead or alive)" scopes reach dead allies too (reviving with a
+## one-ally-any item), and "everyone" hits both sides' living battlers.
 func resolve_targets(user: RPGBattler, usable: Dictionary, target_index: int) -> Array:
 	var friends: Array = party if user.is_actor() else enemies
 	var foes: Array = enemies if user.is_actor() else party
 	var alive_foes := foes.filter(func(x): return x.is_active())
 	var alive_friends := friends.filter(func(x): return x.is_active())
 	var dead_friends := friends.filter(func(x): return x.is_dead() and not x.hidden and not x.escaped)
+	var any_friends := friends.filter(func(x): return not x.hidden and not x.escaped)
 	match str(usable.get("scope", "one_enemy")):
 		"one_enemy":
 			if target_index >= 0 and target_index < foes.size() and foes[target_index].is_active():
@@ -792,18 +796,34 @@ func resolve_targets(user: RPGBattler, usable: Dictionary, target_index: int) ->
 			return alive_foes
 		"random_enemy":
 			return [] if alive_foes.is_empty() else [rng.pick(alive_foes)]
+		"random_enemies":
+			# N picks, each a fresh roll among the living (MV randomTargets).
+			var picks: Array = []
+			for i in maxi(1, int(usable.get("random_count", 1))):
+				if alive_foes.is_empty():
+					break
+				picks.append(rng.pick(alive_foes))
+			return picks
 		"one_ally":
 			if target_index >= 0 and target_index < friends.size() and friends[target_index].is_active():
 				return [friends[target_index]]
 			return [user] if user.is_active() else []
+		"one_ally_any":
+			if target_index >= 0 and target_index < friends.size() and not friends[target_index].hidden and not friends[target_index].escaped:
+				return [friends[target_index]]
+			return [user] if user.is_active() else (alive_friends[0] if not alive_friends.is_empty() else [])
 		"all_allies":
 			return alive_friends
+		"all_allies_any":
+			return any_friends
 		"one_dead_ally":
 			if target_index >= 0 and target_index < friends.size() and friends[target_index].is_dead():
 				return [friends[target_index]]
 			return [] if dead_friends.is_empty() else [dead_friends[0]]
 		"all_dead_allies":
 			return dead_friends
+		"everyone":
+			return alive_friends + alive_foes
 		"self", "user":
 			return [user]
 	return []

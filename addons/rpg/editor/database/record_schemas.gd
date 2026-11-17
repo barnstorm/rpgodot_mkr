@@ -7,7 +7,11 @@ extends RefCounted
 ## (rpg/project.json "custom_fields": {type: [{key, kind, label, ...}]}).
 ## Fields marked "formula": true get a Test button in the Database screen.
 
-const SCOPES := ["none", "one_enemy", "all_enemies", "one_ally", "all_allies", "user", "one_dead_ally", "all_dead_allies"]
+const SCOPES := ["none", "one_enemy", "all_enemies", "random_enemies", "one_ally", "one_ally_any",
+	"all_allies", "all_allies_any", "user", "one_dead_ally", "all_dead_allies", "everyone"]
+const SCOPE_LABELS := ["None", "One enemy", "All enemies", "N random enemies", "One ally",
+	"One ally (dead or alive)", "All allies", "All allies (dead or alive)", "The user",
+	"One dead ally", "All dead allies", "Everyone (both sides)"]
 const OCCASIONS := ["always", "battle", "menu", "never"]
 const DAMAGE_TYPES := ["none", "damage", "recover", "drain"]
 const HIT_TYPES := ["certain", "physical", "magical"]
@@ -83,7 +87,9 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
 				_type_field("skill_type", "Skill type", type_lists, "skill_types"),
 				_obj("cost", "Cost", _resource_fields(resources)),
-				_c("scope", "Target", SCOPES, "one_enemy"), _c("occasion", "Usable", OCCASIONS, "always"),
+				_c("scope", "Target", SCOPES, "one_enemy").merged({"option_labels": SCOPE_LABELS}),
+				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
+				_c("occasion", "Usable", OCCASIONS, "always"),
 				_c("damage_type", "Damage type", DAMAGE_TYPES, "damage"),
 				_c("resource", "Affects", _ids(resources), "hp"),
 				_type_field("element", "Element", type_lists, "elements"),
@@ -98,7 +104,9 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
 				_i("price", "Price", 0, 0, 9999999), _b("consumable", "Consumed when used", true), _b("key_item", "Key item", false),
-				_c("scope", "Target", SCOPES, "one_ally"), _c("occasion", "Usable", OCCASIONS, "always"),
+				_c("scope", "Target", SCOPES, "one_ally").merged({"option_labels": SCOPE_LABELS}),
+				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
+				_c("occasion", "Usable", OCCASIONS, "always"),
 				_animation_field(),
 				_effects(resources, stats),
 			]

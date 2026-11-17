@@ -73,6 +73,8 @@ Effects can recover HP or SP, deal damage, add or remove a state, raise a stat p
 4. **Battle animation**: an animation, or one of the built-in effects (slash, fire, ice, thunder, heal, hit).
 5. Add the skill to a class's **Skills learned** at level 3.
 
+**Target** goes further than one/all: *N random enemies* (MV's multi-hit random scope — each of the 1-4 hits re-picks whoever is still standing, so one enemy can be struck twice), the *(dead or alive)* ally scopes that reach a fallen friend (a revive item), and *Everyone*, both sides at once.
+
 ## 5. Icons
 
 The starter icon sheet has 192 icons drawn for the kit (CC0): potions, swords, shields, armour, rings, books, element and state symbols. Records pick one with the **Icon** field: a grid of the sheet you can search by name. Menus, the shop, battle lists and the `\I[n]` message code draw them.

@@ -189,6 +189,70 @@ func test_escape_effect_on_an_enemy_leaves_it_without_rewards() -> void:
 	assert_eq(rw.gold, 8)
 
 
+## MV/MZ scopes (#44): the (dead or alive) scopes reach a fallen ally, "everyone" covers both
+## sides' living battlers, and the living-only scopes stay clear of the dead.
+func test_mz_scopes_reach_dead_allies_and_everyone() -> void:
+	var core := _core(["hero", "mira"], "slimes", 7)
+	var hero: RPGBattler = core.party[0]
+	assert_eq(core.resolve_targets(hero, {"scope": "everyone"}, -1),
+		[hero, core.party[1], core.enemies[0], core.enemies[1]], "both sides, friends first")
+	rules.add_state(core.party[1], rules.death_state())
+	assert_eq(core.resolve_targets(hero, {"scope": "one_ally"}, 1), [hero],
+		"a dead ally cannot take a living-only scope")
+	assert_eq(core.resolve_targets(hero, {"scope": "one_ally_any"}, 1), [core.party[1]],
+		"the (dead or alive) scope picks her")
+	assert_eq(core.resolve_targets(hero, {"scope": "all_allies"}, -1), [hero])
+	assert_eq(core.resolve_targets(hero, {"scope": "all_allies_any"}, -1), [hero, core.party[1]])
+	assert_eq(core.resolve_targets(hero, {"scope": "everyone"}, -1),
+		[hero, core.enemies[0], core.enemies[1]], "the dead stay out of Everyone")
+	# A revive item aimed at her works through the any-scope instead of reading "no effect".
+	db.add("items", {"id": "phoenix_down", "name": "Phoenix Down", "scope": "one_ally_any",
+		"effects": [{"kind": "remove_state", "id": rules.death_state()}]})
+	var r := rules.use_item(hero, core.party[1], "phoenix_down")
+	assert_true(RPGRuleSystem.had_effect(r))
+	assert_false(core.party[1].is_dead(), "revived")
+
+
+## MV's "N random enemies": one pick per hit from the living, the same enemy can come up twice,
+## and the picks are the seeded RNG's (same seed, same storm).
+func test_random_enemies_scope_hits_once_per_pick() -> void:
+	var storm := func(c: RPGBattleCore) -> Array:
+		return c.resolve_targets(c.party[0], {"scope": "random_enemies", "random_count": 4}, -1)\
+			.map(func(p): return c.enemies.find(p))
+	var core := _core(["hero", "mira"], "slimes", 7)
+	var hero: RPGBattler = core.party[0]
+	var picks: Array = core.resolve_targets(hero, {"scope": "random_enemies", "random_count": 4}, -1)
+	assert_eq(picks.size(), 4, "four picks from two slimes means repeats")
+	for p in picks:
+		assert_true(p.is_active() and core.enemies.has(p))
+	assert_eq(core.resolve_targets(hero, {"scope": "random_enemies"}, -1).size(), 1, "count defaults to one")
+	assert_eq(storm.call(_core(["hero", "mira"], "slimes", 7)),
+		picks.map(func(p): return core.enemies.find(p)), "the same seed draws the same storm")
+	for e in core.enemies:
+		e.escaped = true
+	assert_eq(core.resolve_targets(hero, {"scope": "random_enemies", "random_count": 3}, -1), [],
+		"nothing to pick from")
+	# In battle: a hit per pick, each rolled separately.
+	db.add("skills", {"id": "spark_storm", "name": "Spark Storm", "scope": "random_enemies",
+		"random_count": 3, "hit_type": "certain", "formula": "4", "variance": 0})
+	var battle := _core(["hero"], "slimes", 5)
+	battle.party[0].skills.append("spark_storm")
+	battle.begin_turn()
+	assert_true(battle.set_action(0, {"kind": "skill", "skill": "spark_storm", "target": -1}))
+	var effects := []
+	var r := battle.next_action()
+	while not r.is_empty():
+		if r.user == battle.party[0] and str(r.get("kind", "")) == "skill":
+			effects = r.effects
+		r = battle.next_action()
+	battle.end_turn()
+	assert_eq(effects.size(), 3, "three picks, three hits")
+	var total := 0
+	for fe in effects:
+		total += int(fe.result.damage)
+	assert_eq(total, 12, "4 damage a hit")
+
+
 func test_turn_order_and_checkpoints() -> void:
 	var core := _core(["hero"], "bats", 11)
 	var seen := []

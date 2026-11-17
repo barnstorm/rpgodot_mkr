@@ -228,7 +228,7 @@ There are 638 tests in 34 suites:
 | `save` | Save and load, migration, refusing to save during an event |
 | `import` | 2000/2003 ChipSet decoding and autotile patterns against fixtures; RPG Maker folder import findings from the real RTPs (water row, palette transparency, JPG, XP/VX/MV window skins, skipped folders, game over, tileset ids) |
 | `formula`, `rules` | Safe formulas and the Classic and OSR rule systems |
-| `battle_core` | Turn order, AI, rewards and battle events; the Escape effect on a party member (lone escaper ends the fight) and on an enemy (leaves with no rewards) |
+| `battle_core` | Turn order, AI, rewards and battle events; the Escape effect on a party member (lone escaper ends the fight) and on an enemy (leaves with no rewards); MV/MZ scopes — N random enemies (a hit per re-rolled pick), the (dead or alive) ally scopes, Everyone |
 | `battle_styles` | Front and side view, turn / ATB / CTB: defaults, side-view placement, the battler graphic chain (MV sheet, 2003 BattleCharSet, walk sprite), motions, ATB fill order, wait and active time, the turn counter for troop pages, preemptive and surprise (encounter rolls, Battle Processing), escape, passing the turn, spacing and mixed-source heights, auto battles in every combination |
 | `party_abilities` | VX Ace / MV party abilities, a trait any member carries for the whole party: Encounter Half and Encounter None on the map, Cancel Surprise and Raise Preemptive in the encounter roll, Gold Double and Drop Item Double in the rewards |
 | `extension_hooks` | Extension hooks: entry scripts and game signals, settings, save sections, menu and options entries, text codes, condition kinds, custom fields, map overlay layers and character attachments |
