@@ -303,6 +303,74 @@ func test_enemy_conditions_and_slip_have_forms() -> void:
 	await frames(1)
 
 
+## Issue #156: own HP / MP conditions are edited as RPG Maker's range (From % to To %), older
+## single bounds are shown as the range they mean, and Party level starts as "highest, at least".
+func test_156_enemy_condition_ranges_in_the_editor() -> void:
+	var fields: Array = RPGRecordSchemas._enemy_condition_fields()
+	var shown := func(c: Dictionary) -> Array:
+		var out := []
+		for f in fields:
+			if RPGCommand._visible(f, c, fields):
+				out.append(str(f.key))
+		return out
+	assert_eq(shown.call({"kind": "hp"}), ["kind", "min", "max"], "own HP: a range, no Compare")
+	assert_eq(shown.call({"kind": "mp"}), ["kind", "min", "max"])
+	assert_eq(shown.call({"kind": "party_level"}), ["kind", "op", "pick", "level"])
+	var by_key := {}
+	for f in fields:
+		by_key[str(f.key)] = f
+	assert_eq([by_key.min.default, by_key.max.default], [0, 100], "a new range is 0% to 100%")
+	assert_eq([by_key.pick.default, by_key.op.default], ["highest", ">="], "Party level as VX / VX Ace / MV mean it")
+	assert_eq(by_key.pick.options, ["average", "highest"], "the 2000 / 2003 average is still there")
+	# Older single bounds as ranges.
+	var as_range := func(c: Dictionary) -> Dictionary: return RPGRecordSchemas.enemy_condition_as_range(c)
+	assert_eq(as_range.call({"kind": "hp", "op": "<=", "percent": 50}), {"kind": "hp", "min": 0, "max": 50})
+	assert_eq(as_range.call({"kind": "hp", "op": "<", "percent": 50}), {"kind": "hp", "min": 0, "max": 50})
+	assert_eq(as_range.call({"kind": "mp", "op": ">=", "percent": 30}), {"kind": "mp", "min": 30, "max": 100})
+	assert_eq(as_range.call({"kind": "mp", "op": "==", "percent": 0}), {"kind": "mp", "min": 0, "max": 0})
+	assert_eq(as_range.call({"kind": "hp"}), {"kind": "hp", "min": 0, "max": 100}, "no bound: <= 100%")
+	assert_eq(as_range.call({"kind": "mp"}), {"kind": "mp", "min": 0, "max": 50}, "MP's old default was <= 50%")
+	var odd := {"kind": "hp", "op": "!=", "percent": 50}
+	assert_true(is_same(as_range.call(odd), odd), "≠ is no range: left alone (it still runs)")
+	var ranged := {"kind": "hp", "min": 30, "max": 70}
+	assert_true(is_same(as_range.call(ranged), ranged))
+	var turn := {"kind": "turn", "n": 2}
+	assert_true(is_same(as_range.call(turn), turn))
+	# In the Database: the form shows the range; the record changes only when it is edited.
+	_edit_db("enemies", func(f): _rec_of(f, "slime")["actions"] = [
+		{"skill": "attack", "rating": 5, "condition": {"kind": "always"}},
+		{"skill": "guard", "rating": 6, "condition": {"kind": "hp", "op": "<=", "percent": 50}}])
+	await _open_screen()
+	var enemies := _tab("enemies")
+	_select_id(enemies, "slime")
+	var rec: Dictionary = enemies.current_record()
+	assert_eq(rec.actions[1].condition, {"kind": "hp", "op": "<=", "percent": 50}, "opening it changes nothing")
+	assert_false(enemies.dirty)
+	var le: RPGListEditor = enemies._form.editor_for("actions")
+	assert_eq(le.get_value()[1].condition, {"kind": "hp", "min": 0, "max": 50}, "the form shows 0% to 50%")
+	# The second row's condition form: From % and To % are on the screen, Compare is not.
+	var cond_form: RPGFormBuilder = null
+	for f in _forms_in(_row_forms(enemies, "actions")[1]):
+		if f._editors.has("min"):
+			cond_form = f
+	assert_true(cond_form != null, "the condition has a form with From %")
+	assert_true(cond_form._editors["min"].row.visible and cond_form._editors["max"].row.visible)
+	assert_false(cond_form._editors["op"].row.visible, "no Compare for own HP")
+	var spins := []
+	for k in ["min", "max"]:
+		spins.append(_find(cond_form.editor_for(k), func(n): return n is SpinBox)[0])
+	assert_eq(spins.map(func(s): return int(s.value)), [0, 50], "From % and To % show the range")
+	spins[0].value = 30
+	await frames(2)
+	assert_eq(enemies.current_record().actions[1].condition, {"kind": "hp", "min": 30, "max": 50}, "edited: saved as a range")
+	assert_true(enemies.dirty)
+	# The validator names a range that can never be true.
+	var data := RPGProjectData.open(TMP + "/rpg")
+	data.db.enemies.records[0]["actions"] = [{"skill": "attack", "rating": 5, "condition": {"kind": "hp", "min": 70, "max": 30}}]
+	var msgs := RPGValidator.full(data, _registry()).map(func(p): return str(p.message))
+	assert_true(msgs.any(func(m): return m.contains("70% to 30%") and m.contains("never be true")), str(msgs))
+
+
 # --------------------------------------------------------------------------------------------
 # Face picker with {sheet, index} (Show Text)
 # --------------------------------------------------------------------------------------------

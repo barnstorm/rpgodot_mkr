@@ -439,6 +439,46 @@ func test_enemy_ai_party_level_condition() -> void:
 	assert_true(kinds.has("guard") and kinds.has("wait"), "average and highest both qualify, both stay in the weighted pool: %s" % str(kinds))
 
 
+## Issue #156: an enemy's own HP / MP condition is RPG Maker's range, both ends counting; the
+## kit's older single bound still runs.
+func test_enemy_ai_hp_and_mp_ranges() -> void:
+	db.add("enemies", {"id": "priest", "name": "Priest",
+		"stats": {"mhp": 200, "msp": 40, "agi": 20},
+		"actions": [
+			{"skill": "attack", "rating": 4, "condition": {"kind": "always"}},
+			{"skill": "guard", "rating": 9, "condition": {"kind": "hp", "min": 30, "max": 70}},
+		]})
+	var troop := {"id": "priests", "members": [{"enemy": "priest"}]}
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], troop, rules, RPGRandom.new(1))
+	core.start()
+	core.turn = 1
+	var p: RPGBattler = core.enemies[0]
+	# "Heal only while its HP is between 30% and 70%."
+	for row in [[200, "attack"], [142, "attack"], [140, "guard"], [100, "guard"], [60, "guard"], [58, "attack"], [1, "attack"]]:
+		p.set_resource("hp", row[0])
+		assert_eq(core.choose_enemy_action(p).kind, row[1], "HP %d of 200" % row[0])
+	# One end alone: the other is 0% or 100%.
+	p.set_resource("hp", 100)
+	assert_true(core._enemy_condition(p, {"kind": "hp", "max": 50}), "0% to 50% at 50%")
+	assert_false(core._enemy_condition(p, {"kind": "hp", "min": 51}), "51% to 100% at 50%")
+	assert_true(core._enemy_condition(p, {"kind": "hp", "min": 50}), "50% to 100% at 50%")
+	assert_true(core._enemy_condition(p, {"kind": "hp", "min": 50, "max": 50}), "exactly 50%")
+	assert_false(core._enemy_condition(p, {"kind": "hp", "min": 70, "max": 30}), "an empty range is never true")
+	# MP the same way.
+	p.set_resource("sp", 10)
+	assert_true(core._enemy_condition(p, {"kind": "mp", "min": 0, "max": 25}), "MP 25%")
+	p.set_resource("sp", 11)
+	assert_false(core._enemy_condition(p, {"kind": "mp", "min": 0, "max": 25}), "MP 27.5%")
+	# The older single bound keeps its meaning, strict comparisons included.
+	assert_false(core._enemy_condition(p, {"kind": "hp", "op": "<", "percent": 50}), "50% is not < 50%")
+	assert_true(core._enemy_condition(p, {"kind": "hp", "op": "<=", "percent": 50}))
+	assert_true(core._enemy_condition(p, {"kind": "hp"}), "no bound at all: <= 100%")
+	# Both in one condition (older data saved again by the editor): both must hold.
+	assert_false(core._enemy_condition(p, {"kind": "hp", "min": 0, "max": 100, "op": "!=", "percent": 50}))
+	p.set_resource("hp", 99)
+	assert_true(core._enemy_condition(p, {"kind": "hp", "min": 0, "max": 100, "op": "!=", "percent": 50}))
+
+
 func _page_ids(pages: Array) -> Array:
 	var out := []
 	for p in pages:

@@ -12,7 +12,7 @@ On the Database's **Enemies** tab, press **New**: `wolf`, *Wolf*.
 - **Level** and **Stats**: HP, SP and the rule system's stats.
 - **Experience** and **Gold** won.
 - **Item drops**: items with a chance %.
-- **Action patterns**: what it does. Each row is a skill (or one of the 2003 basic actions: *attack*, *double attack* — two hits, *guard*, *observe* — a message and nothing else, *charge up* — the next attack hits harder, *self destruct* — the monster's remaining HP as damage to the party, then it falls, *escape* — it leaves the battle and its rewards, or *transform* — it becomes the enemy picked under **Becomes**), a **Rating** (1–10: higher is chosen more often), and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %** or **Own MP %**, *Has a state* (say, cure itself when poisoned), the **Party level** (average or highest), **Monsters present** (how many of its own side are still up — "flee when alone"), a **Variable**, or a **Switch**. MP compares the spell resource as a percent, like the MP battle-event condition. Optionally **Switch ON / Switch OFF**: switches turned on or off the moment the action is used — 2003's way of chaining phases ("after using Charge Up, switch 12 ON enables the big attack").
+- **Action patterns**: what it does. Each row is a skill (or one of the 2003 basic actions: *attack*, *double attack* — two hits, *guard*, *observe* — a message and nothing else, *charge up* — the next attack hits harder, *self destruct* — the monster's remaining HP as damage to the party, then it falls, *escape* — it leaves the battle and its rewards, or *transform* — it becomes the enemy picked under **Becomes**), a **Rating** (1–10: higher is chosen more often), and a **Condition**: *Always*, a **Turn** (and then every N turns), its **Own HP %** or **Own MP %** as a range (**From %** to **To %**, both ends counting: 30 to 70 is "heal only while its HP is between 30% and 70%", 0 to 50 is "at half HP or less"), *Has a state* (say, cure itself when poisoned), the **Party level** (the highest level in the party, at least N, as RPG Maker VX / VX Ace / MV mean it; *Average* is 2000 / 2003's), **Monsters present** (how many of its own side are still up — "flee when alone"), a **Variable**, or a **Switch**. MP compares the spell resource as a percent, like the MP battle-event condition. Optionally **Switch ON / Switch OFF**: switches turned on or off the moment the action is used — 2003's way of chaining phases ("after using Charge Up, switch 12 ON enables the big attack").
 - **Traits**: element rates (weak to fire), state resistances and so on.
 
 ## 2. An enemy group
@@ -145,7 +145,7 @@ The party gets EXP, gold and drops, and actors level up, learn skills and show m
 
 ## Try it yourself
 
-- Make a slime that gets angry: an action pattern *Power Strike* with the condition *Own HP %* ≤ 50.
+- Make a slime that gets angry: an action pattern *Power Strike* with the condition *Own HP %* from 0 to 50.
 - Add a battle event to the boss: at turn 2, `Show Text: "You'll pay for that!"` and give the boss a state that raises its attack.
 - Add a slime to the boss group, mark it *Appears later*, and bring it in at turn 3 with **Enemy Appear**.
 - Try every battle style on the same group with **Battle test**.

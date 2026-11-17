@@ -633,6 +633,13 @@ static func _enemy_condition_structure(c: Variant, file: String, rec: String, pa
 		return
 	if kind in ["hp", "mp", "party_level", "enemies_alive", "variable"] and c.has("op") and not OPS.has(str(c.get("op"))):
 		out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % c.get("op"), "Use ==, !=, <, <=, > or >=."))
+	if kind in ["hp", "mp"] and (c.has("min") or c.has("max")):
+		var lo: Variant = c.get("min", 0)
+		var hi: Variant = c.get("max", 100)
+		if not (typeof(lo) in [TYPE_INT, TYPE_FLOAT] and typeof(hi) in [TYPE_INT, TYPE_FLOAT]):
+			out.append(problem("error", file, rec, "condition", path + "/min", "The percent range must be two numbers.", "Use numbers from 0 to 100 for From % and To %."))
+		elif float(lo) > float(hi):
+			out.append(problem("error", file, rec, "condition", path + "/min", "This %s range runs from %s%% to %s%%, so it can never be true." % [kind.to_upper(), lo, hi], "Make From % no larger than To %."))
 	if kind == "state" and not RPGIds.is_valid(c.get("state")):
 		out.append(problem("error", file, rec, "condition", path + "/state", "This state condition has no valid state.", "Pick a state from the list."))
 	if kind == "variable":

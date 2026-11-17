@@ -256,9 +256,10 @@ func _on_selected() -> void:
 		select(int(it.get_metadata(0)))
 
 
-## What the form shows for a record: the record plus its "virtual" fields.
+## What the form shows for a record: the record (older data in the shape the form edits, see
+## RPGRecordSchemas.for_form) plus its "virtual" fields.
 func form_value(r: Dictionary) -> Dictionary:
-	var v := r.duplicate()
+	var v := RPGRecordSchemas.for_form(str(config.get("type", "")), r).duplicate()
 	for f in _fields:
 		if f.get("virtual", false):
 			v[str(f.key)] = RPGRecordSchemas.virtual_value(str(config.get("type", "")), str(f.key), r)

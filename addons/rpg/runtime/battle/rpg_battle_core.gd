@@ -1463,6 +1463,22 @@ func _enemy_action_dict(a: Dictionary) -> Dictionary:
 	return act
 
 
+## An enemy's own HP % or MP % condition (issue #156). RPG Maker's form is a range, "min" % to
+## "max" % with both ends counting (HP 30% - 70%); a missing end is 0 or 100. The kit's older
+## form is one bound, {op, percent} (`legacy_percent` when it names none). A condition that
+## carries both must pass both, so data written either way keeps its meaning.
+static func _percent_condition(pct: float, c: Dictionary, legacy_percent: float) -> bool:
+	var ranged := c.has("min") or c.has("max")
+	if ranged:
+		var lo := float(c.get("min", 0))
+		var hi := float(c.get("max", 100))
+		if (pct < lo and not is_equal_approx(pct, lo)) or (pct > hi and not is_equal_approx(pct, hi)):
+			return false
+	if ranged and not (c.has("op") or c.has("percent")):
+		return true
+	return _compare(pct, str(c.get("op", "<=")), float(c.get("percent", legacy_percent)))
+
+
 ## One action-pattern condition. Shared helpers (_turn_matches, _hp_percent, _mp_percent,
 ## _compare, _switch_is) keep the semantics the same as the troop page conditions (#9).
 func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
@@ -1474,11 +1490,11 @@ func _enemy_condition(e: RPGBattler, c: Variant) -> bool:
 		"turn":
 			return _turn_matches(int(c.get("n", 0)), int(c.get("every", 0)))
 		"hp":
-			return _compare(_hp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 100)))
+			return _percent_condition(_hp_percent(e), c, 100.0)
 		"mp":
 			if rules.magic_resource() == "":
 				return false
-			return _compare(_mp_percent(e), str(c.get("op", "<=")), float(c.get("percent", 50)))
+			return _percent_condition(_mp_percent(e), c, 50.0)
 		"state":
 			return e.has_state(str(c.get("state", "")))
 		"party_level":
