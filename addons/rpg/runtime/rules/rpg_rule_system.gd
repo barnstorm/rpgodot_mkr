@@ -37,6 +37,7 @@ const DEFAULT_TERMS := {
 	"counter": "%1 counterattacks!",
 	"magic_reflection": "%1 reflects the magic!",
 	"substitute": "%1 covers %2!",
+	"acts_under_state": "%1 is driven by %2!",
 	"state_added": "%1 is affected by %2!",
 	"state_removed": "%1 is no longer affected by %2.",
 	"state_resisted": "%1 resisted %2.",
@@ -1002,20 +1003,42 @@ func _luck_factor(user: RPGBattler, target: RPGBattler) -> float:
 	return maxf(1.0 + (a - t) * 0.001, 0.0)
 
 
-func _state_name(state_id: String) -> String:
+func state_name(state_id: String) -> String:
 	return str(_rec("states", state_id).get("name", state_id))
 
 
-## Restriction of the strongest state: "none", "cannot_use_skills" or "cannot_act".
+## Restriction severities, MV's ranking: a state that takes more control always wins over one
+## that takes less (cannot act beats attack-at-random, which beats being merely silenced).
+const RESTRICTION_RANK := {"none": 0, "attack_enemy": 1, "attack_anyone": 2, "attack_ally": 3,
+	"cannot_use_skills": 4, "cannot_act": 5}
+
+
+## Restriction of the most limiting state the battler carries: "none", one of the
+## attack-at-random ones ("attack_enemy" berserk, "attack_anyone" confusion, "attack_ally"
+## charm), "cannot_use_skills" or "cannot_act". Unknown values rank as "none".
 func restriction(b: RPGBattler) -> String:
 	var worst := "none"
 	for s in b.states:
 		var r := str(_rec("states", s.id).get("restriction", "none"))
-		if r == "cannot_act":
-			return r
-		if r == "cannot_use_skills":
+		if int(RESTRICTION_RANK.get(r, 0)) > int(RESTRICTION_RANK.get(worst, 0)):
 			worst = r
 	return worst
+
+
+## Whether the battler's restriction makes it attack at random (2000/2003's confusion, berserk
+## and charm): it acts on its own, attacking what the state says instead of what its player or
+## action pattern would choose.
+func is_confused(b: RPGBattler) -> bool:
+	return b != null and int(RESTRICTION_RANK.get(restriction(b), 0)) in [1, 2, 3]
+
+
+## The id of the first state imposing restriction `r` ("" when none does) — the state the
+## battle log names when a battler acts under it.
+func restriction_state(b: RPGBattler, r: String) -> String:
+	for s in b.states:
+		if str(_rec("states", s.id).get("restriction", "none")) == r:
+			return str(s.id)
+	return ""
 
 
 func can_act(b: RPGBattler) -> bool:

@@ -63,6 +63,7 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 - The remaining Ex- and Sp-Parameters: *Counter Attack* and *Magic Reflection* in battle; *Target Rate*, *Guard Effect*, *Recovery Effect*, *Pharmacology*, *MP Cost Rate*, *Physical/Magic Damage Rate*, *Floor Damage* rate and *Experience* rate.
 - MV invocation fields: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss).
 - The rest of the Features: *Attack State* rides every normal attack, *Attack Speed* speeds them, *Add Skill* / *Seal Skill* change the skill list, *Equip Weapon/Armor Type* widen the class's equip lists, *Auto Battle* picks its own command, *Guard* halves damage without the command, *Substitute* covers a friend under a quarter of HP, and the *Collapse Effect* picks the death animation (normal, boss, instant, none).
+- State restrictions: *Attack an Enemy* (berserk), *Attack Anyone* (confusion, itself included), *Attack an Ally* (charm, never itself), *Cannot Use Skills* and *Cannot Act*. The most limiting state wins, a confused battler asks for no command (a monster skips its action list), and the log names the driving state.
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 
