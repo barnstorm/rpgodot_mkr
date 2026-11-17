@@ -416,6 +416,25 @@ func has_trait(b: RPGBattler, kind: String, id: String = "") -> bool:
 	return false
 
 
+## Party abilities (VX Ace / MV): a trait on any member of `party` applies to the whole party —
+## Encounter Half / Encounter None, Cancel Surprise, Raise Preemptive.
+func party_has_trait(party: Array, kind: String) -> bool:
+	for b in party:
+		if b is RPGBattler and has_trait(b, kind):
+			return true
+	return false
+
+
+## Product of every member's percent traits of `kind`: Gold Double at 200 doubles, two members
+## carrying it quadruple, as MV's gold rate does.
+func party_trait_rate(party: Array, kind: String) -> float:
+	var rate := 1.0
+	for b in party:
+		if b is RPGBattler:
+			rate *= trait_rate(b, kind)
+	return rate
+
+
 func attack_element(b: RPGBattler) -> String:
 	for t in traits(b, "attack_element"):
 		return str(t.get("id", ""))

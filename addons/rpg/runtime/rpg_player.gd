@@ -666,7 +666,7 @@ func _check_encounter() -> void:
 	var rpg: Node = map.rpg
 	var enc: Dictionary = map.props.get("encounters", {})
 	var groups: Array = enc.get("groups", [])
-	if groups.is_empty() or rpg.scheduler.is_main_busy() or debug_through() or not bool(rpg.state.access.get("encounters", true)):
+	if groups.is_empty() or rpg.scheduler.is_main_busy() or debug_through() or not bool(rpg.state.access.get("encounters", true)) or _party_ability("encounter_none"):
 		return
 	if encounter_count <= 0:
 		reset_encounter()
@@ -737,7 +737,16 @@ static func pick_encounter_group(props: Dictionary, region: int, rng: Variant) -
 
 func reset_encounter() -> void:
 	var steps := int(map.props.get("encounters", {}).get("steps", 30))
-	encounter_count = maxi(1, int(steps * _randf_range(0.5, 1.5)))
+	# Party ability (VX Ace / MV): Encounter Half doubles the steps between battles.
+	var mult := 2.0 if _party_ability("encounter_half") else 1.0
+	encounter_count = maxi(1, int(steps * mult * _randf_range(0.5, 1.5)))
+
+
+## A party ability (VX Ace / MV): a trait any party member carries — Encounter Half and
+## Encounter None reach the walking rules through here.
+func _party_ability(kind: String) -> bool:
+	var rpg: Node = map.rpg
+	return rpg != null and rpg.rules is RPGRuleSystem and rpg.rules.party_has_trait(rpg.state.party_battlers(), kind)
 
 
 # --- followers ---------------------------------------------------------------------------------

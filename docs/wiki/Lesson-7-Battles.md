@@ -37,6 +37,8 @@ Open your map's **Properties** (right-click it in the map tree):
 
 When a random battle starts there is a small chance of a **preemptive** attack (the party moves first) or a **surprise** attack (the enemies do): 5% and 3% when the party's average agility is at least the enemies', else 3% and 5%.
 
+The **party abilities** (VX Ace / MV) bend these rules: a trait any party member carries — on an actor, class, equipment or state — applies to the whole party. *Encounter Half* doubles the steps between battles, *Encounter None* stops random battles entirely, *Cancel Surprise* removes the ambush chance and *Raise Preemptive* quadruples the first-strike one. One member carrying the trait is enough.
+
 **Battle start chances** (Database > System) add the RPG Maker 2003 openings on top of that, each with a percent chance on a random encounter:
 
 | Start | Gauges | Formation |
@@ -137,7 +139,7 @@ The speed a gauge fills comes from the rule system (`atb_speed`, else the agilit
 
 ## 7. After the battle
 
-The party gets EXP, gold and drops, and actors level up, learn skills and show messages. The kit's **Victory aftermath** plugin replaces those messages with a results screen; **Enemy HP gauges**, **Party formation** and **Bestiary** also change battles. See [Plugins](Plugins.md).
+The party gets EXP, gold and drops, and actors level up, learn skills and show messages. Party abilities reach the take: *Gold Double* on any living member multiplies what a victory pays (200% doubles, and the percents multiply across members) and *Drop Item Double* the drop chance. The kit's **Victory aftermath** plugin replaces those messages with a results screen; **Enemy HP gauges**, **Party formation** and **Bestiary** also change battles. See [Plugins](Plugins.md).
 
 ## Try it yourself
 

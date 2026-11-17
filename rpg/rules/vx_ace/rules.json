@@ -2,7 +2,7 @@
 	"schema_version": 1,
 	"id": "vx_ace",
 	"name": "VX Ace style",
-	"description": "Rules in the style of RPG Maker VX Ace. Eight parameters (MHP, MMP, ATK, DEF, MAT, MDF, AGI, LUK), HP/MP/TP, class parameter curves from level 1 to 99, damage formulas such as a.atk * 4 - b.def * 2 with 20% variance and x3 criticals, HIT/EVA/CRI ex-parameters, Features (Add Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen, Element Rate, State Rate) and the basis/extra/acceleration experience curve.",
+	"description": "Rules in the style of RPG Maker VX Ace. Eight parameters (MHP, MMP, ATK, DEF, MAT, MDF, AGI, LUK), HP/MP/TP, class parameter curves from level 1 to 99, damage formulas such as a.atk * 4 - b.def * 2 with 20% variance and x3 criticals, HIT/EVA/CRI ex-parameters, Features (Add Skill Type, Dual Wield, Seal Equip, Action Times+, HP/MP Regen, Element Rate, State Rate, Party Abilities: Encounter Half/None, Cancel Surprise, Raise Preemptive, Gold/Drop Double) and the basis/extra/acceleration experience curve.",
 	"capabilities": ["turn_order", "action_selection", "target_choice", "battle_events", "escape", "defeat"],
 	"stats": [
 		{"id": "mhp", "label": "Max HP", "short": "MHP", "type": "int", "min": 1, "max": 999999},
@@ -67,7 +67,13 @@
 		{"kind": "seal_skill_type", "label": "Seal Skill Type", "id_ref": "skill_type"},
 		{"kind": "dual_wield", "label": "Dual Wield (slot becomes a weapon slot)", "id_ref": "equip_slot"},
 		{"kind": "seal_equip", "label": "Seal Equip", "id_ref": "equip_slot"},
-		{"kind": "preserve_tp", "label": "Preserve TP"}
+		{"kind": "preserve_tp", "label": "Preserve TP"},
+		{"kind": "encounter_half", "label": "Party Ability: Encounter Half"},
+		{"kind": "encounter_none", "label": "Party Ability: Encounter None"},
+		{"kind": "cancel_surprise", "label": "Party Ability: Cancel Surprise"},
+		{"kind": "raise_preemptive", "label": "Party Ability: Raise Preemptive"},
+		{"kind": "gold_double", "label": "Party Ability: Gold Double", "value": "percent", "default": 200},
+		{"kind": "drop_double", "label": "Party Ability: Drop Item Double", "value": "percent", "default": 200}
 	],
 	"attack": {
 		"name": "Attack",
