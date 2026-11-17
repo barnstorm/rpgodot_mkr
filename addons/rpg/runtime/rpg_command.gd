@@ -76,7 +76,7 @@ func validate(args: Dictionary) -> Array:
 			"bool":
 				if typeof(v) != TYPE_BOOL:
 					problems.append({"severity": "error", "field": k, "message": "'%s' must be true or false." % f.get("label", k)})
-			"text", "multiline":
+			"text", "multiline", "tile_key":
 				if typeof(v) != TYPE_STRING:
 					problems.append({"severity": "error", "field": k, "message": "'%s' must be text." % f.get("label", k)})
 			"choice":

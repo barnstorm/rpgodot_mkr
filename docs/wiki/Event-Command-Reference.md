@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 92 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 93 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -114,6 +114,7 @@ records how long the wait took, in tenths of a second.
 | **Change Map Name Display** | `change_map_name_display` | Show map names |
 | **Change Parallax Background** | `change_parallax` | Image (blank = none), Loop, Horizontal scroll (0 = fixed, 1 = with the map), Vertical scroll (0 = fixed, 1 = with the map) |
 | **Change Tileset** | `change_tileset` | Tileset |
+| **Change Tile** | `change_tile` | Layer, Change (every matching tile / one cell), From tile, To tile, X, Y, Keep |
 | **Change Window Skin** | `change_windowskin` | Window skin (blank = default) |
 | **Fade In Screen** | `fade_in` | Seconds |
 | **Fade Out Screen** | `fade_out` | Seconds, Colour |
@@ -122,6 +123,8 @@ records how long the wait took, in tenths of a second.
 | **Shake Screen** | `shake_screen` | Power, Seconds, Wait until done |
 | **Show Animation** | `show_animation` | Character, Animation, Wait for completion |
 | **Tint Screen** | `tint_screen` | Red %, Green %, Blue %, Seconds, Wait until done |
+
+**Change Tile** replaces tiles by their key (`lower_17`, `water_a`…) on one layer — every cell holding the *From* key, or just the cell at X, Y (the coordinates are operands, so they can come from variables). The map redraws immediately and passability follows the new tile. The exact tile you pick is painted; autotiles do not re-shape around it. Like RPG Maker 2000/2003, a change lasts until the map is reloaded (a transfer to another map and back restores the saved tiles); **Keep** also stores it in the save, so it survives reloads and loading.
 
 ## Pictures
 

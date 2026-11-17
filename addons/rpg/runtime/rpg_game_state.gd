@@ -70,6 +70,9 @@ var music_overrides: Dictionary = {}
 ## "Change Tileset" / "Change Parallax Background" / "Change Battle Background", per map:
 ## map id -> {tileset: id, parallax: {image, scroll_x, scroll_y, loop} or null, battle_background}.
 var map_overrides: Dictionary = {}
+## "Change Tile" operations with Keep (#15), per map: map id -> [{layer, mode, from?, to, cell?}],
+## replayed by RPGMap.start() so kept tile changes survive map changes and loading.
+var tile_changes: Dictionary = {}
 ## "Change Window Skin": System graphic used for windows ("" = the System record's).
 var windowskin := ""
 ## Extension save sections: namespace -> Dictionary
@@ -466,6 +469,21 @@ func set_map_override(map_id: String, key: String, value: Variant) -> void:
 	var o: Dictionary = map_override(map_id)
 	o[key] = value
 	map_overrides[map_id] = o
+
+
+## Remembers a Change Tile operation for `map_id` (see tile_changes). A later operation with the
+## same target replaces the earlier one, so a map's list stays bounded however often it runs.
+func remember_tile_change(map_id: String, op: Dictionary) -> void:
+	var list: Array = tile_changes.get(map_id, [])
+	for i in list.size():
+		var o: Dictionary = list[i]
+		if str(o.get("layer", "")) == str(op.get("layer", "")) and str(o.get("mode", "")) == str(op.get("mode", "")) \
+				and str(o.get("from", "")) == str(op.get("from", "")) and str(o.get("cell", "")) == str(op.get("cell", "")):
+			list[i] = op
+			tile_changes[map_id] = list
+			return
+	list.append(op)
+	tile_changes[map_id] = list
 
 
 const LOOK_KEYS := ["charset", "charset_index", "face", "face_index", "battler", "nickname"]
@@ -1017,6 +1035,7 @@ func to_dict() -> Dictionary:
 		"map_name_display": map_name_display,
 		"music_overrides": music_overrides.duplicate(true),
 		"map_overrides": map_overrides.duplicate(true),
+		"tile_changes": tile_changes.duplicate(true),
 		"windowskin": windowskin,
 		"counters": counters.duplicate(),
 		"last_used": last_used.duplicate(),
@@ -1068,6 +1087,7 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 	map_name_display = bool(d.get("map_name_display", true))
 	music_overrides = d.get("music_overrides", {}).duplicate(true) if d.get("music_overrides") is Dictionary else {}
 	map_overrides = d.get("map_overrides", {}).duplicate(true) if d.get("map_overrides") is Dictionary else {}
+	tile_changes = d.get("tile_changes", {}).duplicate(true) if d.get("tile_changes") is Dictionary else {}
 	windowskin = str(d.get("windowskin", ""))
 	counters = {"saves": 0, "battles": 0, "victories": 0, "defeats": 0, "escapes": 0}
 	if d.get("counters") is Dictionary:

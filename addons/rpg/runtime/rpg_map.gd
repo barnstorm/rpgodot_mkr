@@ -250,6 +250,11 @@ func start(p_rpg: Node) -> void:
 	# Runtime-spawned copies (#66) come back on top of the placed ones, wherever they were.
 	for ev_data in rpg.state.spawned_events.get(map_id, []):
 		_create_event(ev_data)
+	# Change Tile operations with Keep (#15) replay after the tilesets are assigned, so they
+	# survive map changes and loading like the map overrides above.
+	if rpg.state != null:
+		for op in rpg.state.tile_changes.get(map_id, []):
+			apply_tile_change(op)
 	refresh_vehicles()
 	started = true
 	refresh_pages()
@@ -324,6 +329,42 @@ func change_tileset(ts_id: String) -> bool:
 	if movement != null:
 		movement.invalidate()
 	return true
+
+
+## "Change Tile" (#15): applies one operation to this map — mode "all" rewrites every cell of the
+## layer whose tile key is op.from (RPG Maker's Change Tile), mode "cell" sets the tile at
+## op.cell = [x, y]. Returns "" or an error for the command to report. The exact tile is painted
+## (autotiles do not re-shape); passability follows the new tile.
+func apply_tile_change(op: Dictionary) -> String:
+	var layer_name := str(op.get("layer", "Layer1"))
+	var layer := get_node_or_null(layer_name) as TileMapLayer
+	if layer == null:
+		return "this map has no %s." % layer_name
+	var ts: TileSet = layer.tile_set
+	if ts == null:
+		return "%s has no tileset." % layer_name
+	var to := str(op.get("to", ""))
+	var found: Array = RPGTilesetBuilder.tiles_for_key(ts, to)
+	if to == "" or found.is_empty():
+		return "tile key '%s' is not in this map's tileset." % to
+	var at := RPGTilesetBuilder.atlas_for_key(to, ts)
+	if at.is_empty():
+		var first: Array = found[0]
+		at = {"source": int(first[0]), "coords": first[1]}
+	if str(op.get("mode", "all")) == "cell":
+		var p: Array = op.get("cell", [0, 0])
+		layer.set_cell(Vector2i(int(p[0]), int(p[1])), int(at.source), at.coords)
+	else:
+		var from := str(op.get("from", ""))
+		if from == "":
+			return "a From tile key is required."
+		for cell in layer.get_used_cells():
+			var td := layer.get_cell_tile_data(cell)
+			if td != null and _tile_key(ts, td) == from:
+				layer.set_cell(cell, int(at.source), at.coords)
+	if movement != null:
+		movement.invalidate()
+	return ""
 
 
 ## "Change Parallax Background": p = {image, scroll_x, scroll_y, loop} or null (none).

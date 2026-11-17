@@ -13,6 +13,7 @@ extends VBoxContainer
 ##
 ## Field kinds: int, float, bool, text, multiline, choice, ref, resource, location, facing, sound,
 ## condition, operand, operand_pair, color, list, object, commands, route, plus editor kinds
+## tile_key (a tile of the map being edited, picked with RPGTilePicker),
 ## image ({sheet, index}), graphic (page graphic), point ([x, y] in whole numbers), count_map
 ## ({id: count}, e.g. starting items; `ref` names the ID kind), troop_members (the visual
 ## Enemy groups editor) and icon (an index into the project's icon sheet, picked from a grid of
@@ -489,6 +490,12 @@ func _make_editor(f: Dictionary) -> Dictionary:
 			res.empty_hint = str(f.get("empty_hint", ""))
 			res.value_changed.connect(func(v): on_edit.call(v))
 			return {"control": res, "get": res.get_value, "set": res.set_value}
+		"tile_key":
+			# A tile of the map being edited (Change Tile's From/To): thumbnail + chooser popup.
+			var tp: Control = load(TILE_PICKER_SCRIPT).new()
+			tp.setup(data, str(options.get("map_id", "")))
+			tp.value_changed.connect(func(v): on_edit.call(v))
+			return {"control": tp, "get": tp.get_value, "set": tp.set_value}
 		"icon":
 			var ip := RPGIconPicker.new(data)
 			ip.value_changed.connect(func(v): on_edit.call(v))
