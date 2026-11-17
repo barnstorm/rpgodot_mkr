@@ -747,6 +747,8 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 	# random scope re-picks its targets per repeat. Other scopes keep a target's repeats together
 	# (a Repeat 3 skill strikes one foe three times before moving to the next).
 	var apply_one := func(t: RPGBattler) -> void:
+		if _counter_or_reflect(b, t, action, u, res):
+			return
 		var r := rules.apply_action(b, t, action)
 		res.effects.append({"target": t, "result": r})
 		res.lines.append_array(r.lines)
@@ -796,6 +798,51 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 			res["common_events"] = ces
 
 
+## Counter Attack and Magic Reflection (the VX Ace / MV Ex-Parameters), checked per hit the
+## way MV's invokeAction does — counter first. A physical hit on a target that can still act is
+## answered with a normal attack from the target; a magical skill is reflected back onto the
+## user unchanged (no second cost). The hit is replaced either way; rules without the fields
+## (or a parameter of 0) never draw and the hit lands as before.
+func _counter_or_reflect(user: RPGBattler, target: RPGBattler, action: Dictionary, u: Dictionary, res: Dictionary) -> bool:
+	var hit_type := str(u.get("hit_type", "certain"))
+	if hit_type == "physical" and rules.can_act(target):
+		var cnt := rules.trait_field(target, "cnt", 0)
+		if cnt > 0 and rng.chance_percent(float(cnt)):
+			res.lines.append(rules.term("counter", [target.name]))
+			var r := rules.apply_action(target, user, {"kind": "attack"})
+			res.effects.append({"target": user, "result": r, "countered_by": target})
+			res.lines.append_array(r.lines)
+			return true
+	if hit_type == "magical" and target.is_alive():
+		var mrf := rules.trait_field(target, "mrf", 0)
+		if mrf > 0 and rng.chance_percent(float(mrf)):
+			res.lines.append(rules.term("magic_reflection", [target.name]))
+			var r := rules.apply_action(user, user, action)
+			res.effects.append({"target": user, "result": r, "reflected_by": target})
+			res.lines.append_array(r.lines)
+			return true
+	return false
+
+
+## A random pick from `foes` as a 0-or-1-element list (MV's randomTarget): weighted by each
+## foe's Target Rate Sp-Parameter when the rules have one — 0 takes a foe out of the draw, 300
+## triples its odds, and a draw where every weight is 0 picks nobody — and a plain even pick
+## otherwise, so rules without it keep the same RNG draws as before.
+func _pick_foe(foes: Array) -> Array:
+	if foes.is_empty():
+		return []
+	if rules.has_snapshot_field("tgr"):
+		var pool: Array = []
+		for f in foes:
+			var w := maxi(0, rules.trait_field(f, "tgr", 100))
+			if w > 0:
+				pool.append({"foe": f, "weight": w})
+		if pool.is_empty():
+			return []
+		return [rng.pick_weighted(pool).foe]
+	return [rng.pick(foes)]
+
+
 ## Targets for a usable (resolved skill/item/attack) by its scope. MV/MZ scopes: "random_enemies"
 ## draws `random_count` (1-4) picks up front, re-rolling from the living each time, so the same
 ## enemy can be hit twice; the "(dead or alive)" scopes reach dead allies too (reviving with a
@@ -811,18 +858,18 @@ func resolve_targets(user: RPGBattler, usable: Dictionary, target_index: int) ->
 		"one_enemy":
 			if target_index >= 0 and target_index < foes.size() and foes[target_index].is_active():
 				return [foes[target_index]]
-			return [] if alive_foes.is_empty() else [rng.pick(alive_foes)]
+			return _pick_foe(alive_foes)
 		"all_enemies":
 			return alive_foes
 		"random_enemy":
-			return [] if alive_foes.is_empty() else [rng.pick(alive_foes)]
+			return _pick_foe(alive_foes)
 		"random_enemies":
 			# N picks, each a fresh roll among the living (MV randomTargets).
 			var picks: Array = []
 			for i in maxi(1, int(usable.get("random_count", 1))):
 				if alive_foes.is_empty():
 					break
-				picks.append(rng.pick(alive_foes))
+				picks.append_array(_pick_foe(alive_foes))
 			return picks
 		"one_ally":
 			if target_index >= 0 and target_index < friends.size() and friends[target_index].is_active():
