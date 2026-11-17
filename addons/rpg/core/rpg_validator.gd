@@ -22,7 +22,7 @@ const VAR_TYPES := ["int", "float", "bool", "string"]
 const OPS := ["==", "=", "!=", "≠", "<", "<=", "≤", ">", ">=", "≥"]
 const EQ_OPS := ["==", "=", "!=", "≠"]
 const FACINGS := ["down", "left", "right", "up", "keep"]
-const CONDITION_KINDS := ["switch", "variable", "self_switch", "self_variable", "item", "actor", "gold", "vehicle", "facing", "button", "started_by", "formula", "can_pass", "all", "any", "not"]
+const CONDITION_KINDS := ["switch", "variable", "self_switch", "self_variable", "item", "actor", "gold", "timer", "vehicle", "facing", "button", "started_by", "formula", "can_pass", "all", "any", "not"]
 ## Actor condition checks ({kind: "actor", check}); the target sits under the check's own key
 ## (for level/hp/sp it is the compared `value`).
 const ACTOR_CHECKS := ["in_party", "name", "class", "skill", "weapon", "armor", "state", "level", "hp", "sp"]
@@ -541,6 +541,14 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 			var vid := str(c.get("id", c.get("vehicle", "")))
 			if not VEHICLE_IDS.has(vid):
 				out.append(problem("error", file, rec, "condition", path + "/id", "Unknown vehicle '%s'." % vid, "Use boat, ship, airship or none."))
+		"timer":
+			var tid := str(c.get("timer", c.get("id", "1")))
+			if not ["1", "2"].has(tid):
+				out.append(problem("error", file, rec, "condition", path + "/timer", "Unknown timer '%s'. There are two timers, 1 and 2." % tid, ""))
+			var t_op := str(c.get("op", "<="))
+			if not OPS.has(t_op):
+				out.append(problem("error", file, rec, "condition", path + "/op", "Unknown comparison '%s'." % t_op, "Use ==, !=, <, <=, > or >=."))
+			_operand_structure(c.get("seconds", c.get("value", 0)), file, rec, path + "/seconds", out)
 		"enemy_can_act", "enemy_is_target":
 			var eidx: Variant = c.get("index", 0)
 			if typeof(eidx) != TYPE_INT or int(eidx) < 0:

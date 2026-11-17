@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 90 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 91 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -40,6 +40,7 @@ There are 90 built-in commands. The *ID* is the command's `type` in the event JS
 | **Control Self Switch** | `set_self_switch` | Action, Self switch, ON, Event (blank = this event), Map (blank = this map) |
 | **Control Switch** | `set_switch` | Switch, Set to |
 | **Control Variable** | `set_variable` | Target (One variable / Range / Indirect / Self variable), Variable, From, To, Holds the target's id, Name, Event (blank = this event), Map (blank = this map), Operation, Value |
+| **Control Timer** | `control_timer` | Timer (1 / 2), Operation (Set / Start / Stop), Time (seconds), Show on screen, Position, In battle (Pause / Keep counting / Abort at 0) |
 | **Get Location Info** | `get_location_info` | Store in, Info, Layer, X, Y |
 
 ## Party

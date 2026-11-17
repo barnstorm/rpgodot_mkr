@@ -98,7 +98,9 @@ Page 2   (condition: farmer_quest_started is ON)
     ◆ Text: Farmer: Any luck with those apples?
 ```
 
-**Conditional Branch** (category *flow*) checks one condition and runs *Then* or *Else*. It has every page condition above, plus *Gold* and *Vehicle*, plus some only a branch can check (they need the running event): *Character facing*, *Button* (held, just pressed, or repeating), *Started by* (the action button, a touch, autorun, parallel, or Call Event) and *Can pass* (a character can step N cells in a direction).
+**Conditional Branch** (category *flow*) checks one condition and runs *Then* or *Else*. It has every page condition above, plus *Gold*, *Vehicle* and *Timer*, plus some only a branch can check (they need the running event): *Character facing*, *Button* (held, just pressed, or repeating), *Started by* (the action button, a touch, autorun, parallel, or Call Event) and *Can pass* (a character can step N cells in a direction).
+
+The *Timer* condition pairs with **Control Timer** (category *switches and variables*), RPG Maker 2003's countdown: *Set* stores the time (in seconds, from an operand like a variable) and the display options, *Start* begins the countdown and *Stop* holds it where it is. There are two timers — timer 2 reads top left, timer 1 top right — and a timer set to show is drawn on the map and the battle screen with the digits of the System graphic. What a timer does in a battle is one of the Set options: *pause* (hold while the fighting lasts), *keep counting*, or *abort* — the battle ends the moment it reaches 0, no rewards, as an escape. A page or branch can then check the time left ("Timer 1 is 30 s or less"), and the timers travel with a save.
 
 Add page 3 with the condition `farmer_quest_done is ON` and the line "Thanks again!". Because page 3 is the last page that is true, it wins once the quest is done.
 

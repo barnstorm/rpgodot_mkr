@@ -343,6 +343,7 @@ static func _describe_condition(c: Dictionary) -> String:
 				"hp", "sp": return "%s %s %s %s%s" % [c.get("id", ""), "HP" if c.get("check") == "hp" else "SP", c.get("op", ">="), c.get("value", ""), "%" if c.get("percent", false) else ""]
 			return "%s in party" % c.get("id", "")
 		"gold": return "gold %s %s" % [c.get("op", ">="), c.get("value", "")]
+		"timer": return "timer %s %s %s s" % [c.get("timer", "1"), c.get("op", "<="), c.get("seconds", 0)]
 		"started_by": return "started by %s" % c.get("by", "action_button")
 		"formula": return "formula %s" % str(c.get("text", "")).strip_edges()
 		"can_pass": return "%s can pass %s x%s" % [c.get("target", "player"), c.get("facing", "down"), c.get("distance", 1)]

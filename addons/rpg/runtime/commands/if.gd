@@ -45,6 +45,7 @@ static func describe_condition(c: Variant) -> String:
 					return "%s's %s %s %s%s" % [who, "HP" if c.get("check") == "hp" else "SP", c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 1)), unit]
 			return "%s is %sin the party" % [who, "" if c.get("value", true) else "not "]
 		"gold": return "Gold %s %s" % [c.get("op", ">="), RPGCommand.describe_operand(c.get("value", 0))]
+		"timer": return "Timer %s %s %s s" % [c.get("timer", "1"), c.get("op", "<="), RPGCommand.describe_operand(c.get("seconds", 0))]
 		"vehicle":
 			var v := str(c.get("id", c.get("vehicle", "")))
 			return "Player is on foot" if v in ["", "none"] else "Player is riding the %s" % v

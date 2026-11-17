@@ -243,6 +243,7 @@ static func _condition_schema() -> Dictionary:
 		{"properties": {"kind": {"const": "formula"}, "text": {"type": "string", "maxLength": 2000}}, "required": ["kind", "text"]},
 		{"properties": {"kind": {"const": "can_pass"}, "target": {"type": "string"}, "facing": {"enum": ["down", "left", "right", "up"]}, "distance": {"type": "integer", "minimum": 1, "maximum": 20}}, "required": ["kind", "facing"]},
 		{"properties": {"kind": {"const": "gold"}, "op": op, "value": {"$ref": "#/$defs/operand"}}, "required": ["kind"]},
+		{"properties": {"kind": {"const": "timer"}, "timer": {"enum": ["1", "2"]}, "op": op, "seconds": {"$ref": "#/$defs/operand"}}, "required": ["kind"]},
 		{"properties": {"kind": {"const": "vehicle"}, "id": {"enum": ["none", "boat", "ship", "airship"]}}, "required": ["kind", "id"]},
 		{"properties": {"kind": {"enum": ["all", "any"]}, "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}}}, "required": ["kind", "conditions"]},
 		{"properties": {"kind": {"const": "not"}, "condition": {"$ref": "#/$defs/condition"}}, "required": ["kind", "condition"]},

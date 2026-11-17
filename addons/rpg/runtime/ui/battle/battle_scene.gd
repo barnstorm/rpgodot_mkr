@@ -186,6 +186,14 @@ func _build() -> void:
 	target_arrow.z_index = 6
 	add_child(target_arrow)
 	add_child(popups)
+	# The timers' readout (the map copy steps aside while the battle screen is up).
+	if rpg != null and rpg.state != null:
+		var timer_display := RPGTimerDisplay.new()
+		timer_display.name = "TimerDisplay"
+		timer_display.state = rpg.state
+		timer_display.service = rpg
+		timer_display.z_index = 10
+		add_child(timer_display)
 
 
 func capabilities() -> Array:

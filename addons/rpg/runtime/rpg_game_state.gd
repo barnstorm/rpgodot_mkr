@@ -52,6 +52,10 @@ var riding := ""
 ## Change Menu Access / Change Save Access / Change Encounter.
 var access: Dictionary = {"menu": true, "save": true, "encounters": true}
 var play_time := 0.0
+## Countdown timers 1 and 2 (RPG Maker 2003): "1"/"2" -> {seconds, running, visible, position,
+## battle}. `battle` says what a timer does while a battle runs: "pause" (hold), "count" or
+## "abort" (the battle ends, no rewards, when it reaches 0).
+var timers: Dictionary = {}
 var steps := 0
 ## Steps the party walked on foot outside events (RPG Maker's party steps): map turns and
 ## RPG Maker 2000-style "every N steps" state changes count these (RPGPlayer.party_walk).
@@ -131,6 +135,7 @@ func new_game() -> void:
 	party.clear()
 	actors.clear()
 	play_time = 0.0
+	timers.clear()
 	steps = 0
 	walk_steps = 0
 	last_used.clear()
@@ -729,6 +734,11 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 					return false
 				return compare(scur, sop, srhs)
 			return compare(float(scur), cond.get("op", "=="), float(srhs))
+		"timer":
+			# RPG Maker 2003's timer condition: the whole seconds a timer has left versus a value
+			# ("or less" is <=, "or more" is >=).
+			var tid := str(cond.get("timer", cond.get("id", "1")))
+			return compare(float(timer_seconds(tid)), cond.get("op", "<="), float(resolve_operand(cond.get("seconds", cond.get("value", 0)), ctx)))
 		"item":
 			var k: String = cond.get("item_kind", "items")
 			return item_count(cond.get("id", ""), k) >= int(cond.get("count", 1)) or (int(cond.get("count", 1)) <= 1 and has_item(cond.get("id", ""), k, true))
@@ -890,6 +900,69 @@ func check_all(conds: Array, map_id := "", event_id := "") -> bool:
 	return true
 
 
+# --- timers ---------------------------------------------------------------------------------
+
+## Where a visible timer is drawn (RPG Maker 2003 keeps timer 2 top left and timer 1 top right).
+const TIMER_POSITIONS := ["top_right", "top_left", "bottom_left", "bottom_right"]
+## What a timer does while a battle runs: hold, keep counting, or end the battle at 0.
+const TIMER_BATTLE_MODES := ["pause", "count", "abort"]
+
+
+## The dictionary of timer `id` ("1" or "2"; anything else reads timer 1), creating the default.
+func timer(id) -> Dictionary:
+	var key := "1" if str(id) != "2" else "2"
+	if not timers.has(key):
+		timers[key] = {"seconds": 0.0, "running": false, "visible": false,
+			"position": "top_right" if key == "1" else "top_left", "battle": "pause"}
+	return timers[key]
+
+
+## Whole seconds a timer has left (0 once it has run out; never negative).
+func timer_seconds(id) -> int:
+	return maxi(0, ceili(float(timer(id).get("seconds", 0.0))))
+
+
+## Control Timer's Set: stores the time and the display options. A running timer keeps running.
+func set_timer(id, seconds: float, visible := true, position := "top_right", battle := "pause") -> void:
+	var t := timer(id)
+	t.seconds = maxf(0.0, seconds)
+	t.visible = visible
+	t.position = position if TIMER_POSITIONS.has(position) else "top_right"
+	t.battle = battle if TIMER_BATTLE_MODES.has(battle) else "pause"
+	changed.emit()
+
+
+## Control Timer's Start: begins (or resumes) counting down. A timer at 0 does not start.
+func start_timer(id) -> void:
+	var t := timer(id)
+	t.running = float(t.get("seconds", 0.0)) > 0.0
+	changed.emit()
+
+
+## Control Timer's Stop: holds the timer where it is (Set is what clears or re-arms it).
+func stop_timer(id) -> void:
+	timer(id).running = false
+	changed.emit()
+
+
+## Counts the running timers down and returns the ids that just reached 0 (those stop). In a
+## battle a "pause" timer holds, "count" and "abort" keep going (rpg_game calls this every frame
+## and ends the battle for an "abort" timer that ran out).
+func tick_timers(delta: float, in_battle := false) -> Array[String]:
+	var done: Array[String] = []
+	for id in ["1", "2"]:
+		var t: Dictionary = timer(id)
+		if not bool(t.get("running", false)):
+			continue
+		if in_battle and str(t.get("battle", "pause")) == "pause":
+			continue
+		t.seconds = maxf(0.0, float(t.get("seconds", 0.0)) - maxf(0.0, delta))
+		if float(t.seconds) <= 0.0:
+			t.running = false
+			done.append(id)
+	return done
+
+
 # --- persistence --------------------------------------------------------------------------
 
 func to_dict() -> Dictionary:
@@ -913,6 +986,7 @@ func to_dict() -> Dictionary:
 		"riding": riding,
 		"access": access.duplicate(),
 		"play_time": play_time,
+		"timers": timers.duplicate(true),
 		"steps": steps,
 		"walk_steps": walk_steps,
 		"player_transparent": player_transparent,
@@ -960,6 +1034,10 @@ func from_dict(d: Dictionary, battler_script: Script = null) -> void:
 		for k in d.access:
 			access[k] = bool(d.access[k])
 	play_time = float(d.get("play_time", 0.0))
+	# Saves from before timers existed start with both at their defaults.
+	timers = d.get("timers", {}).duplicate(true) if d.get("timers") is Dictionary else {}
+	timer("1")
+	timer("2")
 	steps = int(d.get("steps", 0))
 	walk_steps = int(d.get("walk_steps", 0))
 	player_transparent = bool(d.get("player_transparent", false))
