@@ -7,6 +7,8 @@ extends RPGCommand
 static func descriptor() -> Dictionary:
 	return {
 		"type": "loop", "schema_version": 1, "category": "flow", "label": "Loop",
+		# "repeats": a Jump to Label into the loop goes round again after the part it landed in.
+		"repeats": true,
 		"fields": [{"key": "commands", "kind": "commands", "label": "Repeat", "default": []}],
 	}
 

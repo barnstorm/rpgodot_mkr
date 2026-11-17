@@ -104,12 +104,16 @@ func run(commands: Array) -> RPGResult:
 
 ## Runs a nested list inside this interpreter (used by if/loop/choices and call_common_event).
 ## Blocks (branches, loops, choices) nest freely: only calls count toward the depth limit.
-func run_list(list: Array, label := "") -> RPGResult:
+## `enter_label` starts the list at that label instead of its top (a Jump to Label landing in
+## this list, or in a block inside it).
+func run_list(list: Array, label := "", enter_label := "") -> RPGResult:
 	var frame := {"label": label, "list": list, "index": 0}
 	stack.append(frame)
 	var result := RPGResult.ok()
 	var i := 0
-	while i < list.size():
+	# A Jump to Label that still has to find its label from this list: the label's name.
+	var jump_to := enter_label
+	while i < list.size() or jump_to != "":
 		if token.is_cancelled:
 			result = RPGResult.cancelled(token.reason)
 			break
@@ -119,16 +123,37 @@ func run_list(list: Array, label := "") -> RPGResult:
 		if token.is_cancelled:
 			result = RPGResult.cancelled(token.reason)
 			break
-		frame.index = i
-		var cmd_data: Variant = list[i]
-		i += 1
-		if not (cmd_data is Dictionary):
-			result = _fail("Command %d is not an object." % i)
-			break
-		if cmd_data.get("skip", false):
-			continue
-		current_command = cmd_data
-		var r: RPGResult = await execute(cmd_data)
+		var r: RPGResult = null
+		if jump_to != "":
+			# Jump to Label, nearest first: the label in this list, then one inside a block of
+			# this list (the jump enters the block, issue #159), else the jump passes outwards
+			# (out of branches and loops) to the list around this one.
+			var target := jump_to
+			jump_to = ""
+			var at := find_label(list, target)
+			if at >= 0:
+				i = at + 1
+				continue
+			var holder := find_label_block(list, target)
+			if holder < 0:
+				result = RPGResult.ok()
+				result.flow = "jump:" + target
+				break
+			frame.index = holder
+			i = holder + 1
+			current_command = list[holder]
+			r = await _enter_block(list[holder], target)
+		else:
+			frame.index = i
+			var cmd_data: Variant = list[i]
+			i += 1
+			if not (cmd_data is Dictionary):
+				result = _fail("Command %d is not an object." % i)
+				break
+			if cmd_data.get("skip", false):
+				continue
+			current_command = cmd_data
+			r = await execute(cmd_data)
 		if r == null:
 			r = RPGResult.ok()
 		if r.is_error():
@@ -140,14 +165,17 @@ func run_list(list: Array, label := "") -> RPGResult:
 			result = r
 			break
 		if r.flow.begins_with("jump:"):
-			# Jump to Label: continue after the label if it is in this list, else pass it outwards
-			# (out of branches and loops) until a list that has it.
-			var at := find_label(list, r.flow.substr(5))
-			if at >= 0:
-				i = at + 1
+			# The usual case, a label in this very list, is placed at once; anything else is
+			# looked for at the top of the next pass.
+			var at_here := find_label(list, r.flow.substr(5))
+			if at_here >= 0:
+				i = at_here + 1
 				continue
-			result = r
-			break
+			jump_to = r.flow.substr(5)
+			if jump_to == "":
+				result = r
+				break
+			continue
 		if r.flow != "":
 			result = r
 			break
@@ -162,6 +190,74 @@ static func find_label(list: Array, label_name: String) -> int:
 		if c is Dictionary and str(c.get("type", "")) == "label" and str(c.get("name", "")) == label_name and not c.get("skip", false):
 			return j
 	return -1
+
+
+## Index of the first command in `list` with the label somewhere inside its blocks (a branch, a
+## loop body, a choice, at any depth), or -1. A line that is switched off hides its blocks.
+func find_label_block(list: Array, label_name: String) -> int:
+	for j in list.size():
+		var c: Variant = list[j]
+		if c is Dictionary and not c.get("skip", false) and not _label_list(c, label_name).is_empty():
+			return j
+	return -1
+
+
+## The command lists directly inside one command, as [{label, list}]: its descriptor's fields
+## of kind "commands", also those inside its "list" and "object" fields (Show Choices keeps a
+## list per choice). Lists a command runs from elsewhere (a called common event) are not its own.
+func nested_lists(cmd_data: Dictionary) -> Array:
+	var out := []
+	var cmd: RPGCommand = rpg.registry.get_command(str(cmd_data.get("type", ""))) if rpg != null and rpg.registry != null else null
+	if cmd != null:
+		_collect_lists(cmd.desc.get("fields", []), cmd_data, "", out)
+	return out
+
+
+static func _collect_lists(fields: Array, holder: Dictionary, prefix: String, out: Array) -> void:
+	for f in fields:
+		var k := str(f.get("key", ""))
+		var v: Variant = holder.get(k)
+		match str(f.get("kind", "")):
+			"commands":
+				if v is Array:
+					out.append({"label": prefix + k, "list": v})
+			"list":
+				if v is Array:
+					for j in v.size():
+						if v[j] is Dictionary:
+							_collect_lists(f.get("item_fields", []), v[j], "%s%s %d " % [prefix, k, j], out)
+			"object":
+				if v is Dictionary:
+					_collect_lists(f.get("fields", []), v, prefix + k + " ", out)
+
+
+## The list directly inside `cmd_data` that holds the label, itself or in a block of its own:
+## {label, list}, or {} when the command's blocks do not have it.
+func _label_list(cmd_data: Dictionary, label_name: String) -> Dictionary:
+	for nl in nested_lists(cmd_data):
+		if find_label(nl.list, label_name) >= 0 or find_label_block(nl.list, label_name) >= 0:
+			return nl
+	return {}
+
+
+## Jump to Label into a block: runs the block's list that holds the label from the label on,
+## then goes on as the block's command does after its list. A branch or a choice just ends; a
+## command whose descriptor says "repeats" (Loop) goes round again from the top until Break Loop.
+func _enter_block(cmd_data: Dictionary, label_name: String) -> RPGResult:
+	var inner := _label_list(cmd_data, label_name)
+	if inner.is_empty():
+		return _fail("Jump to Label: there is no label '%s' in this event." % label_name)
+	var r: RPGResult = await run_list(inner.list, str(inner.label), label_name)
+	var cmd: RPGCommand = rpg.registry.get_command(str(cmd_data.get("type", "")))
+	if cmd == null or not bool(cmd.desc.get("repeats", false)):
+		return r
+	if r.is_error() or r.is_cancelled():
+		return r
+	if r.flow == "break":
+		return RPGResult.ok()
+	if r.flow != "":
+		return r
+	return await execute(cmd_data)
 
 
 ## Entering a called common event or event page (Call Common Event / Call Event). Returns "" when

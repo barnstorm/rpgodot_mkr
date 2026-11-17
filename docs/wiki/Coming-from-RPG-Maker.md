@@ -40,7 +40,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
 | Change Encounter, Change Menu Access, Change Save Access | Change Encounter, Change Menu / Save Access |
-| Label, Jump to Label | The same (*flow* category) |
+| Label, Jump to Label | The same (*flow* category). A jump reaches a label anywhere in the event, inside a Conditional Branch, a Loop or a choice too; with several labels of one name the nearest wins (RPG Maker takes the first from the top) |
 | Call Event (RM2000/2003) | **Call Event** runs a map event's page inline — this event, by ID, or the ID from a variable; the page's self switches belong to the called event. The common-event tab is **Call Common Event** |
 | Common events on game moments (plugins: Yanfly Utility Common Events, Galv's Auto Common Events, Hime's Level Up Events, run-on-map-load) | Built in: a common event's Trigger can be an **engine moment** — new game, load, map enter/leave, every N steps, region/terrain enter, level up, state added/removed, knockout, battle start/end, game over, menu, party change, vehicles — narrowed by filters (only map, actor, state, region, outcome, vehicle), with the moment's data as Game Data `hook.*` ([Lesson 5](Lesson-5-Cutscenes-and-Common-Events.md)) |
 | Show Animation, Change Actor Graphic, Change Name / Nickname, Change Level / EXP / Skills / Equipment / Class | The same commands |
