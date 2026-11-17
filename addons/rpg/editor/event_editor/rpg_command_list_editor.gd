@@ -396,7 +396,7 @@ func _on_picked(type: String) -> void:
 	var cmd: RPGCommand = registry.get_command(type)
 	if cmd == null:
 		return
-	var c := cmd.with_defaults({"type": type})
+	var c := cmd.new_args()
 	var target := _pending_insert if not _pending_insert.is_empty() else _insert_target()
 	var editable: bool = cmd.desc.get("fields", []).any(func(f): return f.get("kind", "") != "commands")
 	if not editable:

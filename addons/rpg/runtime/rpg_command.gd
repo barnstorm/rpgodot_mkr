@@ -40,6 +40,19 @@ func with_defaults(args: Dictionary) -> Dictionary:
 	return RPGCommand.apply_defaults(desc, args)
 
 
+## The fields of a command the editor has just inserted: the descriptor defaults, except where
+## a field names another starting value for new commands ("new_default"). "default" stays what a
+## missing field means, so stored commands keep their behaviour when only the starting value
+## of new ones should change (Show Choices' "When cancelled", issue #157).
+func new_args() -> Dictionary:
+	var out := {"type": str(desc.get("type", ""))}
+	for f in desc.get("fields", []):
+		var k: String = f.get("key", "")
+		if k != "" and f.has("new_default"):
+			out[k] = RPGJson.deep_copy(f.new_default)
+	return with_defaults(out)
+
+
 static func apply_defaults(d: Dictionary, args: Dictionary) -> Dictionary:
 	var out := args.duplicate()
 	for f in d.get("fields", []):

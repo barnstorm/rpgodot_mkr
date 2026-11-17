@@ -68,7 +68,7 @@ Double-click an empty grass tile. The event editor opens:
 ## 4. Ask a question
 
 1. Open the villager again. Double-click the **◆** under the Show Text line and choose **Show Choices**.
-2. The choices are *Yes* and *No* to begin with. Change them to `Yes` and `Not really`. Set *When cancelled* to *Last choice*, so pressing X answers "Not really".
+2. The choices are *Yes* and *No* to begin with. Change them to `Yes` and `Not really`. *When cancelled* is already *Last choice*, as in RPG Maker, so pressing X answers "Not really". It can also be *Disallow*, *A choice* (any one of the list, counted from 0) or *Branch* (commands of its own).
 3. Press **OK**. The list now has a branch for each choice, each with its own **◆** line:
 
    ```

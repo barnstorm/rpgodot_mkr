@@ -12,7 +12,7 @@ There are 94 built-in commands. The *ID* is the command's `type` in the event JS
 | **Key Input Processing** | `key_input` | Store in, Wait until pressed, Accepted keys, Store time in, Extra actions |
 | **Select Item** | `select_item` | Store in, Which items |
 | **Show Balloon Icon** | `show_balloon` | Character, Balloon, Wait until done |
-| **Show Choices** | `show_choices` | Choices, Cursor starts on, When cancelled, On cancel |
+| **Show Choices** | `show_choices` | Choices (one with an empty label is not shown), Cursor starts on, When cancelled (*Disallow*, *A choice* with its number, *Last choice* or *Branch*; a new command starts on *Last choice*), On cancel |
 | **Show Scrolling Text** | `show_scrolling_text` | Text, Speed, No fast forward |
 | **Show Text** | `show_text` | Face, Speaker name, Text, Position, Background, Show gold window |
 
