@@ -29,6 +29,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Switch/Variable 0001 | Named switches and variables, e.g. `talked_to_king` |
 | `\V[1]`, `\N[1]` | `\V[talked_count]`, `\N[hero]` (an ID instead of a number) |
 | `\I[n]` (VX/MV message icon), the Icon field of items, skills and states | The same: `\I[64]` and the **Icon** field (a grid of the icon sheet, searchable by name). The starter icons are the kit's own (CC0), so their numbers differ from RPG Maker's IconSet |
+| Show Choices: *When Cancel* (Disallow, Choice 1-4, Branch); blank choices are not shown | **Show Choices**: *When cancelled* is *Disallow*, *A choice* (its number, counted from 0), *Last choice* (the default of a new command, as RPG Maker's Choice 2 of Yes / No) or *Branch*. A choice with an empty label is not shown. Cancel never takes a hidden or greyed-out choice |
 | Control Switches / Variables / Self Switch | Control Switch / Variable / Self Switch |
 | Event priority: a new page is *Below Characters*; choosing a character graphic makes it *Same As Characters* | The same. An empty page (the tutorials' "make the event disappear") is walked through. Pages saved by older versions of the kit keep the priority they were saved with |
 | Self Switch condition (the event's own A-D) | Leave the condition's *Event* and *Map* blank (or type `this`) for the event the page belongs to; name another event or map to read theirs |

@@ -2,8 +2,11 @@
 extends RPGCommand
 ## Show Choices. Each choice may be hidden while a switch is OFF ("show_switch") and greyed out
 ## while another is OFF ("enable_switch"); in JSON also by any condition ("show_if",
-## "enable_if"). Choices without them always show, as before. Branches belong to the choices
-## as listed; "When cancelled: last choice" takes the last choice that is shown.
+## "enable_if"). Choices without them always show, as before. A choice with an empty label is
+## not shown, as in RPG Maker. Branches belong to the choices as listed; "When cancelled" is
+## Disallow, one choice of the list ("choice" + "cancel_choice", 0 = the first), the last choice
+## that is shown, or a branch of its own. Cancel never takes a choice that is hidden or greyed
+## out: it does nothing then, as with Disallow.
 
 
 static func descriptor() -> Dictionary:
@@ -15,7 +18,10 @@ static func descriptor() -> Dictionary:
 					{"key": "show_switch", "kind": "ref", "ref": "switch", "default": "", "label": "Shown only while switch is ON", "help": "Empty: always shown."},
 					{"key": "enable_switch", "kind": "ref", "ref": "switch", "default": "", "label": "Can be picked only while switch is ON", "help": "Empty: always enabled. Otherwise the choice is greyed out and buzzes."}]},
 			{"key": "default", "kind": "int", "default": 0, "min": 0, "max": 9, "label": "Cursor starts on"},
-			{"key": "cancel", "kind": "choice", "options": ["disallow", "last_choice", "branch"], "default": "disallow", "label": "When cancelled"},
+			# A missing "cancel" still means disallow (stored commands keep their behaviour); a
+			# command inserted in the editor starts on the last choice, RPG Maker's default.
+			{"key": "cancel", "kind": "choice", "options": ["disallow", "choice", "last_choice", "branch"], "option_labels": ["Disallow", "A choice", "Last choice", "Branch"], "default": "disallow", "new_default": "last_choice", "label": "When cancelled"},
+			{"key": "cancel_choice", "kind": "int", "default": 0, "min": 0, "max": 9, "label": "Cancel picks choice (0 = first)", "show_if": {"key": "cancel", "equals": "choice"}},
 			{"key": "cancel_then", "kind": "commands", "default": [], "label": "On cancel", "show_if": {"key": "cancel", "equals": "branch"}},
 		],
 	}
@@ -62,6 +68,9 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var disabled := []
 	for i in choices.size():
 		var c: Variant = choices[i]
+		# RPG Maker does not show a choice whose text is empty.
+		if (str(c.get("label", "")) if c is Dictionary else str(c)) == "":
+			continue
 		if not choice_allowed(ctx, c, "show"):
 			continue
 		if not choice_allowed(ctx, c, "enable"):
@@ -74,8 +83,12 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	var cancel_index := -1
 	if cancel == "last_choice":
 		cancel_index = shown.size() - 1
+	elif cancel == "choice":
+		cancel_index = shown.find(int(args.get("cancel_choice", 0)))
 	elif cancel == "branch":
 		cancel_index = shown.size()
+	if disabled.has(cancel_index):
+		cancel_index = -1
 	var default_pos := maxi(shown.find(int(args.get("default", 0))), 0)
 	var box: Control = ctx.ui.message_box
 	var params := {"default": default_pos, "cancel_index": cancel_index}

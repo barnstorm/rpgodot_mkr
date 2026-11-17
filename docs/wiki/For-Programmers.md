@@ -55,7 +55,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	return RPGResult.ok()
 ```
 
-**Field kinds**: `int`, `float`, `bool`, `text`, `multiline`, `choice` (`options`), `ref` (a switch, variable, item, weapon, armor, actor, skill, state, enemy, troop, map, event, common_event or class), `resource` (a charset, faceset, picture, music, sound, scene, battleback or tile), `location`, `facing`, `sound`, `condition`, `operand`, `list`, `object`, `commands` (a nested command list), `route`. Any field can have `show_if`, `default`, `min`, `max`, `required`, `label` and `help`.
+**Field kinds**: `int`, `float`, `bool`, `text`, `multiline`, `choice` (`options`), `ref` (a switch, variable, item, weapon, armor, actor, skill, state, enemy, troop, map, event, common_event or class), `resource` (a charset, faceset, picture, music, sound, scene, battleback or tile), `location`, `facing`, `sound`, `condition`, `operand`, `list`, `object`, `commands` (a nested command list), `route`. Any field can have `show_if`, `default`, `min`, `max`, `required`, `label` and `help`. `default` is also what a missing field means when the command runs; `new_default` gives a different starting value to commands inserted in the editor, without changing what stored commands do.
 
 **When things go wrong:**
 
