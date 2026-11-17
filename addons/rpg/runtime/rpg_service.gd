@@ -760,6 +760,16 @@ const KEY_MAP := {
 	"rpg_debug": [KEY_F9],
 	"rpg_through": [KEY_CTRL],
 	"rpg_overlay": [KEY_F7],
+	# The Key Input Processing command's digits and operators (#14): the number row and, for
+	# the operators, the numpad too. Rebindable like every rpg_* action.
+	"rpg_num0": [KEY_0], "rpg_num1": [KEY_1], "rpg_num2": [KEY_2], "rpg_num3": [KEY_3],
+	"rpg_num4": [KEY_4], "rpg_num5": [KEY_5], "rpg_num6": [KEY_6], "rpg_num7": [KEY_7],
+	"rpg_num8": [KEY_8], "rpg_num9": [KEY_9],
+	"rpg_add": [KEY_PLUS, KEY_EQUAL, KEY_KP_ADD],
+	"rpg_subtract": [KEY_MINUS, KEY_KP_SUBTRACT],
+	"rpg_multiply": [KEY_ASTERISK, KEY_KP_MULTIPLY],
+	"rpg_divide": [KEY_SLASH, KEY_KP_DIVIDE],
+	"rpg_decimal": [KEY_PERIOD, KEY_KP_PERIOD],
 }
 ## Gamepad buttons per action (MV: A ok, B cancel, X dash, Y menu; Start opens the menu too,
 ## Back cancels).

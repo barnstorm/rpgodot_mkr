@@ -82,7 +82,7 @@ const FIX_HINT := {
 	"common_event": "Create the common event in Database > Common events, or pick another one.",
 }
 ## Command fields that write the referenced switch/variable (everything else reads).
-const SETTER_FIELDS := {"set_switch": ["id", "from", "to"], "set_variable": ["id", "from", "to"], "input_number": ["variable"], "select_item": ["variable"]}
+const SETTER_FIELDS := {"set_switch": ["id", "from", "to"], "set_variable": ["id", "from", "to"], "input_number": ["variable"], "select_item": ["variable"], "key_input": ["variable", "time_variable"]}
 const SETTER_KEYS := ["result", "roll_into"]
 ## Commands whose free-form strings may mention IDs (renames warn instead of rewriting).
 const SCRIPT_COMMANDS := ["call_method", "emit_signal", "run_scene"]
