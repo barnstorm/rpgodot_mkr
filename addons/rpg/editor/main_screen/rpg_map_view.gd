@@ -815,16 +815,12 @@ func reload_events() -> void:
 	overlay.queue_redraw()
 
 
+## A new event's first page: RPGQuickEvents.new_page() (below characters) with RPG Maker's
+## default movement speed and frequency.
 static func default_page() -> Dictionary:
-	return {
-		"conditions": [],
-		"graphic": null,
-		"movement": {"type": "fixed", "speed": 3, "frequency": 3},
-		"options": {"walk_anim": true, "step_anim": false, "direction_fix": false, "through": false, "forbid_overlap": false},
-		"priority": "same",
-		"trigger": "action_button",
-		"commands": [],
-	}
+	var page := RPGQuickEvents.new_page()
+	page["movement"] = {"type": "fixed", "speed": 3, "frequency": 3}
+	return page
 
 
 func new_event_at(c: Vector2i) -> String:
