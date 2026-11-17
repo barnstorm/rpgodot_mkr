@@ -234,6 +234,7 @@ func test_gain_tp_effect() -> void:
 	assert_eq(eric.get_resource("tp"), 100, "capped at the maximum")
 	var dead := rules.new_actor_battler("eric")
 	dead.set_resource("hp", 0)
+	rules.add_state(dead, rules.death_state())
 	rules.use_item(eric, dead, "tonic")
 	assert_eq(dead.get_resource("tp"), 0, "the dead gain nothing")
 
