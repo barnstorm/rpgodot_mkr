@@ -1697,6 +1697,11 @@ static func database_values(files: Dictionary) -> Array:
 						out.append(problem("error", path, rec, "auto_removal", base + "/auto_removal",
 							"State '%s' wears off at '%s', which is not one of: turn_end, action_end, none." % [rec, timing],
 							"Pick when the turns count down: end of the turn, end of the battler's action, or never."))
+					var restriction := str(r.get("restriction", "none"))
+					if not ["none", "attack_enemy", "attack_anyone", "attack_ally", "cannot_use_skills", "cannot_act"].has(restriction):
+						out.append(problem("error", path, rec, "restriction", base + "/restriction",
+							"State '%s' has the restriction '%s', which is not one of: none, attack_enemy, attack_anyone, attack_ally, cannot_use_skills, cannot_act." % [rec, restriction],
+							"Pick a restriction from the list: attack at random (enemies, anyone or allies), cannot use skills, or cannot act."))
 					_state_walk_problems(r, path, rec, base, out)
 				"animations":
 					var flashes: Variant = r.get("flashes", [])

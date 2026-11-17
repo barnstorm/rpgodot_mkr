@@ -15,7 +15,7 @@ const SCOPE_LABELS := ["None", "One enemy", "All enemies", "N random enemies", "
 const OCCASIONS := ["always", "battle", "menu", "never"]
 const DAMAGE_TYPES := ["none", "damage", "recover", "drain"]
 const HIT_TYPES := ["certain", "physical", "magical"]
-const RESTRICTIONS := ["none", "cannot_act", "attack_enemy", "attack_anyone", "attack_ally"]
+const RESTRICTIONS := ["none", "attack_enemy", "attack_anyone", "attack_ally", "cannot_use_skills", "cannot_act"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 ## Effect kinds (RPGRuleSystem.apply_action) and their labels.
 const EFFECT_KINDS := ["recover", "damage", "add_state", "remove_state", "grow", "learn_skill", "gain_tp", "escape", "common_event"]
@@ -176,7 +176,10 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 		"states":
 			f = [
 				_t("name", "Name"), _icon_field(), _i("priority", "Priority", 50, 0, 100),
-				_c("restriction", "Restriction", RESTRICTIONS, "none"),
+				_c("restriction", "Restriction", RESTRICTIONS, "none").merged({
+					"option_labels": ["None", "Attack enemies randomly (berserk)", "Attack anyone randomly (confusion)",
+						"Attack allies randomly (charm)", "Cannot use skills (silence)", "Cannot act (sleep, paralysis)"],
+					"help": "What the state makes the battler do. Attack at random: the battler acts on its own, attacking a random foe (berserk), a random battler from either side (confusion) or a random ally, never itself (charm). Cannot use skills: attacks and items only. Cannot act: the battler loses its turns. The most limiting state a battler carries wins."}),
 				_b("remove_at_battle_end", "Remove at battle end", false),
 				# "duration" is not stored: it shows whether the state has turns_min/turns_max
 				# (RPGRecordTab: "virtual" fields; hidden "drop_hidden" fields are removed).

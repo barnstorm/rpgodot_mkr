@@ -40,6 +40,20 @@
 			"traits": [{"kind": "stat_rate", "id": "agi", "value": 50}],
 			"turns_max": 4,
 			"turns_min": 2
+		},
+		{
+			"id": "confusion",
+			"name": "Confusion",
+			"notes": "",
+			"custom": {},
+			"icon": 178,
+			"messages": {"added": "%1 is confused!", "removed": "%1 is no longer confused."},
+			"priority": 50,
+			"remove_at_battle_end": true,
+			"remove_on_damage": 100,
+			"restriction": "attack_anyone",
+			"turns_max": 4,
+			"turns_min": 2
 		}
 	]
 }

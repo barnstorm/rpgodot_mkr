@@ -275,7 +275,8 @@ func inputs_needed() -> Array:
 		return out
 	for i in party.size():
 		var b: RPGBattler = party[i]
-		if b.is_active() and rules.can_act(b) and not _forced_next.has(b) and not _auto_battle(b):
+		if b.is_active() and rules.can_act(b) and not _forced_next.has(b) and not _auto_battle(b) \
+				and not _confused(b):
 			out.append(i)
 	return out
 
@@ -447,7 +448,8 @@ func _build_queue() -> void:
 				a.action = _forced_next[a]
 				_forced_next.erase(a)
 			elif a.is_active() and rules.can_act(a) and a.action.is_empty():
-				a.action = _auto_battle_action(a) if _auto_battle(a) else {"kind": "attack", "target": -1}
+				a.action = _confused_action(a) if _confused(a) \
+					else (_auto_battle_action(a) if _auto_battle(a) else {"kind": "attack", "target": -1})
 	var entries := []
 	var order := 0
 	for b in all_battlers():
@@ -478,6 +480,11 @@ func _execute(b: RPGBattler, given_targets: Variant = null) -> Dictionary:
 	var kind := str(action.get("kind", "wait"))
 	var res := {"user": b, "action": action, "kind": kind, "name": "", "targets": [], "effects": [],
 		"lines": [], "text": "", "escaped": false, "battle_over": ""}
+	# Acting under an attack-at-random state: the log says which state drove the battler
+	# before its attack is reported.
+	var rstate := str(action.get("restriction_state", ""))
+	if rstate != "":
+		res.lines.append(rules.term("acts_under_state", [b.name, rules.state_name(rstate)]))
 	if not USABLE_KINDS.has(kind) and hooks != null:
 		# Guard, escape and wait have no targets to resolve: the hook runs here.
 		var h := _action_hook(b, action, [b] if kind == "guard" else [])
@@ -677,7 +684,11 @@ func _execute_usable(b: RPGBattler, action: Dictionary, res: Dictionary, hooked 
 	# Resolved once (random scopes draw from the RNG), before the message that names them. The
 	# cost is paid after the action_chosen hook (paying draws nothing, so the order is unchanged).
 	var targets: Array = []
-	if given_targets is Array:
+	var baked: Variant = action.get("target_battler", null)
+	if baked is RPGBattler and (baked as RPGBattler).is_active():
+		# A confused battler's pick (attack at random): the target was chosen with the action.
+		targets = [baked]
+	elif given_targets is Array:
 		targets = (given_targets as Array).filter(func(t): return t is RPGBattler)
 	else:
 		targets = resolve_targets(b, u, int(action.get("target", -1)))
@@ -832,6 +843,35 @@ func _counter_or_reflect(user: RPGBattler, target: RPGBattler, action: Dictionar
 ## action is chosen when its turn comes up.
 func _auto_battle(b: RPGBattler) -> bool:
 	return b != null and b.is_actor() and rules != null and rules.has_trait(b, "auto_battle")
+
+
+## Whether `b` is under an attack-at-random restriction (2000/2003's confusion, berserk and
+## charm): it needs no command and attacks what the state says.
+func _confused(b: RPGBattler) -> bool:
+	return b != null and rules != null and rules.is_confused(b)
+
+
+## The action a battler takes under an attack-at-random restriction (MV's confusionTarget):
+## a normal attack on a random foe (berserk), a random battler from either side (confusion)
+## or a random ally, never itself (charm). The pick rides on the action as its baked target;
+## nothing to attack means the battler waits its turn out.
+func _confused_action(b: RPGBattler) -> Dictionary:
+	var kind := rules.restriction(b)
+	var side: Array = party if b.is_actor() else enemies
+	var foes: Array = enemies if b.is_actor() else party
+	var pool: Array = []
+	match kind:
+		"attack_enemy":
+			pool = _pick_foe(foes.filter(func(f): return f.is_active()))
+		"attack_anyone":
+			pool = (side + foes).filter(func(m): return m.is_active())
+		"attack_ally":
+			pool = side.filter(func(m): return m != b and m.is_active())
+	if pool.is_empty():
+		return {"kind": "wait"}
+	var t: RPGBattler = pool[0] if pool.size() == 1 else rng.pick(pool)
+	return {"kind": "attack", "target_battler": t,
+		"restriction_state": rules.restriction_state(b, kind)}
 
 
 ## MV's Auto Battle pick, used when an actor with the flag takes its turn: a usable recovery
@@ -1139,7 +1179,7 @@ func atb_advance_to_next() -> void:
 ## True when actor `b` has a full gauge and waits for the player's command.
 func needs_input(b: RPGBattler) -> bool:
 	return b != null and b.is_actor() and ready_queue.has(b) and b.is_active() and rules.can_act(b) \
-		and b.action.is_empty() and not _forced_next.has(b) and not _auto_battle(b)
+		and b.action.is_empty() and not _forced_next.has(b) and not _auto_battle(b) and not _confused(b)
 
 
 ## Full actors waiting for a command, in ready order.
@@ -1208,7 +1248,8 @@ func act(b: RPGBattler) -> Dictionary:
 		elif b.is_enemy():
 			b.action = choose_enemy_action(b)
 		elif b.action.is_empty():
-			b.action = _auto_battle_action(b) if _auto_battle(b) else {"kind": "attack", "target": -1}
+			b.action = _confused_action(b) if _confused(b) \
+				else (_auto_battle_action(b) if _auto_battle(b) else {"kind": "attack", "target": -1})
 		if not _extra.has(b):
 			_extra[b] = 0 if str(b.action.get("kind", "")) == "escape" else maxi(1, rules.action_times(b)) - 1
 		res = _execute(b, given)
@@ -1317,6 +1358,10 @@ func turn_order(n: int) -> Array:
 ## usable actions whose condition holds, those rated within 2 of the best are picked, weighted by
 ## how close they are.
 func choose_enemy_action(e: RPGBattler) -> Dictionary:
+	# An attack-at-random restriction overrides the action table (2000/2003: a confused or
+	# charmed monster attacks whatever the state says).
+	if _confused(e):
+		return _confused_action(e)
 	var rec := rules.battler_record(e)
 	var usable := []
 	var best := -1000000
