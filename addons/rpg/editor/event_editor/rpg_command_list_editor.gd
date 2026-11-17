@@ -117,8 +117,20 @@ func rebuild() -> void:
 
 
 func _restore_scroll(y: float) -> void:
-	if is_instance_valid(_tree) and y > 0.0:
-		_tree.get_v_scroll_bar().value = y
+	if not is_instance_valid(_tree) or y <= 0.0:
+		return
+	var bar := _v_scroll_bar()
+	if bar != null:
+		bar.value = y
+
+
+## The Tree's own vertical scroll bar. Tree reports its scroll offset (get_scroll) but has no
+## setter and no accessor for the bar, as ScrollContainer has: the bar is an internal child.
+func _v_scroll_bar() -> VScrollBar:
+	for c in _tree.get_children(true):
+		if c is VScrollBar:
+			return c
+	return null
 
 
 func _add_list(parent: TreeItem, list: Variant, owner: Variant, key: Variant) -> void:
