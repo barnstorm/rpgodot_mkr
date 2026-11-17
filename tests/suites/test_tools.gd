@@ -104,7 +104,14 @@ func test_rule_migration_preview_classic_to_osr() -> void:
 		fields.append(u.field)
 	assert_true(p.uses.size() > 0, "database values using removed stats are listed")
 	assert_true(RPGRuleMigration.describe(p).contains("Nothing is deleted"))
+	assert_eq(p.base_values, [], "neither system has base values")
 	assert_false(RPGRuleMigration.preview(data, "no_such_rules").ok)
+	# Issue #146: the preview says which base values the new system brings.
+	var ace := RPGRuleMigration.preview(data, "vx_ace")
+	assert_eq(ace.base_values, ["Classes: Hit Rate 95%, Evasion Rate 5%, Critical Rate 4%", "Enemies: Hit Rate 95%, Evasion Rate 5%"])
+	var text := RPGRuleMigration.describe(ace)
+	assert_true(text.contains("Classes: Hit Rate 95%, Evasion Rate 5%, Critical Rate 4%"), text)
+	assert_true(text.contains("base values that their other traits"), text)
 
 
 func test_rule_migration_apply_only_changes_project_rules() -> void:

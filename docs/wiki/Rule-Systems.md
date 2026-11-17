@@ -12,7 +12,8 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 
 ### VX Ace style: what is covered
 
-- Ace's damage formulas, variance and criticals; HIT, EVA and CRI checks.
+- Ace's damage formulas, variance and criticals.
+- HIT, EVA and CRI checks. As in VX Ace a class starts from *Hit Rate 95%*, *Evasion Rate 5%* and *Critical Rate 4%* (an enemy from 95% and 5%), and every other trait adds to that: a shirt with *Evasion Rate +3%* gives 8%, a Blind state with *Hit Rate -60%* leaves 35%. A class or enemy made with **New** lists the three traits so you can edit them; one that lists none uses the same values. A class or enemy that lists one of them itself uses its own value as the base.
 - Class parameter curves (level 1 value, level 99 value, a growth shape) with a graph in the Classes tab.
 - Features (the kit calls them **Traits**): Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Attack State, Attack Speed, Add/Seal Skill Type, Add/Seal Skill, Equip Weapon/Armor Type, Dual Wield, Seal Equip, Action Times+, Special Flags (Auto Battle, Guard, Substitute, Preserve TP), Collapse Effect, HP/MP Regen.
 - Party abilities, a trait any member carries for the whole party: Encounter Half, Encounter None, Cancel Surprise, Raise Preemptive, Gold Double, Drop Item Double.

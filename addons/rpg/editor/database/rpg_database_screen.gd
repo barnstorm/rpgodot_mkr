@@ -382,6 +382,7 @@ func _add_db_tab(t: Array, fields: Array) -> void:
 		cfg["preview"] = func(rec: Dictionary) -> Control: return Preview.actor(data, rec)
 	elif type == "enemies":
 		cfg["preview"] = func(rec: Dictionary) -> Control: return Preview.enemy(data, rec)
+		cfg["new_record"] = func(rec: Dictionary) -> void: _add_default_traits(rec, true)
 	elif type == "animations":
 		cfg["preview"] = func(rec: Dictionary) -> Control: return Preview.animation(data, rec)
 	elif type == "tilesets":
@@ -406,9 +407,23 @@ func _add_db_tab(t: Array, fields: Array) -> void:
 	_add_tab(cfg)
 
 
+## A new class or enemy starts with the rule system's default features as traits (VX Ace: HIT
+## 95%, EVA 5%, and CRI 4% on a class), where the maker can see and edit them.
+func _add_default_traits(rec: Dictionary, enemy: bool) -> void:
+	if rules == null or not rules.has_method("default_traits"):
+		return
+	var own: Variant = rec.get("traits")
+	if own is Array and not own.is_empty():
+		return
+	var defaults: Array = rules.default_traits(enemy)
+	if not defaults.is_empty():
+		rec["traits"] = defaults
+
+
 ## A new class starts with the first class's stat curves and experience curve (or, with no class
 ## yet, the lowest legal value of every stat), never all zeros.
 func _new_class_defaults(rec: Dictionary) -> void:
+	_add_default_traits(rec, false)
 	var first: Dictionary = {}
 	for c in data.records("classes"):
 		if c is Dictionary and c != rec and c.get("growth") is Dictionary and not c.growth.is_empty():

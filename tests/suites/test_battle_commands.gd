@@ -35,7 +35,7 @@ func _rules_env() -> void:
 	db.add("actors", {"id": "bruno", "name": "Bruno", "class": "brawler", "equips": {}})
 	db.add("states", {"id": "knockout", "name": "Knockout"})
 	db.add("states", {"id": "true_aim", "name": "True Aim", "traits": [{"kind": "hit_rate", "value": 100}]})
-	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": 0}]})
+	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": -5}]})
 	db.add("skills", {"id": "stab100", "name": "Stab", "formula": "100", "hit_type": "physical", "variance": 0})
 	db.add("skills", {"id": "bolt100", "name": "Bolt", "formula": "100", "hit_type": "magical", "variance": 0})
 	db.add("skills", {"id": "fire", "name": "Fire", "skill_type": "magic", "formula": "100", "hit_type": "magical",

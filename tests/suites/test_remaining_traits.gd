@@ -38,7 +38,7 @@ func before_each() -> void:
 	# Aim and flat feet make the physical hit checks certain (a.hit 100, b.eva 0); Ex-Parameter
 	# traits replace the default, so the states carry the whole value.
 	db.add("states", {"id": "true_aim", "name": "True Aim", "traits": [{"kind": "hit_rate", "value": 100}]})
-	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": 0}]})
+	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": -5}]})
 	db.add("states", {"id": "venom", "name": "Venom"})
 	db.add("states", {"id": "venom_blade", "name": "Venom Blade", "traits": [{"kind": "attack_state", "id": "venom", "value": 100}]})
 	db.add("states", {"id": "dull_blade", "name": "Dull Blade", "traits": [{"kind": "attack_state", "id": "venom", "value": 0}]})

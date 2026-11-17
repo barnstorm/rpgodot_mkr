@@ -65,7 +65,8 @@ static func preview(data: RPGProjectData, to_id: String) -> Dictionary:
 	var from_def := _definition(data.root, from_id)
 	var to_def := _definition(data.root, to_id)
 	var out := {"from": from_id, "to": to_id, "ok": not to_def.is_empty(), "stats_removed": [], "stats_added": [],
-		"resources_removed": [], "resources_added": [], "capabilities_lost": [], "uses": [], "formula_problems": []}
+		"resources_removed": [], "resources_added": [], "capabilities_lost": [], "uses": [], "formula_problems": [],
+		"base_values": []}
 	if to_def.is_empty():
 		out["formula_problems"].append("Rule system '%s' was not found." % to_id)
 		return out
@@ -95,6 +96,11 @@ static func preview(data: RPGProjectData, to_id: String) -> Dictionary:
 	# Formulas in the new system must compile.
 	var rs := RPGRuleSystem.new()
 	rs.setup(to_def, data)
+	# Base values the new system gives every class and enemy that lists none (HIT, EVA, CRI).
+	var old_rs := RPGRuleSystem.new()
+	old_rs.setup(from_def, data)
+	if rs.default_traits(false) != old_rs.default_traits(false) or rs.default_traits(true) != old_rs.default_traits(true):
+		out.base_values = _base_value_lines(rs)
 	for p in rs.validate():
 		out.formula_problems.append(str(p.get("message", p)) if p is Dictionary else str(p))
 	return out
@@ -160,6 +166,23 @@ static func _scan_command_list(list: Array, gone: Array, label: String, uses: Ar
 					_scan_command_list(sub, gone, label, uses)
 
 
+## "Classes: Hit Rate 95%, ..." and "Enemies: ..." for a rule system's default traits.
+static func _base_value_lines(rs: RPGRuleSystem) -> Array:
+	var labels := {}
+	for t in rs.trait_kinds():
+		if t is Dictionary:
+			var label := str(t.get("label", t.get("kind", "")))
+			labels[str(t.get("kind", ""))] = label.get_slice(": ", 1) if label.contains(": ") else label
+	var out := []
+	for side in [["Classes", false], ["Enemies", true]]:
+		var parts := []
+		for t in rs.default_traits(side[1]):
+			parts.append("%s %d%%" % [labels.get(str(t.kind), str(t.kind)), int(t.value)])
+		if not parts.is_empty():
+			out.append("%s: %s" % [side[0], ", ".join(parts)])
+	return out
+
+
 ## Human-readable summary of a preview, for the confirmation dialog.
 static func describe(p: Dictionary) -> String:
 	var lines := ["Switch rules from '%s' to '%s'." % [p.from, p.to], ""]
@@ -178,6 +201,11 @@ static func describe(p: Dictionary) -> String:
 		lines.append("The default battle needs capabilities the new system lacks: %s" % ", ".join(p.capabilities_lost))
 	if not p.formula_problems.is_empty():
 		lines.append("Formula problems in the new system: %d" % p.formula_problems.size())
+	if not p.get("base_values", []).is_empty():
+		lines.append("")
+		lines.append("The new system gives every class and enemy base values that their other traits (equipment, states, the actor) add to. A class or enemy that lists one of these traits itself uses its own value instead:")
+		for l in p.base_values:
+			lines.append("  • " + str(l))
 	lines.append("")
 	if p.uses.is_empty():
 		lines.append("No database values, formulas or event commands name a removed stat or resource.")

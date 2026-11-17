@@ -41,7 +41,7 @@ func before_each() -> void:
 	db.add("states", {"id": "autopilot", "name": "Autopilot", "traits": [{"kind": "auto_battle"}]})
 	# Aim and flat feet make the physical hit checks certain (a.hit 100, b.eva 0).
 	db.add("states", {"id": "true_aim", "name": "True Aim", "traits": [{"kind": "hit_rate", "value": 100}]})
-	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": 0}]})
+	db.add("states", {"id": "flat_footed", "name": "Flat-footed", "traits": [{"kind": "evasion_rate", "value": -5}]})
 	db.add("skills", {"id": "hit100", "name": "Hit 100", "formula": "100", "hit_type": "certain", "variance": 0})
 	db.add("skills", {"id": "mend", "name": "Mend", "formula": "300", "damage_type": "recover",
 		"hit_type": "certain", "variance": 0, "scope": "one_ally"})
