@@ -32,6 +32,7 @@ var screen_position := Vector2.ZERO
 var hidden := false          ## enemy not yet appeared (troop member "hidden")
 var action := {}             ## action chosen for the current turn
 var escaped := false
+var row := 0                 ## 2003 rows: 0 front, 1 back (the rule system scales physical damage)
 ## The battler's own turn count (#11), incremented wherever its states tick: once per battle turn
 ## in the turn system, once per own gauge fill in ATB/CTB — lost turns (a state, a failed escape)
 ## count too. The enemy_turns / actor_turns page conditions read it.

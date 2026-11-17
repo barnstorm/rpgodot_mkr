@@ -22,8 +22,8 @@ The stats you see (HP, SP, Strength…) come from the project's **rule system**.
 
 | Tab | What it holds |
 | --- | --- |
-| **Actors** | The heroes: name, nickname, description, class, starting and max level, walk sprite, face, battler and side-view battler, starting equipment, extra skills, stat bonuses, traits |
-| **Classes** | EXP curve, stat growth (per level, or a curve with a graph), skills learned at each level, which weapon and armour types can be equipped, traits |
+| **Actors** | The heroes: name, nickname, description, class, starting and max level, walk sprite, face, battler and side-view battler, starting equipment, extra skills, stat bonuses, battle commands, traits |
+| **Classes** | EXP curve, stat growth (per level, or a curve with a graph), skills learned at each level, which weapon and armour types can be equipped, battle commands, traits |
 | **Skills** | Icon, skill type, cost, target, where it can be used, damage type, element, damage formula, hit %, variance, criticals, speed, repeats, TP gain (VX Ace/MV), animation, battle message, effects |
 | **Items** | Icon, price, consumed or not, key item, target, where it can be used, animation, effects |
 | **Weapons**, **Armour** | Icon, type (and slot for armour), price, stat changes, animation (weapons), traits |
@@ -53,6 +53,8 @@ To make Bram join during the game, an event uses **Change Party Member** (*Add*,
 ![Database > Classes](images/editor_db_classes.png)
 
 A class decides how its actors grow. Each stat is either **Per level** (a number added each level) or a **Curve** (the value at level 1, the value at level 99, and a shape), drawn as a graph. **Skills learned** lists a skill and the level it's learned at.
+
+**Battle commands** (on both this tab and Actors) decides the menu the actor gets in battle ([Lesson 7](Lesson-7-Battles.md)). Blank means the default — Attack, Skill, Guard, Item — or, under VX Ace style rules when the class grants skill types with *Add Skill Type* traits, Attack, one command per skill type, Guard, Item. A **Skill type** command lists only that type's skills, labelled from Types > Skill types. **Row** (2003) adds a command that swaps the actor between the front and back rows: the rule system's row rates scale physical damage dealt and taken from the back row (magic is unaffected). **Event** is 2003's *Link to Event* — a menu entry with its own id and label that counts as the actor's command that turn, so the enemy group's battle events can answer it with a *Command used* condition.
 
 ## 3. A healing item
 

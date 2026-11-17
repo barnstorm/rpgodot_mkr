@@ -55,8 +55,11 @@ const CHARACTER_FIELDS := ["x", "y", "direction", "screen_x", "screen_y"]
 const BATTLE_CONDITION_KINDS := ["turn", "enemy_hp", "enemy_mp", "enemy_turns", "actor_hp", "actor_mp", "actor_turns", "command_used", "switch", "variable", "turn_end"]
 ## Enemy action pattern condition kinds (RPGBattleCore._enemy_condition).
 const ENEMY_CONDITION_KINDS := ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"]
-## Battle commands a command_used condition can name (action kinds of RPGBattleCore).
-const BATTLE_COMMAND_KINDS := ["attack", "skill", "item", "guard", "escape"]
+## Battle commands a command_used condition can name (action kinds of RPGBattleCore). An Event
+## battle command is named by the id its battle command list gave it, or "event" for any of them.
+const BATTLE_COMMAND_KINDS := ["attack", "skill", "item", "guard", "escape", "row", "event"]
+## The commands an actor's or class's battle command list may hold (issue #17).
+const MENU_COMMAND_KINDS := ["attack", "skill", "skill_type", "guard", "item", "escape", "row", "event"]
 ## Battle kinds a Conditional Branch may use (RM2000/2003): the page checks RM2003 also offers in
 ## branches, plus the branch-only can-act and is-target checks. Valid inside battle events and in
 ## common events (which battle events call); on a map they are always false, so they warn.
@@ -540,9 +543,11 @@ static func _condition_structure(c: Variant, file: String, rec: String, path: St
 					out.append(problem("error", file, rec, "condition", path + "/" + kk, "The %s id '%s' is not valid." % [kk, c[kk]], ""))
 		"command_used":
 			var cmd := str(c.get("command", "attack"))
-			if not BATTLE_COMMAND_KINDS.has(cmd):
-				out.append(problem("error", file, rec, "condition", path + "/command", "Unknown battle command '%s'." % cmd, "Use one of: %s." % ", ".join(PackedStringArray(BATTLE_COMMAND_KINDS))))
-			elif cmd == "skill" and str(c.get("skill", "")) == "":
+			if not BATTLE_COMMAND_KINDS.has(cmd) and not RPGIds.is_valid(cmd):
+				out.append(problem("error", file, rec, "condition", path + "/command", "Unknown battle command '%s'." % cmd, "Use one of: %s — or an Event battle command's id." % ", ".join(PackedStringArray(BATTLE_COMMAND_KINDS))))
+			elif not BATTLE_COMMAND_KINDS.has(cmd):
+				out.append(problem("warning", file, rec, "condition", path + "/command", "'%s' is not a built-in battle command." % cmd, "Event battle commands answer to the id their actor's or class's battle command list gave them."))
+			if cmd == "skill" and str(c.get("skill", "")) == "":
 				out.append(problem("error", file, rec, "condition", path + "/skill", "A Skill command condition needs the skill.", "Pick the skill in the condition."))
 		"actor":
 			var check := str(c.get("check", "in_party"))
@@ -1712,6 +1717,8 @@ static func database_values(files: Dictionary) -> Array:
 				continue
 			var rec := str(r.get("id", ""))
 			var base := "records/%d" % i
+			if t in ["actors", "classes"] and r.get("battle_commands") is Array:
+				_battle_command_problems(r.battle_commands, lists, path, rec, base, out)
 			match t:
 				"types":
 					_type_entry_problems(r, path, rec, base, out)
@@ -1768,6 +1775,39 @@ static func database_values(files: Dictionary) -> Array:
 								"Tileset '%s': the sheet '%s' does not exist." % [rec, p], "Pick an existing image for the sheet."))
 			_formula_problems(r, base, path, rec, out)
 	return out
+
+
+## Battle command lists on actors and classes (issue #17): known kinds, Skill type commands
+## naming a type that exists (when Types lists skill types), Event commands with a valid id.
+static func _battle_command_problems(cmds: Array, lists: Dictionary, path: String, rec: String, base: String, out: Array) -> void:
+	var st: Dictionary = lists.get("skill_types", {})
+	for j in cmds.size():
+		var c: Variant = cmds[j]
+		if not (c is Dictionary):
+			out.append(problem("error", path, rec, "battle_commands", "%s/battle_commands/%d" % [base, j],
+				"Battle command #%d is not a command." % (j + 1), "Pick the command from the list."))
+			continue
+		var kind := str(c.get("kind", ""))
+		if not MENU_COMMAND_KINDS.has(kind):
+			out.append(problem("error", path, rec, "battle_commands", "%s/battle_commands/%d/kind" % [base, j],
+				"Unknown battle command '%s'." % kind, "Use one of: %s." % ", ".join(PackedStringArray(MENU_COMMAND_KINDS))))
+			continue
+		if kind == "skill_type":
+			var tid := str(c.get("type", c.get("id", "")))
+			if tid == "":
+				out.append(problem("error", path, rec, "battle_commands", "%s/battle_commands/%d/type" % [base, j],
+					"A Skill type command needs the skill type.", "Pick one from Types > Skill types."))
+			elif not st.is_empty() and not st.ids.has(tid):
+				out.append(problem("warning", path, rec, "battle_commands", "%s/battle_commands/%d/type" % [base, j],
+					"'%s' is not in Types > %s." % [tid, st.name], "Pick one from the list, or add '%s' in Types > %s." % [tid, st.name]))
+		elif kind == "event":
+			var eid := str(c.get("id", ""))
+			if eid == "":
+				out.append(problem("error", path, rec, "battle_commands", "%s/battle_commands/%d/id" % [base, j],
+					"An Event command needs an id the troop pages' command_used conditions can name.", "Give it a short id, e.g. transform."))
+			elif not RPGIds.is_valid(eid):
+				out.append(problem("error", path, rec, "battle_commands", "%s/battle_commands/%d/id" % [base, j],
+					"'%s' is not a valid id (lowercase letters, digits and _)." % eid, ""))
 
 
 ## Types entries: IDs follow the record ID rules and are unique within their list.

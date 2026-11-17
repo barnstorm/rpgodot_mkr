@@ -51,6 +51,7 @@ const DEFAULT_TERMS := {
 	"charge": "%1 is charging up!",
 	"self_destruct": "%1 self-destructs!",
 	"transform": "%1 transformed!",
+	"row_move": "%1 changes row.",
 	"appear": "%1 appears!",
 	"victory": "Victory!",
 	"defeat": "The party has fallen...",
@@ -1472,6 +1473,59 @@ func skill_type_usable(b: RPGBattler, skill_type: String) -> bool:
 	return true
 
 
+## The skill types (the Types database's "skill_types" entries).
+func skill_types() -> Array:
+	var t := _rec("types", "skill_types")
+	return t.get("entries", []) if t.get("entries") is Array else []
+
+
+func skill_type_label(id: String) -> String:
+	for e in skill_types():
+		if e is Dictionary and str(e.get("id", "")) == id:
+			return str(e.get("name", id))
+	return id
+
+
+## The battle commands a battler's actor record lists, else its class record, else the default
+## menu. Each entry is {kind, id?, type?, name?} with kind one of attack / skill (all skills) /
+## skill_type (one subset, its id in "type") / guard / item / escape / row / event (an id the
+## troop pages' command_used conditions can name). The default menu is Attack, Skill, Guard,
+## Item — or, on a rule system that declares add_skill_type and a battler carrying such traits,
+## one command per granted skill type (VX Ace's skill-type commands).
+func battle_commands(b: RPGBattler) -> Array:
+	var rec := _rec("actors", b.id) if b.is_actor() else {}
+	var list: Variant = rec.get("battle_commands", [])
+	if not (list is Array) or list.is_empty():
+		var cls := _rec("classes", b.class_id) if b.is_actor() else {}
+		list = cls.get("battle_commands", [])
+	if list is Array and not list.is_empty():
+		return list.duplicate(true)
+	var out := [{"kind": "attack"}, {"kind": "skill"}, {"kind": "guard"}, {"kind": "item"}]
+	if b.is_actor() and declares_trait("add_skill_type"):
+		var ids := []
+		for t in traits(b, "add_skill_type"):
+			var tid := str(t.get("id", ""))
+			if tid != "" and skill_type_usable(b, tid) and not ids.has(tid):
+				ids.append(tid)
+		if not ids.is_empty():
+			var typed := [{"kind": "attack"}]
+			for tid in ids:
+				typed.append({"kind": "skill_type", "type": tid, "name": skill_type_label(tid)})
+			typed.append_array([{"kind": "guard"}, {"kind": "item"}])
+			return typed
+	return out
+
+
+## Rows (2003): rules.json "rows" opts a rule system into front and back rows with the rate a
+## battler in the back row deals ("back_attack") and takes ("back_defence") on physical hits
+## (1.0 = unchanged; the front row always fights at full strength).
+func row_rate(b: RPGBattler, what: String) -> float:
+	if b.row != 1:
+		return 1.0
+	var rows: Dictionary = definition.get("rows", {}) if definition.get("rows") is Dictionary else {}
+	return float(rows.get("back_" + what, 1.0))
+
+
 ## True when rules.json "traits" declares `kind`.
 func declares_trait(kind: String) -> bool:
 	for t in definition.get("traits", []):
@@ -1632,6 +1686,8 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 		match str(u.get("hit_type", "certain")):
 			"physical":
 				value *= float(trait_field(target, "pdr", 100)) / 100.0
+				# Rows (2003): only physical hits are scaled, both dealt and taken.
+				value *= row_rate(user, "attack") * row_rate(target, "defence")
 			"magical":
 				value *= float(trait_field(target, "mdr", 100)) / 100.0
 	elif out.type == "recover":

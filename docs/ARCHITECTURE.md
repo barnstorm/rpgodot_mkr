@@ -441,4 +441,6 @@ Methods: `setup(definition, db)`, `stats()`, `resources()`, `capabilities()`,
 `max_resource(b, res)`, `hit_check(user, target, action)`, `damage(user, target, action)`,
 `apply_action(user, target, action) -> Dictionary`, `exp_for_level(class_id, level)`,
 `gain_exp(b, amount) -> Array (level ups)`, `escape_chance(party, enemies)`,
-`roll_check(b, check) -> {success, roll, target}`, `evaluate_formula(text, user, target)`.
+`roll_check(b, check) -> {success, roll, target}`, `evaluate_formula(text, user, target)`,
+`battle_commands(b) -> Array` (the actor's or class's battle menu; classic four by default),
+`row_rate(b, what) -> float` (2003 rows: physical damage scale from the `rows` block).

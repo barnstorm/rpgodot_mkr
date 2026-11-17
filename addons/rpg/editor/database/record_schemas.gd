@@ -78,6 +78,7 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_res("sv_battler", "sv_battler", "Side-view battler").merged({"help": "Drawn in side-view battles: an MV/MZ sv_actors sheet or a 2003 BattleCharSet (BattleCharSet folder). Empty: the walk sprite, facing left."}),
 				_obj("equips", "Starting equipment", _equip_fields(equip_slots)),
 				{"key": "skills", "kind": "list", "item_ref": "skill", "default": [], "label": "Extra skills"},
+				_battle_commands_field("Battle commands (blank: the class's, else the default menu)", type_lists),
 				_obj("base_stats", "Stat bonuses", _stat_fields(stats, 0)),
 				_traits(trait_kinds, type_lists, stats),
 			]
@@ -95,6 +96,7 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_obj("growth", "Stat growth", growth),
 				{"key": "learnings", "kind": "list", "default": [], "label": "Skills learned", "item_fields": [
 					_i("level", "Level", 1, 1, 999), _ref("skill", "skill", "Skill")]},
+				_battle_commands_field("Battle commands (the class's default battle menu)", type_lists),
 				_obj("equip", "Can equip", [
 					_type_list_field("weapon_types", "Weapon types", type_lists, "weapon_types"),
 					_type_list_field("armor_types", "Armour types", type_lists, "armor_types")]),
@@ -427,6 +429,23 @@ static func type_lists(data: RPGProjectData) -> Dictionary:
 
 ## A type or element field: a dropdown of the Types list `list_id` (plus "(none)"), or a text
 ## field when the project has no such list.
+## The battle command list actors and classes carry (issue #17): what the battle menu shows.
+static func _battle_commands_field(label: String, lists: Dictionary) -> Dictionary:
+	return {"key": "battle_commands", "kind": "list", "default": [], "label": label,
+		"help": "The battle menu in order: Attack, Skill (all skills), a Skill type (that type's skills only), Guard, Item, Escape, Row (switch front and back row) and Event (a choice troop pages' command_used conditions can name). Blank: the class's list, else Attack, Skill, Guard, Item.",
+		"item_fields": [
+			_c("kind", "Command", ["attack", "skill", "skill_type", "guard", "item", "escape", "row", "event"], "attack").merged({"option_labels": [
+				"Attack", "Skill (all skills)", "Skill type", "Guard", "Item", "Escape", "Row", "Event"]}),
+			_type_field("type", "Skill type", lists, "skill_types").merged({"show_if": {"key": "kind", "equals": "skill_type"}}),
+			{"key": "id", "kind": "text", "default": "", "label": "Id",
+				"show_if": {"key": "kind", "equals": "event"},
+				"help": "The id troop page conditions name (command_used): this command or any Event command."},
+			{"key": "name", "kind": "text", "default": "", "label": "Label",
+				"show_if": {"key": "kind", "equals": "event"},
+				"help": "The menu entry's text. Empty: the id."},
+		]}
+
+
 static func _type_field(key: String, label: String, lists: Dictionary, list_id: String) -> Dictionary:
 	var l: Variant = lists.get(list_id)
 	if not (l is Dictionary):
