@@ -29,7 +29,7 @@ Double-click an empty grass tile. The event editor opens:
   - **Graphic**: the character sheet, which character on it, the direction it faces and the frame. Choose *Tile* to show a tile of the tileset instead (a pot, a sign), or nothing for an invisible event.
   - **Movement**: *Fixed* (stands still), *Random*, *Vertical* / *Horizontal* (paces one axis, turning back at obstacles), *Approach the player*, *Away from the player* or *Custom route*, with a speed (1–6) and how often it moves (1–5).
   - **Options**: walking animation, stepping animation (moves its feet while standing), direction fix (never turns), walk through.
-  - **Priority**: *Below characters* (the player walks over it, like a switch on the floor), *Same as characters* (it blocks like a person) or *Above characters*.
+  - **Priority**: *Below characters* (the player walks over it, like a switch on the floor), *Same as characters* (it blocks like a person) or *Above characters*. A new page starts *Below characters*, as in RPG Maker, so a page you leave empty lets the player walk through; picking a character graphic turns it to *Same as characters*.
   - **Trigger**: how it starts:
 
   | Trigger | Starts when… |

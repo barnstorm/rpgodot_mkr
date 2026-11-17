@@ -36,6 +36,8 @@ const TEXT_KEYS := ["text", "label", "name", "notes", "message"]
 const FACINGS := ["down", "left", "right", "up", "keep"]
 const ITEM_KINDS := ["items", "weapons", "armors"]
 
+## What a page key means when it is missing (complete_page fills these in). "priority": "same"
+## matches the runtime's reading of a page without one (RPGEvent), so old files keep working.
 const PAGE_DEFAULTS := {
 	"conditions": [],
 	"graphic": null,
@@ -45,6 +47,10 @@ const PAGE_DEFAULTS := {
 	"trigger": "action_button",
 	"commands": [],
 }
+## A brand-new page (New event, New page, Clear page) starts below characters, as in RPG Maker,
+## so a page left blank lets the player walk through; picking a character graphic in the event
+## editor turns it to "same" (issue #142).
+const NEW_PAGE_PRIORITY := "below"
 
 static var _placeholder_re: RegEx
 
@@ -246,6 +252,11 @@ static func complete_event(ev: Dictionary) -> Dictionary:
 		if ev.pages[i] is Dictionary:
 			ev.pages[i] = complete_page(ev.pages[i])
 	return ev
+
+
+## An empty page with RPG Maker's new-page settings (below characters, action button).
+static func new_page() -> Dictionary:
+	return complete_page({"priority": NEW_PAGE_PRIORITY})
 
 
 static func complete_page(p: Dictionary) -> Dictionary:

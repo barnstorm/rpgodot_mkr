@@ -740,6 +740,19 @@ func _character_data(g: Dictionary, ctx: Object) -> Variant:
 	return 0
 
 
+## The [map, event] a self switch or self variable condition reads. A missing, blank or "this"
+## map/event is the one the condition belongs to (a page's event, the running branch's event),
+## the same rule Control Self Switch uses. The condition editor saves blanks as "" (issue #141).
+static func self_owner(cond: Dictionary, map_id: String, event_id: String) -> Array:
+	var m := str(cond.get("map", ""))
+	var e := str(cond.get("event", ""))
+	if m == "" or m == "this":
+		m = map_id
+	if e == "" or e == "this":
+		e = event_id
+	return [m, e]
+
+
 ## Checks one condition object. `map_id`/`event_id` are needed for self switches; `ctx` (the
 ## running command's RPGContext) for Character facing.
 func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object = null) -> bool:
@@ -759,14 +772,13 @@ func check_condition(cond: Dictionary, map_id := "", event_id := "", ctx: Object
 			return compare(float(cur), cond.get("op", "=="), float(rhs))
 		"self_switch":
 			var letter: String = cond.get("id", cond.get("switch", "A"))
-			# Blank map/event is the event the condition belongs to (a page, the running branch).
-			var m := str(cond.get("map", map_id))
-			var e := str(cond.get("event", event_id))
-			return get_self_switch(m, e, letter) == bool(cond.get("value", true))
+			var who := self_owner(cond, map_id, event_id)
+			return get_self_switch(who[0], who[1], letter) == bool(cond.get("value", true))
 		"self_variable":
 			var sname := str(cond.get("name", cond.get("id", "")))
-			var sm := str(cond.get("map", map_id))
-			var se := str(cond.get("event", event_id))
+			var swho := self_owner(cond, map_id, event_id)
+			var sm: String = swho[0]
+			var se: String = swho[1]
 			var scur: Variant = get_self_variable(sm, se, sname)
 			var srhs: Variant = resolve_operand(cond.get("value", 0), ctx)
 			var st := self_variable_type(sm, se, sname)

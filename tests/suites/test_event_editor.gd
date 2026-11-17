@@ -616,3 +616,108 @@ func test_runtime_started_by_can_pass_and_button_modes() -> void:
 	Input.action_release("rpg_ok")
 	assert_false(st.check_condition({"kind": "button", "button": "ok", "mode": "held"}))
 	await env.destroy()
+
+
+# --------------------------------------------------------------------------------------------
+# Tutorial audit: self switch conditions built in the editor (#141), new-page priority (#142)
+# --------------------------------------------------------------------------------------------
+
+func test_141_self_switch_condition_from_the_editor_reads_this_event() -> void:
+	# The condition editor saves its blank Event field as "" (not missing): that must still mean
+	# "this event", as Control Self Switch reads it, or a looted chest never closes.
+	var ce := RPGConditionEditor.new(data)
+	tree.root.add_child(ce)
+	ce._on_kind(ce._kinds.find("self_switch"))
+	var cond: Dictionary = ce.get_value()
+	assert_eq(str(cond.get("event", "(missing)")), "", "the editor writes a blank event")
+	var IfCmd: GDScript = load("res://addons/rpg/runtime/commands/if.gd")
+	assert_eq(IfCmd.describe_condition(cond), "Self Switch A of [this event] is ON", "described as this event")
+	ce._on_kind(ce._kinds.find("self_variable"))
+	var vcond: Dictionary = ce.get_value()
+	vcond["name"] = "times_opened"
+	vcond["value"] = 2
+	assert_eq(str(vcond.get("event", "(missing)")), "", "self variables too")
+	ce.queue_free()
+	var env = Env.create(tree, TMP + "/rpg")
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8), "up")
+	assert_true(r.is_ok(), str(r))
+	var st: RPGGameState = env.rpg.state
+	var door: RPGEvent = env.rpg.current_map().get_event("town_house_door")
+	assert_false(st.check_condition(cond, "town", "town_house_door"), "off before the switch is set")
+	r = await env.rpg.run_commands([
+		{"type": "set_self_switch", "switch": "A", "value": "on"},
+		{"type": "set_variable", "target": "self", "name": "times_opened", "operation": "set", "value": 2},
+		{"type": "if", "condition": cond, "then": [{"type": "set_variable", "id": "counter", "value": 1}], "else": [{"type": "set_variable", "id": "counter", "value": 2}]},
+		{"type": "if", "condition": vcond, "then": [{"type": "set_variable", "id": "ratio", "value": 1}], "else": [{"type": "set_variable", "id": "ratio", "value": 2}]},
+	], {"kind": "api", "id": "t141"}, door)
+	assert_true(r.is_ok(), str(r))
+	assert_eq(int(env.rpg.get_variable("counter")), 1, "Conditional Branch reads this event's self switch")
+	assert_eq(int(env.rpg.get_variable("ratio")), 1, "and its self variable")
+	# A page gated on the editor-built condition turns on (the tutorials' looted-chest page).
+	var page_no: int = door.data["pages"].size()
+	door.data["pages"].append(RPGQuickEvents.complete_page({"conditions": [cond]}))
+	door.refresh()
+	assert_eq(door.page_index, page_no, "the page with the blank-event condition is active")
+	# "this" means the owner too; a named event is still that event.
+	assert_true(st.check_condition({"kind": "self_switch", "id": "A", "event": "this", "map": "this"}, "town", "town_house_door"))
+	assert_false(st.check_condition({"kind": "self_switch", "id": "A", "event": "chest", "map": ""}, "town", "town_house_door"), "another event's own switch")
+	await env.destroy()
+
+
+func test_142_new_events_and_pages_start_below_characters() -> void:
+	assert_eq(RPGQuickEvents.new_page().priority, "below")
+	assert_eq(RPGMapView.default_page().priority, "below", "an event made on the map")
+	assert_eq(RPGQuickEvents.complete_page({}).priority, "same", "a stored page without a priority still means same")
+	var win := RPGEventEditor.open_new("town", Vector2i(13, 8), data, registry, null, func(_id): pass)
+	await frames(2)
+	assert_eq(win.event.pages[0].priority, "below", "a new event's first page")
+	assert_eq(win._page_form.get_field("priority"), "below", "and the form shows it")
+	win.new_page()
+	assert_eq(win.event.pages[1].priority, "below", "New page")
+	win._on_page_field("priority", "above")
+	win.clear_page()
+	assert_eq(win.event.pages[1].priority, "below", "Clear page")
+	win.queue_free()
+	await frames(1)
+
+
+func test_142_picking_a_character_graphic_makes_the_page_same() -> void:
+	var win := RPGEventEditor.open_new("town", Vector2i(13, 8), data, registry, null, func(_id): pass)
+	await frames(2)
+	win._on_page_field("graphic", {"tile": "upper_1"})
+	assert_eq(win.event.pages[0].priority, "below", "a tile graphic leaves the priority alone")
+	win._on_page_field("graphic", {"sheet": "hero", "index": 0, "facing": "down"})
+	assert_eq(win.event.pages[0].priority, "same", "a character makes it same as characters")
+	assert_eq(win._page_form.get_field("priority"), "same", "the form follows")
+	# The maker's own choice afterwards sticks when one character is swapped for another.
+	win._on_page_field("priority", "below")
+	win._on_page_field("graphic", {"sheet": "hero", "index": 2, "facing": "down"})
+	assert_eq(win.event.pages[0].priority, "below", "swapping characters keeps the choice")
+	win._on_page_field("graphic", null)
+	assert_eq(win.event.pages[0].priority, "below", "clearing the graphic changes nothing")
+	win._on_page_field("priority", "above")
+	win._on_page_field("graphic", {"sheet": "hero", "index": 0, "facing": "down"})
+	assert_eq(win.event.pages[0].priority, "above", "above characters is never changed")
+	win.queue_free()
+	await frames(1)
+
+
+func test_142_a_blank_new_event_does_not_block_the_player() -> void:
+	# The tutorials' "an empty page makes it vanish": a new event without a graphic is walked
+	# through. East of (12, 8) is open floor in the fixture town.
+	var win := RPGEventEditor.open_new("town", Vector2i(13, 8), data, registry, null, func(_id): pass)
+	await frames(2)
+	win.set_event_name("Vanished guard")
+	win.ok()
+	await frames(1)
+	var env = Env.create(tree, TMP + "/rpg")
+	var r: RPGResult = await env.start_on("town", Vector2i(12, 8), "right")
+	assert_true(r.is_ok(), str(r))
+	var map: RPGMap = env.rpg.current_map()
+	var ev: Node = map.get_event("event_13_8")
+	assert_true(ev != null, "the new event is on the map")
+	if ev != null:
+		assert_true(map.movement.can_move(map.player, Vector2i(12, 8), Vector2i.RIGHT), "a below-characters page never blocks")
+		ev.priority = "same"
+		assert_false(map.movement.can_move(map.player, Vector2i(12, 8), Vector2i.RIGHT), "the old default (same) blocked")
+	await env.destroy()

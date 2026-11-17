@@ -13,6 +13,17 @@ static func descriptor() -> Dictionary:
 	}
 
 
+## "[this event]", "[chest]" or "[chest] on [town]" for a self switch/variable condition. Blank
+## and "this" mean the event (and map) the condition belongs to.
+static func _self_owner_text(c: Dictionary) -> String:
+	var ev := str(c.get("event", ""))
+	var who := "[%s]" % ("this event" if ev == "" or ev == "this" else ev)
+	var mp := str(c.get("map", ""))
+	if mp != "" and mp != "this":
+		who = "%s on [%s]" % [who, mp]
+	return who
+
+
 static func describe_condition(c: Variant) -> String:
 	if not (c is Dictionary):
 		return "?"
@@ -20,15 +31,9 @@ static func describe_condition(c: Variant) -> String:
 		"switch": return "Switch [%s] is %s" % [c.get("id", ""), "ON" if c.get("value", true) else "OFF"]
 		"variable": return "Variable [%s] %s %s" % [c.get("id", ""), c.get("op", "=="), RPGCommand.describe_operand(c.get("value", 0))]
 		"self_switch":
-			var who := "[%s]" % c.get("event", "this event")
-			if str(c.get("map", "")) != "":
-				who = "%s on [%s]" % [who, c.map]
-			return "Self Switch %s of %s is %s" % [c.get("id", "A"), who, "ON" if c.get("value", true) else "OFF"]
+			return "Self Switch %s of %s is %s" % [c.get("id", "A"), _self_owner_text(c), "ON" if c.get("value", true) else "OFF"]
 		"self_variable":
-			var sv_who := "[%s]" % c.get("event", "this event")
-			if str(c.get("map", "")) != "":
-				sv_who = "%s on [%s]" % [sv_who, c.map]
-			return "Self variable %s.%s %s %s" % [sv_who, c.get("name", ""), c.get("op", "=="), RPGCommand.describe_operand(c.get("value", 0))]
+			return "Self variable %s.%s %s %s" % [_self_owner_text(c), c.get("name", ""), c.get("op", "=="), RPGCommand.describe_operand(c.get("value", 0))]
 		"item": return "Party has [%s]%s" % [c.get("id", ""), (" x%d" % int(c.count)) if typeof(c.get("count")) in [TYPE_INT, TYPE_FLOAT] and int(c.count) > 1 else ""]
 		"actor":
 			var who := "[%s]" % c.get("id", "")

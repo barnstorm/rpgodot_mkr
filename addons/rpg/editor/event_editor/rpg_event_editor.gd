@@ -155,16 +155,16 @@ func setup(p_map_id: String, p_event_id: String, p_data: RPGProjectData, p_regis
 	if p_new_at.x >= 0 and p_new_at.y >= 0:
 		is_new = true
 		event_id = RPGIds.unique("event_%d_%d" % [p_new_at.x, p_new_at.y], file.ids(), file.retired_ids())
-		var page := RPGQuickEvents.complete_page({})
+		var page := RPGQuickEvents.new_page()
 		page["movement"] = {"type": "fixed", "speed": 3, "frequency": 3}
 		event = {"id": event_id, "name": "EV%03d" % (file.ids().size() + 1), "position": [p_new_at.x, p_new_at.y], "notes": "", "pages": [page]}
 	elif file.has_event(event_id):
 		event = file.get_event_copy(event_id)
 	else:
-		event = {"id": event_id, "name": "", "position": [0, 0], "notes": "", "pages": [RPGQuickEvents.complete_page({})]}
+		event = {"id": event_id, "name": "", "position": [0, 0], "notes": "", "pages": [RPGQuickEvents.new_page()]}
 	_loaded_event = event.duplicate(true)
 	if not (event.get("pages") is Array) or event.pages.is_empty():
-		event["pages"] = [RPGQuickEvents.complete_page({})]
+		event["pages"] = [RPGQuickEvents.new_page()]
 	title = _title()
 	_build_ui()
 	if file.error != "":
@@ -328,7 +328,7 @@ func _show_page(i: int) -> void:
 	_page = i
 	var pg: Variant = event.pages[i]
 	if not (pg is Dictionary):
-		event.pages[i] = RPGQuickEvents.complete_page({})
+		event.pages[i] = RPGQuickEvents.new_page()
 		pg = event.pages[i]
 	_page_form.set_value(pg)
 	if not (pg.get("commands") is Array):
@@ -338,8 +338,20 @@ func _show_page(i: int) -> void:
 
 func _on_page_field(key: String, v: Variant) -> void:
 	if _page < event.pages.size():
-		event.pages[_page][key] = RPGJson.deep_copy(v)
+		var pg: Dictionary = event.pages[_page]
+		var had_character := is_character_graphic(pg.get("graphic"))
+		pg[key] = RPGJson.deep_copy(v)
+		# RPG Maker VX/Ace/MV: picking a character for a page that is below characters makes it
+		# "Same as characters", so people and chests block and are talked to face on (#142).
+		if key == "graphic" and not had_character and is_character_graphic(v) and str(pg.get("priority", "same")) == "below":
+			pg["priority"] = "same"
+			_page_form.set_field("priority", "same")
 		_mark_dirty()
+
+
+## True for a character-sheet graphic ({sheet, index, ...}); false for none and tile graphics.
+static func is_character_graphic(g: Variant) -> bool:
+	return g is Dictionary and str(g.get("sheet", "")) != ""
 
 
 func _mark_dirty() -> void:
@@ -378,7 +390,7 @@ func current_page() -> int:
 
 
 func new_page() -> void:
-	event.pages.append(RPGQuickEvents.complete_page({}))
+	event.pages.append(RPGQuickEvents.new_page())
 	_page = event.pages.size() - 1
 	_rebuild_tabs()
 	_show_page(_page)
@@ -420,7 +432,7 @@ func delete_page() -> void:
 
 
 func clear_page() -> void:
-	event.pages[_page] = RPGQuickEvents.complete_page({})
+	event.pages[_page] = RPGQuickEvents.new_page()
 	_show_page(_page)
 	_mark_dirty()
 
@@ -487,7 +499,7 @@ func _take_json() -> bool:
 		return false
 	event = r.data
 	if not (event.get("pages") is Array) or event.pages.is_empty():
-		event["pages"] = [RPGQuickEvents.complete_page({})]
+		event["pages"] = [RPGQuickEvents.new_page()]
 	if typeof(event.get("id")) == TYPE_STRING and event.id != event_id:
 		_id_edit.text = event.id
 	event["id"] = event_id
