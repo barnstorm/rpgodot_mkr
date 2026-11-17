@@ -34,6 +34,8 @@ const DEFAULT_TERMS := {
 	"miss": "%1 missed!",
 	"evade": "%1 dodged the attack!",
 	"critical": "A critical hit!",
+	"counter": "%1 counterattacks!",
+	"magic_reflection": "%1 reflects the magic!",
 	"state_added": "%1 is affected by %2!",
 	"state_removed": "%1 is no longer affected by %2.",
 	"state_resisted": "%1 resisted %2.",
@@ -638,6 +640,22 @@ func _trait_field(b: RPGBattler, all: Array, def: Dictionary) -> int:
 	return roundi(total * 100.0) if rate_mode else roundi(total)
 
 
+## One "snapshot_traits" field of `b` as the rules aggregate it (the a.pdr of formulas, a.hit
+## and so on), computed straight from the traits: trait_field(b, "mcr") → 80. `fallback` when
+## this rule system has no such field, so callers can keep classic maths untouched.
+func trait_field(b: RPGBattler, code: String, fallback := 0) -> int:
+	var defs: Dictionary = definition.get("snapshot_traits", {})
+	if not defs.has(code):
+		return fallback
+	return int(_trait_field(b, traits(b), defs[code]))
+
+
+## Whether "snapshot_traits" defines `code` — lets callers keep their RNG draws (a weighted
+## pick) unchanged for rule systems that don't know the field.
+func has_snapshot_field(code: String) -> bool:
+	return (definition.get("snapshot_traits", {}) as Dictionary).has(code)
+
+
 func _snap_of(x: Variant) -> Dictionary:
 	if x is RPGBattler:
 		return x.snapshot()
@@ -1140,13 +1158,14 @@ func map_step_changes(b: RPGBattler, walk_steps: int, slip_death := false) -> Di
 	return out
 
 
-## A damage floor: `amount` off the life resource of a living battler. As in RPG Maker, a floor
-## never knocks anyone out (at least 1 point is left). Returns a map result.
+## A damage floor: `amount` off the life resource of a living battler, scaled by the Floor
+## Damage Rate Sp-Parameter (100 = the full amount). As in RPG Maker, a floor never knocks
+## anyone out (at least 1 point is left). Returns a map result.
 func floor_damage(b: RPGBattler, amount: int) -> Dictionary:
 	var out := _map_result()
 	if b.is_dead() or amount <= 0:
 		return out
-	_map_change(b, life_resource(), -amount, false, out)
+	_map_change(b, life_resource(), -roundi(amount * float(trait_field(b, "fdr", 100)) / 100.0), false, out)
 	return out
 
 
@@ -1296,7 +1315,7 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 			return false
 		if not skill_type_usable(user, str(u.get("skill_type", ""))):
 			return false
-		var cost: Dictionary = u.cost
+		var cost: Dictionary = _skill_cost(user, u)
 		for res_id in cost:
 			if user.get_resource(res_id) < int(cost[res_id]):
 				return false
@@ -1344,9 +1363,23 @@ func pay_cost(user: RPGBattler, action: Dictionary) -> void:
 	if str(action.get("kind", "")) != "skill":
 		return
 	var u := resolve_action(user, action)
-	var cost: Dictionary = u.get("cost", {})
+	var cost: Dictionary = _skill_cost(user, u)
 	for res_id in cost:
 		user.set_resource(res_id, maxi(0, user.get_resource(res_id) - int(cost[res_id])))
+
+
+## A skill's cost with the MP Cost Rate Sp-Parameter folded in (MV's mpCost × subject's mcr —
+## only the magic resource's share; TP and the like are paid as listed). A rule system without
+## the field charges the listed cost.
+func _skill_cost(user: RPGBattler, u: Dictionary) -> Dictionary:
+	var cost: Dictionary = u.get("cost", {})
+	var mr := magic_resource()
+	if mr != "" and cost.has(mr):
+		var mcr := trait_field(user, "mcr", 100)
+		if mcr != 100:
+			cost = cost.duplicate()
+			cost[mr] = maxi(0, roundi(int(cost[mr]) * float(mcr) / 100.0))
+	return cost
 
 
 ## Resources the user gains for using the action: "gain_on_use" formula, a = the user,
@@ -1456,6 +1489,16 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 	if out.element != "":
 		out.element_rate = trait_rate(target, "element_rate", out.element)
 		value *= out.element_rate
+	# The damage-rate Sp-Parameters (MV's makeDamageValue): PDR/MDR scale damage by the hit's
+	# type — a "certain" hit is neither — and REC scales recovery received. 100 = unchanged.
+	if out.type == "damage":
+		match str(u.get("hit_type", "certain")):
+			"physical":
+				value *= float(trait_field(target, "pdr", 100)) / 100.0
+			"magical":
+				value *= float(trait_field(target, "mdr", 100)) / 100.0
+	elif out.type == "recover":
+		value *= float(trait_field(target, "rec", 100)) / 100.0
 	if out.type == "damage" and u.critical:
 		var crit_cfg: Dictionary = definition.get("critical", {})
 		var crit := false
@@ -1473,7 +1516,9 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 		if amp > 0:
 			value += rng.randi_range(-amp, amp)
 	if out.type == "damage" and target.guarding and value > 0.0:
-		value = value * float(cfg.get("guard_percent", 50)) / 100.0
+		# MV's applyGuard: damage / (2 x GRD). guard_percent is the /2 (50 = half damage), the
+		# Guard Effect Sp-Parameter the rest — a rules set without it divides by 100 (= x1.0).
+		value = value * float(cfg.get("guard_percent", 50)) / float(trait_field(target, "grd", 100))
 	var final_value := roundi(value)
 	if out.type == "damage":
 		final_value = maxi(final_value, int(cfg.get("min", 0)))
@@ -1549,6 +1594,12 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 				if target.is_dead() and rid == life_resource():
 					continue
 				var amount := int(_num(e.get("amount"), 0.0)) + int(float(max_resource(target, rid)) * _num(e.get("percent"), 0.0) / 100.0)
+				if str(e.kind) == "recover" and (rid == life_resource() or rid == magic_resource()):
+					# MV's itemEffectRecoverHp/Mp: recovery received scales with the target's
+					# Recovery Effect, and an item's with the user's Pharmacology on top.
+					amount = roundi(amount * float(trait_field(target, "rec", 100)) / 100.0)
+					if u.kind == "item":
+						amount = roundi(amount * float(trait_field(user, "pha", 100)) / 100.0)
 				_change(target, rid, -amount if str(e.kind) == "damage" else amount)
 			"add_state":
 				var sid := str(e.get("id", ""))
@@ -1786,7 +1837,8 @@ func exp_for_level(class_id: String, level: int) -> int:
 ## {level, gains: {stat: delta}, learned: [skill ids]}.
 func gain_exp(b: RPGBattler, amount: int) -> Array:
 	var ups := []
-	b.exp = maxi(0, b.exp + amount)
+	# The Experience Rate Sp-Parameter scales what is actually earned (MV's round(exp x exr)).
+	b.exp = maxi(0, b.exp + roundi(amount * float(trait_field(b, "exr", 100)) / 100.0))
 	var cap := max_level(b)
 	while b.level < cap and b.exp >= exp_for_level(b.class_id, b.level + 1):
 		var before := stat_block(b)
