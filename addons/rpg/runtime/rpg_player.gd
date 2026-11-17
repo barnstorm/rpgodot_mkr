@@ -545,10 +545,13 @@ func _board(kind: String) -> void:
 		# The map's music comes back where it was when the player gets off (MV's vehicle BGM).
 		set_meta("map_bgm", rpg.audio.save_bgm())
 		rpg.audio.play_bgm(bgm)
+	if rpg.has_signal("vehicle_entered"):
+		rpg.vehicle_entered.emit(kind)
 
 
 func _leave_vehicle() -> void:
 	var rpg: Node = map.rpg
+	var vkind := vehicle
 	vehicle = ""
 	speed = int(get_meta("walk_speed", 4))
 	step_anim = false
@@ -560,6 +563,8 @@ func _leave_vehicle() -> void:
 			rpg.audio.replay_bgm(prev)
 	if rpg.game != null and rpg.game.has_method("refresh_party_graphics"):
 		rpg.game.refresh_party_graphics()
+	if rpg.has_signal("vehicle_exited"):
+		rpg.vehicle_exited.emit(vkind)
 
 
 ## Walking into a same-priority event fires its touch trigger on every failed step, as in RPG

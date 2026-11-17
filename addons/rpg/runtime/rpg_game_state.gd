@@ -569,8 +569,9 @@ func resolve_operand(v: Variant, ctx: Object = null) -> Variant:
 ## play_time (seconds), party_size, {kind: actor, id, field} (level, exp, a resource, an equip
 ## slot's item id, or a stat), {kind: character, target, field} (x, y, direction, screen_x,
 ## screen_y), map_id, {kind: party_member, slot} (the actor id in that slot), {kind: last_used,
-## what}, {kind: counter, which}, or {kind: enemy, index, field} (a stat of an enemy in the
-## running battle). Kinds that read the map or the battle need `ctx`.
+## what}, {kind: counter, which}, {kind: enemy, index, field} (a stat of an enemy in the
+## running battle), or {kind: hook[.field]} (the engine moment that started this common event).
+## Kinds that read the map, the battle or the hook need `ctx`.
 func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 	var kind := str(g.get("kind", ""))
 	match kind:
@@ -631,8 +632,31 @@ func game_data(g: Dictionary, ctx: Object = null) -> Variant:
 				_err("Game data: enemies have no '%s'." % g.get("field", "hp"))
 				return 0
 			return ev
+		_:
+			if kind == "hook" or kind.begins_with("hook."):
+				return _hook_data(kind, ctx)
 	_err("Game data: unknown kind '%s'." % kind)
 	return 0
+
+
+## The engine moment that started the running common event (issue #52): Control Variables reads
+## it as game data "hook" (the whole dictionary) or one field — "hook.actor", "hook.state",
+## "hook.region", "hook.terrain", "hook.map", "hook.outcome", "hook.vehicle", "hook.x", "hook.y",
+## "hook.old_level", "hook.new_level". Numeric fields default to 0, the rest to "".
+func _hook_data(kind: String, ctx: Object) -> Variant:
+	var hook: Variant = {}
+	if ctx != null and "interpreter" in ctx and ctx.interpreter != null:
+		hook = ctx.interpreter.owner.get("hook", {})
+	if not (hook is Dictionary) or (hook as Dictionary).is_empty():
+		_err("Game data: '%s' needs a common event started by an engine moment." % kind)
+		return 0
+	if kind == "hook":
+		return hook
+	var field := kind.substr(5)
+	var h: Dictionary = hook
+	if not h.has(field):
+		return 0 if ["x", "y", "region", "terrain", "old_level", "new_level"].has(field) else ""
+	return h[field]
 
 
 ## One value of an actor or enemy battler: level, exp, a resource, the item id in an equip slot

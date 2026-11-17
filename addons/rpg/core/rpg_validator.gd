@@ -18,6 +18,17 @@ const PAGE_PRIORITIES := ["below", "same", "above"]
 const PAGE_TRIGGERS := ["action_button", "player_touch", "event_touch", "autorun", "parallel"]
 const MOVE_TYPES := ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]
 const CE_TRIGGERS := ["none", "autorun", "parallel"]
+## Engine-moment triggers a common event can run on (issue #52); `trigger` may also be an Array
+## of these (one event on several moments). Mirrors RPGService.HOOK_TRIGGERS.
+const CE_HOOKS := [
+	"on_new_game", "on_load", "on_map_enter", "on_map_leave", "on_step", "on_region_enter",
+	"on_region_leave", "on_terrain_enter", "on_level_up", "on_state_added", "on_state_removed",
+	"on_actor_ko", "on_battle_start", "on_battle_end", "on_game_over", "on_menu_open",
+	"on_menu_close", "on_party_change", "on_vehicle_enter", "on_vehicle_exit",
+]
+## Choice filters of a hooked common event (hook_map, hook_actor and hook_state are refs).
+const CE_HOOK_OUTCOMES := ["", "win", "escape", "lose"]
+const CE_HOOK_VEHICLES := ["", "boat", "ship", "airship"]
 const VAR_TYPES := ["int", "float", "bool", "string"]
 const OPS := ["==", "=", "!=", "≠", "<", "<=", "≤", ">", ">=", "≥"]
 const EQ_OPS := ["==", "=", "!=", "≠"]
@@ -191,8 +202,18 @@ static func structure(file_kind: String, data: Variant, registry: RPGCommandRegi
 						continue
 					var rec := str(ce.get("id", ""))
 					var base := "common_events/%d" % i
-					if not CE_TRIGGERS.has(str(ce.get("trigger", "none"))):
-						out.append(problem("error", file, rec, "trigger", base + "/trigger", "Common event '%s' has an unknown trigger '%s'." % [rec, ce.get("trigger")], "Use none, autorun or parallel."))
+					var trig: Variant = ce.get("trigger", "none")
+					var trig_ok := CE_TRIGGERS.has(str(trig))
+					if not trig_ok and trig is Array and not (trig as Array).is_empty():
+						# An Array trigger names several engine moments.
+						trig_ok = true
+						for h in trig:
+							if not CE_HOOKS.has(str(h)):
+								trig_ok = false
+								break
+					if not trig_ok:
+						out.append(problem("error", file, rec, "trigger", base + "/trigger", "Common event '%s' has an unknown trigger '%s'." % [rec, trig], "Use none, autorun or parallel, one engine moment (on_map_enter...), or an array of engine moments."))
+					_ce_hook_filters(ce, file, rec, base, out)
 					_commands_structure(ce.get("commands", []), registry, file, rec, base + "/commands", out, "common")
 		"database":
 			if _id_list_structure(data, "records", "record", file, out):
@@ -219,6 +240,27 @@ static func structure(file_kind: String, data: Variant, registry: RPGCommandRegi
 		"project":
 			pass
 	return out
+
+
+## The filter fields of a hooked common event (issue #52): numbers and choice members here; the
+## ref filters (hook_map, hook_actor, hook_state) are existence-checked by validate_project.
+static func _ce_hook_filters(ce: Dictionary, file: String, rec: String, base: String, out: Array) -> void:
+	var mins := {"hook_region": 0, "hook_terrain": 0, "hook_every": 1}
+	for key in mins:
+		var v: Variant = ce.get(key, null)
+		if v == null:
+			continue
+		if not (v is int or v is float):
+			out.append(problem("error", file, rec, key, base + "/" + key, "Common event '%s': %s must be a number." % [rec, key], "Use a whole number."))
+		elif int(v) < int(mins[key]):
+			out.append(problem("error", file, rec, key, base + "/" + key, "Common event '%s': %s cannot be below %d." % [rec, key, int(mins[key])], ""))
+	var choices := {"hook_outcome": [CE_HOOK_OUTCOMES, "outcome"], "hook_vehicle": [CE_HOOK_VEHICLES, "vehicle kind"]}
+	for key in choices:
+		var v2: Variant = ce.get(key, null)
+		if v2 == null or str(v2) == "":
+			continue
+		if not (choices[key][0] as Array).has(str(v2)):
+			out.append(problem("error", file, rec, key, base + "/" + key, "Common event '%s': unknown %s '%s'." % [rec, choices[key][1], v2], "Use %s." % ", ".join((choices[key][0] as Array).map(func(o): return str(o)))))
 
 
 static func _id_list_structure(data: Dictionary, key: String, what: String, file: String, out: Array) -> bool:

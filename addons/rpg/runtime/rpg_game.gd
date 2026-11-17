@@ -804,6 +804,12 @@ func return_to_title() -> void:
 
 
 func game_over() -> void:
+	if rpg.has_signal("game_over_started"):
+		rpg.game_over_started.emit()
+	# The game over moment runs its hooked common events first, while the world is still up
+	# (issue #52); a queued run would die with the scheduler cancellation below.
+	if rpg.has_method("run_hook_common_events"):
+		await rpg.run_hook_common_events("on_game_over", {})
 	await rpg.scheduler.cancel_all("game over")
 	rpg.audio.stop_all()
 	var node: Node = rpg.ui.open_scene(rpg.ui.scene_path("game_over"))

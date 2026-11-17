@@ -47,6 +47,14 @@ signal message_char(character: String, index: int, instant: bool)
 signal message_closed()
 ## An autosave was attempted (RPGSaveService.autosave).
 signal autosaved(slot: int, ok: bool, reason: String)
+## The game is about to end in a Game Over, before the screen (hooked common events ran already).
+signal game_over_started()
+## A state was added to or removed from an actor, wherever it happened (a map command, an item
+## or skill effect, the battle rules). `battler` is the RPGBattler (or fallback Dictionary).
+signal actor_state_changed(battler: Variant, state_id: String, added: bool)
+## The player boarded or got off a vehicle (`kind`: boat, ship or airship).
+signal vehicle_entered(kind: String)
+signal vehicle_exited(kind: String)
 
 # --- battle hooks (battle_hook(); entry scripts get on_<name>, see docs/ARCHITECTURE.md) -------
 ## The default battle scene is built and about to start (`scene`: per-battler nodes, popups).
@@ -109,6 +117,23 @@ var text_preprocessors: Array[Callable] = []
 ## Last level seen per actor (actor_levelled).
 var _levels: Dictionary = {}
 
+# --- engine-moment hooks (common events) --------------------------------------------------------
+## Common event triggers that run on engine moments instead of polling: the editor's Trigger
+## dropdown offers these below none/autorun/parallel (the hooks of YEP Utility Common Events,
+## Galv Auto Common Events and friends, built in). A trigger may also be an Array of hook names
+## to run one common event on several moments.
+const HOOK_TRIGGERS := [
+	"on_new_game", "on_load", "on_map_enter", "on_map_leave", "on_step", "on_region_enter",
+	"on_region_leave", "on_terrain_enter", "on_level_up", "on_state_added", "on_state_removed",
+	"on_actor_ko", "on_battle_start", "on_battle_end", "on_game_over", "on_menu_open",
+	"on_menu_close", "on_party_change", "on_vehicle_enter", "on_vehicle_exit",
+]
+## Steps counted towards each "every N steps" common event (id -> steps since it last fired).
+var _hook_steps: Dictionary = {}
+## Region and terrain the player is standing in, for the enter/leave moments (-1: not on a map).
+var _hook_region := -1
+var _hook_terrain := -1
+
 var _refresh_pending := false
 
 
@@ -158,6 +183,7 @@ func boot(root := "res://rpg") -> void:
 	state.changed.connect(request_refresh)
 	state.actor_changed.connect(check_levels)
 	state.party_changed.connect(check_levels)
+	_connect_moment_hooks()
 	state.new_game()
 	_start_extensions()
 	reset_level_tracking()
@@ -316,6 +342,8 @@ func _load_rules() -> void:
 		rules = rs.load_rules(rules_name, data)
 	if rules != null and rng != null and "rng" in rules:
 		rules.rng = rng
+	if rules != null and "rpg" in rules:
+		rules.rpg = self
 
 
 func battler_script() -> Script:
@@ -385,6 +413,193 @@ func run_commands(commands: Array, owner: Dictionary = {"kind": "api"}, event: N
 	return await t.wait()
 
 
+# --- engine-moment hooks (issue #52) -------------------------------------------------------------
+
+## Connects the engine's moment signals to the common event hooks. Each handler feeds
+## trigger_hook(), which queues the matching common events on the main interpreter.
+func _connect_moment_hooks() -> void:
+	new_game_started.connect(func(): trigger_hook("on_new_game"))
+	game_loaded.connect(func(): trigger_hook("on_load"))
+	map_entered.connect(_on_hook_map_entered)
+	map_left.connect(_on_hook_map_left)
+	player_stepped.connect(_on_hook_player_stepped)
+	menu_opened.connect(func(_menu): trigger_hook("on_menu_open"))
+	menu_closed.connect(func(): trigger_hook("on_menu_close"))
+	actor_levelled.connect(_on_hook_actor_levelled)
+	actor_state_changed.connect(_on_hook_actor_state_changed)
+	state.party_changed.connect(func(): trigger_hook("on_party_change"))
+	vehicle_entered.connect(func(kind): trigger_hook("on_vehicle_enter", {"vehicle": kind, "map": _hook_map_now()}))
+	vehicle_exited.connect(func(kind): trigger_hook("on_vehicle_exit", {"vehicle": kind, "map": _hook_map_now()}))
+
+
+## The map the moment happened on ("" off the maps).
+func _hook_map_now() -> String:
+	var m := current_map()
+	return str(m.map_id) if m != null and "map_id" in m else ""
+
+
+func _on_hook_map_entered(map_id: String) -> void:
+	# Seed the region/terrain trackers with where the player stands, so the first step does not
+	# falsely "enter" the region they are already in.
+	var m := current_map()
+	if m != null and game != null and is_instance_valid(game) and game.player != null and m.has_method("region_at"):
+		_hook_region = int(m.region_at(game.player.cell))
+		_hook_terrain = int(m.terrain_at(game.player.cell))
+	else:
+		_hook_region = -1
+		_hook_terrain = -1
+	_hook_steps.clear()
+	trigger_hook("on_map_enter", {"map": map_id})
+
+
+func _on_hook_map_left(map_id: String) -> void:
+	# Leaving a map is covered by on_map_leave; the region trackers just reset.
+	_hook_region = -1
+	_hook_terrain = -1
+	trigger_hook("on_map_leave", {"map": map_id})
+
+
+func _on_hook_player_stepped(cell: Vector2i, region: int, terrain: int) -> void:
+	var map_id := _hook_map_now()
+	if region != _hook_region:
+		# Region 0 is "no region": stepping out of a real one fires on_region_leave for the old
+		# one, stepping into a real one fires on_region_enter.
+		if _hook_region > 0:
+			trigger_hook("on_region_leave", {"region": _hook_region, "map": map_id, "x": cell.x, "y": cell.y})
+		if region > 0:
+			trigger_hook("on_region_enter", {"region": region, "map": map_id, "x": cell.x, "y": cell.y})
+		_hook_region = region
+	if terrain != _hook_terrain:
+		if terrain > 0:
+			trigger_hook("on_terrain_enter", {"terrain": terrain, "map": map_id, "x": cell.x, "y": cell.y})
+		_hook_terrain = terrain
+	trigger_hook("on_step", {"map": map_id, "region": region, "terrain": terrain, "x": cell.x, "y": cell.y})
+
+
+func _on_hook_actor_levelled(actor_id: String, old_level: int, new_level: int) -> void:
+	if new_level > old_level:
+		trigger_hook("on_level_up", {"actor": actor_id, "old_level": old_level, "new_level": new_level, "map": _hook_map_now()})
+
+
+func _on_hook_actor_state_changed(battler: Variant, state_id: String, added: bool) -> void:
+	var actor_id := ""
+	var is_actor := true
+	var death := "knockout"
+	if battler is Object:
+		if "kind" in battler:
+			is_actor = str(battler.kind) == "actor"
+		if "id" in battler:
+			actor_id = str(battler.id)
+		if "death_state" in battler:
+			death = str(battler.death_state)
+	elif battler is Dictionary:
+		actor_id = str(battler.get("id", ""))
+		is_actor = str(battler.get("kind", "actor")) == "actor"
+	if not is_actor:
+		return
+	var info := {"actor": actor_id, "state": state_id, "map": _hook_map_now()}
+	# Knockout is its own moment, and it fires first: the state-added hook of the death state
+	# then still tells the whole story.
+	if added and state_id == death:
+		trigger_hook("on_actor_ko", info)
+	trigger_hook("on_state_added" if added else "on_state_removed", info)
+
+
+## Queues every common event whose trigger names `hook` (and whose switch condition and filters
+## match) on the main interpreter. The events queue in common_events.json order and never
+## overwrite each other; the moment's data is readable in the event through game data "hook.*".
+func trigger_hook(hook: String, info: Dictionary = {}) -> void:
+	if data == null or data.common_events.is_empty():
+		return
+	for id in data.common_events:
+		var ce: Dictionary = data.common_events[id]
+		if not _ce_hooks(ce).has(hook) or not _common_active(ce) or not _hook_filters_match(ce, hook, info):
+			continue
+		if hook == "on_step":
+			# "Every N steps": the counter is per common event, so events with different
+			# intervals coexist. The step that reaches N fires the event and resets the count.
+			var every := maxi(1, int(ce.get("hook_every", 1)))
+			var n := int(_hook_steps.get(id, 0)) + 1
+			if n < every:
+				_hook_steps[id] = n
+				continue
+			_hook_steps[id] = 0
+		_queue_hook(id, ce, hook, info)
+
+
+## The moments that cannot wait for the main interpreter to free up (by the time a queued run
+## got its turn, the battle would already be over, the Game Over screen already up): each
+## matching common event runs to completion, in file order, before this returns. Battle
+## Processing and the game-over flow call this.
+func run_hook_common_events(hook: String, info: Dictionary = {}) -> void:
+	if data == null or data.common_events.is_empty():
+		return
+	for id in data.common_events:
+		var ce: Dictionary = data.common_events[id]
+		if not _ce_hooks(ce).has(hook) or not _common_active(ce) or not _hook_filters_match(ce, hook, info):
+			continue
+		var owner := _hook_owner(id, hook, info)
+		var interp := RPGInterpreter.new(self, owner, null)
+		var r: RPGResult = await interp.run(ce.get("commands", []))
+		if r.is_error():
+			report_error(r, owner)
+
+
+## One matched common event, queued. The key holds the same moment's duplicate at bay (step spam
+## queues one run, not one per step) while different moments and events each keep their ticket.
+func _queue_hook(id: String, ce: Dictionary, hook: String, info: Dictionary) -> void:
+	scheduler.request_main("hook:%s:%s" % [hook, id], ce.get("commands", []), _hook_owner(id, hook, info), null)
+
+
+func _hook_owner(id: String, hook: String, info: Dictionary) -> Dictionary:
+	return {"kind": "common_event", "id": id, "map": "", "event": "", "hook": info.duplicate(true).merged({"name": hook}, true)}
+
+
+## A common event's hook triggers: `trigger` is one hook name, or an Array of them (a classic
+## none/autorun/parallel trigger names no hooks).
+func _ce_hooks(ce: Dictionary) -> Array:
+	var t: Variant = ce.get("trigger", "none")
+	var out: Array = []
+	if t is Array:
+		for h in t:
+			if str(h).begins_with("on_"):
+				out.append(str(h))
+	elif str(t).begins_with("on_"):
+		out.append(str(t))
+	return out
+
+
+## The filter fields of a hooked common event against the moment's data. Blank and 0 filters
+## match anything; hook_map applies to every moment that happens on a map.
+func _hook_filters_match(ce: Dictionary, hook: String, info: Dictionary) -> bool:
+	var only_map := str(ce.get("hook_map", ""))
+	if only_map != "" and str(info.get("map", "")) != only_map:
+		return false
+	match hook:
+		"on_region_enter", "on_region_leave":
+			var want_region := int(ce.get("hook_region", 0))
+			return want_region <= 0 or int(info.get("region", 0)) == want_region
+		"on_terrain_enter":
+			var want_terrain := int(ce.get("hook_terrain", 0))
+			return want_terrain <= 0 or int(info.get("terrain", 0)) == want_terrain
+		"on_level_up", "on_actor_ko":
+			var want_actor := str(ce.get("hook_actor", ""))
+			return want_actor == "" or str(info.get("actor", "")) == want_actor
+		"on_state_added", "on_state_removed":
+			var want_state := str(ce.get("hook_state", ""))
+			if want_state != "" and str(info.get("state", "")) != want_state:
+				return false
+			var want_actor := str(ce.get("hook_actor", ""))
+			return want_actor == "" or str(info.get("actor", "")) == want_actor
+		"on_battle_end":
+			var want_outcome := str(ce.get("hook_outcome", ""))
+			return want_outcome == "" or str(info.get("outcome", "")) == want_outcome
+		"on_vehicle_enter", "on_vehicle_exit":
+			var want_vehicle := str(ce.get("hook_vehicle", ""))
+			return want_vehicle == "" or str(info.get("vehicle", "")) == want_vehicle
+	return true
+
+
 # --- refresh -------------------------------------------------------------------------------------
 
 ## Marks pages for re-checking at the next safe point.
@@ -414,7 +629,7 @@ func process_refresh() -> void:
 func _refresh_common_events() -> void:
 	for id in data.common_events:
 		var ce: Dictionary = data.common_events[id]
-		if ce.get("trigger", "none") != "parallel":
+		if str(ce.get("trigger", "none")) != "parallel":
 			continue
 		var key: String = "common:" + str(id)
 		var ok := _common_active(ce)
@@ -479,7 +694,7 @@ func _check_autoruns() -> void:
 	var ids: Array = data.common_events.keys()
 	for id in ids:
 		var ce: Dictionary = data.common_events[id]
-		if ce.get("trigger", "none") == "autorun" and _common_active(ce):
+		if str(ce.get("trigger", "none")) == "autorun" and _common_active(ce):
 			_note_autorun("common:" + id, "common event '%s'" % id)
 			scheduler.request_main("common:" + id, ce.get("commands", []), {"kind": "common_event", "id": id, "map": "", "event": ""}, null)
 			return

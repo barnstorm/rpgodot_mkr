@@ -26,6 +26,20 @@ const BUFF_EFFECT_KINDS := ["add_buff", "add_debuff", "remove_buff", "remove_deb
 const BUFF_EFFECT_LABELS := ["Add Buff", "Add Debuff", "Remove Buff", "Remove Debuff"]
 ## Built-in battle effects (RPGBattleEffects.BUILTIN) an animation field may name.
 const BUILTIN_ANIMATIONS := ["hit", "slash", "fire", "ice", "thunder", "heal"]
+## Engine-moment triggers for common events (issue #52), their editor labels, and the hooks
+## that happen on a map (the "Only map" filter applies to those). Mirrors RPGService.HOOK_TRIGGERS.
+const CE_HOOKS := ["on_new_game", "on_load", "on_map_enter", "on_map_leave", "on_step", "on_region_enter",
+	"on_region_leave", "on_terrain_enter", "on_level_up", "on_state_added", "on_state_removed",
+	"on_actor_ko", "on_battle_start", "on_battle_end", "on_game_over", "on_menu_open",
+	"on_menu_close", "on_party_change", "on_vehicle_enter", "on_vehicle_exit"]
+const CE_HOOK_LABELS := ["Moment: new game starts", "Moment: a save is loaded", "Moment: enter a map",
+	"Moment: leave a map", "Moment: every N steps", "Moment: enter a region", "Moment: leave a region",
+	"Moment: enter a terrain", "Moment: an actor levels up", "Moment: a state is added",
+	"Moment: a state is removed", "Moment: an actor is knocked out", "Moment: battle starts",
+	"Moment: battle ends", "Moment: game over", "Moment: menu opens", "Moment: menu closes",
+	"Moment: party changes", "Moment: board a vehicle", "Moment: leave a vehicle"]
+const CE_HOOKS_ON_MAP := ["on_map_enter", "on_map_leave", "on_step", "on_region_enter", "on_region_leave",
+	"on_terrain_enter", "on_vehicle_enter", "on_vehicle_exit"]
 ## Tileset asset profiles and their labels.
 const TILESET_PROFILES := ["rm2k", "xp", "vx", "mv"]
 const TILESET_PROFILE_LABELS := ["RPG Maker 2000/2003", "RPG Maker XP", "RPG Maker VX / VX Ace", "RPG Maker MV / MZ"]
@@ -250,8 +264,34 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 		"common_events":
 			f = [
 				_t("name", "Name"),
-				_c("trigger", "Trigger", ["none", "autorun", "parallel"], "none"),
-				{"key": "switch", "kind": "ref", "ref": "switch", "default": "", "label": "Condition switch", "show_if": {"key": "trigger", "equals": ["autorun", "parallel"]}},
+				{"key": "trigger", "kind": "choice", "options": ["none", "autorun", "parallel"] + CE_HOOKS, "default": "none", "label": "Trigger",
+					"option_labels": ["None", "Autorun (repeats while the switch is on)", "Parallel (runs alongside the game)"] + CE_HOOK_LABELS,
+					"help": "An engine moment queues this event when it happens, like the big common-event plugins of RPG Maker — no parallel event polling. For several moments on one event, set trigger to a list of them in rpg/common_events.json."},
+				{"key": "switch", "kind": "ref", "ref": "switch", "default": "", "label": "Condition switch",
+					"show_if": {"key": "trigger", "equals": ["autorun", "parallel"] + CE_HOOKS}},
+				{"key": "hook_map", "kind": "ref", "ref": "map", "default": "", "label": "Only map",
+					"help": "The moment only fires on this map. Blank: any map.",
+					"show_if": {"key": "trigger", "equals": CE_HOOKS_ON_MAP}},
+				{"key": "hook_every", "kind": "int", "default": 1, "min": 1, "max": 999, "label": "Every N steps",
+					"show_if": {"key": "trigger", "equals": "on_step"}},
+				{"key": "hook_region", "kind": "int", "default": 0, "min": 0, "max": 63, "label": "Region",
+					"help": "Only this region (RPG tab > Regions). 0: any region.",
+					"show_if": {"key": "trigger", "equals": ["on_region_enter", "on_region_leave"]}},
+				{"key": "hook_terrain", "kind": "int", "default": 0, "min": 0, "max": 99, "label": "Terrain",
+					"help": "Only this terrain (RPG tab > Tiles). 0: any terrain.",
+					"show_if": {"key": "trigger", "equals": "on_terrain_enter"}},
+				{"key": "hook_actor", "kind": "ref", "ref": "actor", "default": "", "label": "Only actor",
+					"help": "Blank: any actor.",
+					"show_if": {"key": "trigger", "equals": ["on_level_up", "on_state_added", "on_state_removed", "on_actor_ko"]}},
+				{"key": "hook_state", "kind": "ref", "ref": "state", "default": "", "label": "Only state",
+					"help": "Blank: any state.",
+					"show_if": {"key": "trigger", "equals": ["on_state_added", "on_state_removed"]}},
+				{"key": "hook_outcome", "kind": "choice", "options": ["", "win", "escape", "lose"],
+					"option_labels": ["Any outcome", "Victory", "Escape", "Defeat"], "default": "", "label": "Only outcome",
+					"show_if": {"key": "trigger", "equals": "on_battle_end"}},
+				{"key": "hook_vehicle", "kind": "choice", "options": ["", "boat", "ship", "airship"],
+					"option_labels": ["Any vehicle", "Boat", "Ship", "Airship"], "default": "", "label": "Only vehicle",
+					"show_if": {"key": "trigger", "equals": ["on_vehicle_enter", "on_vehicle_exit"]}},
 			]
 		"switches":
 			f = [_t("label", "Label"), _t("folder", "Folder"), _m("description", "Description")]
