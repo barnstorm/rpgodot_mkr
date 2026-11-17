@@ -112,6 +112,8 @@ var _started := false
 var _done := false
 var _atb_fills: Dictionary = {}        # RPGBattler -> gauge fill ColorRect (ATB)
 var _timed_escape := false             # the party command chose Escape (timed battles)
+var _menu_commands: Array = []         # the current actor's battle command list (issue #17)
+var _select_skill_type: Variant = null # skill-type id a Skill Type command filters the list by
 var _inputting: RPGBattler = null      # side view: the actor standing forward to choose
 var _order_strip: Control              # CTB turn order
 var _tab_down := false                 # Tab held (ATB: pass the turn on the press)
@@ -1857,20 +1859,77 @@ func _show_actor_command(keep_cursor := false) -> void:
 	target_arrow.visible = false
 	var b: RPGBattler = core.party[inputs[input_pos]]
 	_set_inputting(b)
-	var has_skills := false
-	for s in (rules().known_skills(b) if rules() != null else b.skills):
-		if str(record("skills", str(s)).get("occasion", "always")) in BATTLE_OCCASIONS:
-			has_skills = true
-	cmd_list.set_items([
-		{"text": term("attack", "Attack")},
-		{"text": term("skill", "Skill"), "enabled": has_skills and rules().restriction(b) != "cannot_use_skills"},
-		{"text": term("guard", "Guard")},
-		{"text": term("item", "Item")},
-	], keep_cursor)
+	_menu_commands = _battle_command_list(b)
+	var items := []
+	for cmd in _menu_commands:
+		items.append(_menu_item(b, cmd))
+	cmd_list.set_items(items, keep_cursor)
 	cmd_list.active = true
 	_place_status_cursor(core.party.find(b))
 	log_win.visible = true
 	log_label.text = b.name
+
+
+## The actor's battle command list: the rules resolve the actor record's, else its class's, else
+## the default menu (issue #17). Without rules it stays the classic four.
+func _battle_command_list(b: RPGBattler) -> Array:
+	var r := rules()
+	if r != null and r.has_method("battle_commands"):
+		return r.battle_commands(b)
+	return [{"kind": "attack"}, {"kind": "skill"}, {"kind": "guard"}, {"kind": "item"}]
+
+
+## One battle command as a menu entry: the terms table names the built-ins (the plain menu
+## terms — attack "Attack" — not the battle log lines), a Skill Type command its Types name,
+## and an Event command the name it was given. Sealed skills or nothing usable disable entries.
+func _menu_item(b: RPGBattler, cmd: Dictionary) -> Dictionary:
+	var r := rules()
+	var sealed: bool = r != null and r.restriction(b) == "cannot_use_skills"
+	var kind := str(cmd.get("kind", ""))
+	var label := str(cmd.get("name", ""))
+	var enabled := true
+	match kind:
+		"skill":
+			if label == "":
+				label = term("skill", "Skill")
+			enabled = _has_battle_skills(b, null) and not sealed
+		"skill_type":
+			var st := str(cmd.get("type", cmd.get("id", "")))
+			if label == "":
+				label = r.skill_type_label(st) if r != null and r.has_method("skill_type_label") else st
+			enabled = _has_battle_skills(b, st) and not sealed
+		"item":
+			if label == "":
+				label = term("item", "Item")
+			enabled = not _battle_items().is_empty()
+		"escape":
+			if label == "":
+				label = term("escape", "Escape")
+			enabled = core.can_escape
+		"guard":
+			if label == "":
+				label = term("guard", "Guard")
+		"row":
+			if label == "":
+				label = term("row", "Row")
+		"event":
+			if label == "":
+				label = str(cmd.get("id", "Event"))
+		_:
+			if label == "":
+				label = term("attack", "Attack")
+	return {"text": label, "enabled": enabled, "data": cmd}
+
+
+## Whether the battler has at least one battle-usable skill — all of them, or one type's.
+func _has_battle_skills(b: RPGBattler, skill_type: Variant) -> bool:
+	for s in (rules().known_skills(b) if rules() != null else b.skills):
+		var rec := record("skills", str(s))
+		if str(rec.get("occasion", "always")) not in BATTLE_OCCASIONS:
+			continue
+		if skill_type == null or str(rec.get("skill_type", "")) == str(skill_type):
+			return true
+	return false
 
 
 ## Side view: the target arrow over the actor picked as a target (the status row is highlighted too).
@@ -2050,26 +2109,36 @@ func _point_ally(i: int) -> void:
 
 func _actor_command(i: int) -> void:
 	var b := current_actor()
-	match i:
-		0:
-			play("decision")
+	var cmd: Dictionary = _menu_commands[i] if i >= 0 and i < _menu_commands.size() else {"kind": "attack"}
+	if not bool(cmd_list.current().get("enabled", true)):
+		play("buzzer")
+		return
+	play("decision")
+	match str(cmd.get("kind", "")):
+		"guard":
+			_commit({"kind": "guard"})
+		"skill":
+			_select_skill_type = null
+			_open_select("skill", b)
+		"skill_type":
+			_select_skill_type = str(cmd.get("type", cmd.get("id", "")))
+			_open_select("skill", b)
+		"item":
+			_open_select("item", b)
+		"escape":
+			if core.is_timed():
+				# The loop tries to escape once the command window is closed.
+				_close_timed_input()
+				_timed_escape = true
+			else:
+				_input_done.emit("escape")
+		"row":
+			_commit({"kind": "row"})
+		"event":
+			_commit({"kind": "event", "event": str(cmd.get("id", ""))})
+		_:
 			pending = {"kind": "attack"}
 			_choose_target("one_enemy", "actor")
-		1:
-			if not bool(cmd_list.current().get("enabled", true)):
-				play("buzzer")
-				return
-			play("decision")
-			_open_select("skill", b)
-		2:
-			play("decision")
-			_commit({"kind": "guard"})
-		3:
-			if _battle_items().is_empty():
-				play("buzzer")
-				return
-			play("decision")
-			_open_select("item", b)
 
 
 func _battle_items() -> Array:
@@ -2098,6 +2167,9 @@ func _open_select(kind: String, b: RPGBattler, keep := false) -> void:
 	if kind == "skill":
 		for s in (rules().known_skills(b) if rules() != null else b.skills):
 			var rec := record("skills", str(s))
+			# A Skill Type command lists only that type's skills (issue #17).
+			if _select_skill_type != null and str(rec.get("skill_type", "")) != str(_select_skill_type):
+				continue
 			var cost: Dictionary = rec.get("cost", {})
 			var cost_text := ""
 			for res in cost:

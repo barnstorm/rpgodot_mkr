@@ -14,6 +14,7 @@
 		{"id": "attack", "name": "Attack command", "notes": "", "category": "menu", "custom": {}, "text": "Attack"},
 		{"id": "guard", "name": "Guard command", "notes": "", "category": "menu", "custom": {}, "text": "Guard"},
 		{"id": "escape", "name": "Escape command", "notes": "", "category": "menu", "custom": {}, "text": "Escape"},
+		{"id": "row", "name": "Row command", "notes": "", "category": "menu", "custom": {}, "text": "Row"},
 		{"id": "buy", "name": "Buy command", "notes": "", "category": "menu", "custom": {}, "text": "Buy"},
 		{"id": "sell", "name": "Sell command", "notes": "", "category": "menu", "custom": {}, "text": "Sell"},
 		{"id": "cancel", "name": "Cancel command", "notes": "", "category": "menu", "custom": {}, "text": "Cancel"},
@@ -64,6 +65,7 @@
 		{"id": "battle_learned", "name": "Battle message: learned", "notes": "", "category": "battle", "custom": {}, "text": "%1 learned %2!"},
 		{"id": "battle_slip", "name": "Battle message: slip", "notes": "", "category": "battle", "custom": {}, "text": "%1 takes %2 damage from %3!"},
 		{"id": "battle_nothing", "name": "Battle message: nothing", "notes": "", "category": "battle", "custom": {}, "text": "Nothing happened."},
+		{"id": "battle_row_move", "name": "Battle message: change row", "notes": "", "category": "battle", "custom": {}, "text": "%1 changes row."},
 		{"id": "inn_1", "name": "Inn message style 1", "notes": "", "category": "inn", "custom": {}, "text": "Welcome! A room is %1 \\G a night. Will you be staying?"},
 		{"id": "inn_2", "name": "Inn message style 2", "notes": "", "category": "inn", "custom": {}, "text": "A room costs %1 \\G. Stay the night?"},
 		{"id": "inn_no_gold", "name": "Inn: not enough gold", "notes": "", "category": "inn", "custom": {}, "text": "Sorry, you don't have enough \\G."}

@@ -292,7 +292,7 @@ func set_action(actor_index: int, action: Dictionary) -> bool:
 		return false
 	var kind := str(action.get("kind", ""))
 	match kind:
-		"attack", "guard", "wait":
+		"attack", "guard", "wait", "row", "event":
 			pass
 		"escape":
 			if not can_escape:
@@ -558,6 +558,15 @@ func _execute_simple(b: RPGBattler, kind: String, res: Dictionary, p_action: Dic
 				res.lines.append(rules.term("transform", [nb.name]))
 			else:
 				res.lines.append(rules.term("wait", [b.name]))
+		"row":
+			# Rows (2003): the battler swaps front and back rows.
+			b.row = 1 - b.row
+			res.lines.append(rules.term("row_move", [b.name]))
+			_record_last_used(b, kind, {}, [])
+		"event":
+			# Link to Event (2003): the choice only marks itself as a command_used this turn (with
+			# the event's id); the troop pages conditioned on it run at the after_action checkpoint.
+			res["event"] = str(p_action.get("event", ""))
 		_:
 			res.lines.append(rules.term("wait", [b.name]))
 	# A guard targets its user; escape and wait target nothing. Neither leaves the last action's
@@ -1581,7 +1590,9 @@ func _page_condition(c: Dictionary, checkpoint_kind := "") -> bool:
 			return false
 		"command_used":
 			for u in _used_commands.get(str(c.get("id", "")), []):
-				if str(u.get("kind", "")) != str(c.get("command", "")):
+				var want_cmd := str(c.get("command", ""))
+				# An Event battle command also answers to its own id ("transform"), not just "event".
+				if str(u.get("kind", "")) != want_cmd and str(u.get("event", "")) != want_cmd:
 					continue
 				var want := str(c.get("skill", ""))
 				if want == "" or str(u.get("skill", "")) == want:
@@ -1624,11 +1635,15 @@ func _mp_percent(b: RPGBattler) -> float:
 
 
 ## command_used conditions: remember the command an actor used this battle turn (a cancelled
-## action counts as none). skill is only set for skill commands.
+## action counts as none). skill is only set for skill commands; an Event command also carries
+## the id it was given in the battle command list.
 func _note_command(b: RPGBattler, res: Dictionary) -> void:
 	if not b.is_actor() or bool(res.get("cancelled", false)):
 		return
 	var used := {"kind": str(res.get("kind", "")), "skill": str(res.action.get("skill", ""))}
+	var ev := str(res.get("event", ""))
+	if ev != "":
+		used["event"] = ev
 	if not _used_commands.has(b.id):
 		_used_commands[b.id] = []
 	(_used_commands[b.id] as Array).append(used)

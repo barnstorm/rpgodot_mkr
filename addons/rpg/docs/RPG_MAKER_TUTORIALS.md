@@ -35,6 +35,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Key Input Processing (2000/2003) | The same (*message* category); the key codes match 2003's numbering, and the kit's rpg_* actions (menu, debug, through, overlay, or your own) can be accepted too |
 | Change Tile (2000/2003) | The same (*screen* category): replaces every tile of a layer matching a key, or sets the single cell at X, Y; **Keep** stores the change in the save (without it the map resets when reloaded, as in RPG Maker) |
 | Call Inn (2000/2003) | **Call Inn** (*party* category): the ask message from one of the two System styles (Terms), Yes/No with cancel as No, the can't-afford message, gold, fade, jingle (ME), a full Recover All and branches for stayed / didn't stay |
+| Battle commands (2003) | An actor's or class's **Battle commands** list builds the battle menu: Attack, Skill, a **Skill type** (only that type's skills; the VX Ace default menu when skill types are granted), Guard, Item, Escape, **Row** (swap front/back rows mid-battle; row rates scale physical damage dealt and taken) or **Event** (*Link to Event*: a menu entry the troop's battle events answer through the *Command used* condition, by its id or generically) |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
@@ -72,7 +73,7 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 
-With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace.
+With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace. When they are granted, the default battle menu follows Ace too: Attack, one command per skill type, Guard, Item — and a per-actor or per-class **Battle commands** list replaces it outright.
 
 Not covered yet: Fix Equip. Action Times+ repeats the same action.
 

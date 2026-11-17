@@ -967,13 +967,15 @@ func test_validator_checks_troop_condition_kinds() -> void:
 	assert_false(probs.any(func(p): return p.severity == "error"), str(probs))
 	var bad := _later_troop([{"id": "p", "conditions": [
 		{"kind": "enemy_turns", "index": 0, "op": "~=", "n": 2},
+		{"kind": "command_used", "id": "mira", "command": "Dance!"},
 		{"kind": "command_used", "id": "mira", "command": "dance"},
 		{"kind": "command_used", "id": "mira", "command": "skill"},
 		{"kind": "actor_mp", "id": "", "op": "<=", "percent": 50},
 	], "commands": []}])
 	var msgs := RPGValidator.structure("database:troops", {"schema_version": 1, "records": [bad]}, reg, "troops.json").map(func(p): return str(p.message))
 	assert_true(msgs.any(func(m): return m.contains("Unknown comparison '~='")), str(msgs))
-	assert_true(msgs.any(func(m): return m.contains("Unknown battle command 'dance'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("Unknown battle command 'Dance!'")), str(msgs))
+	assert_true(msgs.any(func(m): return m.contains("'dance' is not a built-in battle command")), str(msgs))
 	assert_true(msgs.any(func(m): return m.contains("needs the skill")), str(msgs))
 	assert_true(msgs.any(func(m): return m.contains("no valid ID")), str(msgs))
 	# Battle-only kinds do not work on map pages.
