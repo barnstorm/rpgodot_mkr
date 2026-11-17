@@ -496,20 +496,26 @@ func test_buff_turns_refresh_and_expiry() -> void:
 	rules.add_buff(eric, "def", 9)
 	assert_eq(rules.buff_level(eric, "def"), 0)
 	assert_false(eric.buffs.has("def"), "level 0 is no entry")
-	# The clock ticks at turn end and wears off with a "returned to normal" line.
+	# The clock ticks at turn end; the buff wears off at the end of the battler's next action
+	# (VX Ace's remove_buffs_auto, issue #152) with a "returned to normal" line.
 	var scout := rules.new_actor_battler("eric", 50)
 	rules.add_buff(scout, "agi", 2)
+	assert_eq(rules.tick_states(scout, "action_end").removed_buffs, [], "the action that cast it leaves it")
 	var out := rules.tick_states(scout, "turn_end")
 	assert_eq(out.removed_buffs, [], "one turn still stands")
 	assert_eq(int(scout.buffs.agi.turns), 1)
 	out = rules.tick_states(scout, "turn_end")
-	assert_eq(out.removed_buffs, ["agi"], "wears off when the clock runs out")
+	assert_eq(out.removed_buffs, [], "the clock has run out, the buff stands until the next action ends")
+	assert_eq(rules.buff_level(scout, "agi"), 1)
+	out = rules.tick_states(scout, "action_end")
+	assert_eq(out.removed_buffs, ["agi"], "wears off at the end of that action")
 	assert_eq(out.lines, ["Eric's Agility returned to normal!"], str(out.lines))
 	assert_eq(rules.buff_level(scout, "agi"), 0)
-	# The action_end pass leaves buffs alone; -1 never counts down; death and battle end clear.
+	# -1 never counts down or wears off; death and battle end clear.
 	rules.add_buff(scout, "agi", 3)
 	scout.buffs.agi.turns = -1
 	rules.tick_states(scout, "turn_end")
+	rules.tick_states(scout, "action_end")
 	assert_eq(rules.buff_level(scout, "agi"), 1, "until-removed stays")
 	rules.add_state(scout, "knockout")
 	assert_true(scout.buffs.is_empty(), "death clears buffs")

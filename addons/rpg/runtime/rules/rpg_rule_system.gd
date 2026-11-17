@@ -279,6 +279,19 @@ func recover_revives() -> bool:
 	return bool(definition.get("recover_revives", false))
 
 
+## When the turns of states and buffs count down, and when they wear off (issue #152).
+## "own_timing" (the default): a state counts down when its own timing comes, the end of the
+## battle turn or the end of its battler's action, and is removed as it reaches 0; buffs count
+## down and wear off at the end of the turn.
+## "turn_end" (VX Ace, MV): every state's and buff's turns count down at the end of the turn.
+## "End of the turn" states are removed there at 0; "End of the action" states and buffs are
+## removed at the end of their battler's next action once they are at 0. So a 1-turn Action End
+## state a battler puts on itself lasts through its next action, and a buff through one more
+## action than its turns.
+func state_countdown() -> String:
+	return str(definition.get("state_countdown", "own_timing"))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 
@@ -1149,12 +1162,14 @@ func can_act(b: RPGBattler) -> bool:
 ## End-of-turn or end-of-action processing for one battler: slip damage, regeneration and state
 ## durations. `timing` is "turn_end" (the battle turn ended: slip damage, regeneration and the
 ## countdown of "turn end" states, as in RPG Maker 2000) or "action_end" (one battler acted:
-## only "action end" states count down, as MV's Action End timing).
-## Returns {damage, removed_states, lines, knocked_out}.
+## only "action end" states count down). state_countdown() "turn_end" moves every countdown to
+## the end of the turn and leaves the action-end pass to remove what has run out, as VX Ace and
+## MV do. Returns {damage, removed_states, removed_buffs, lines, knocked_out}.
 func tick_states(b: RPGBattler, timing := "turn_end") -> Dictionary:
 	var out := {"damage": 0, "removed_states": [], "removed_buffs": [], "lines": [], "knocked_out": false}
 	if b.is_dead():
 		return out
+	var at_turn_end := state_countdown() == "turn_end"
 	if timing == "turn_end":
 		# Regeneration: resources with a "regen" formula (a = the battler), e.g. HP Regen traits.
 		# Negative regeneration never knocks out.
@@ -1192,23 +1207,34 @@ func tick_states(b: RPGBattler, timing := "turn_end") -> Dictionary:
 						out.knocked_out = true
 						out.lines.append(term("knockout", [b.name]))
 						return out
-		if s.turns > 0 and str(rec.get("auto_removal", "turn_end")) == timing:
+		var auto := str(rec.get("auto_removal", "turn_end"))
+		var ends := false
+		if at_turn_end:
+			# VX Ace / MV: update_state_turns at the turn's end for every timed state, then
+			# remove_states_auto for the timing that has come. A state never counted ("none")
+			# keeps its turns; -1 is "until removed".
+			if timing == "turn_end" and s.turns > 0 and auto != "none":
+				s.turns -= 1
+			ends = s.turns == 0 and auto == timing
+		elif s.turns > 0 and auto == timing:
 			s.turns -= 1
-			if s.turns == 0:
-				remove_state(b, s.id)
-				out.removed_states.append(s.id)
-				out.lines.append(_state_message(rec, "removed", b.name, s.id))
-	# Buffs/debuffs count down at the end of the battle turn (MV's updateBuffTurns; the action_end
-	# pass leaves them alone) and wear off with a "returned to normal" line. -1 never counts down.
-	if timing == "turn_end":
-		for stat in b.buffs.keys().duplicate():
-			var buff: Dictionary = b.buffs[stat]
-			if int(buff.get("turns", 0)) > 0:
-				buff.turns -= 1
-				if int(buff.turns) <= 0:
-					b.buffs.erase(stat)
-					out.removed_buffs.append(stat)
-					out.lines.append(term("buff_back", [b.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
+			ends = s.turns == 0
+		if ends:
+			remove_state(b, s.id)
+			out.removed_states.append(s.id)
+			out.lines.append(_state_message(rec, "removed", b.name, s.id))
+	# Buffs/debuffs count down at the end of the battle turn (MV's updateBuffTurns) and wear off
+	# with a "returned to normal" line: there and then, or under the "turn_end" countdown at the
+	# end of the battler's next action (remove_buffs_auto). -1 never counts down.
+	for stat in b.buffs.keys().duplicate():
+		var buff: Dictionary = b.buffs[stat]
+		if timing == "turn_end" and int(buff.get("turns", 0)) > 0:
+			buff.turns -= 1
+		var worn: bool = buff.has("turns") and int(buff.turns) == 0
+		if worn and timing == ("action_end" if at_turn_end else "turn_end"):
+			b.buffs.erase(stat)
+			out.removed_buffs.append(stat)
+			out.lines.append(term("buff_back", [b.name, str(_stat_defs.get(stat, {}).get("label", stat))]))
 	return out
 
 

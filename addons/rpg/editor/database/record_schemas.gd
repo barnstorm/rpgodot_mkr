@@ -207,8 +207,8 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_i("turns_max", "At most (turns)", 1, 1, 999).merged({"show_if": {"key": "duration", "equals": "turns"}, "drop_hidden": true, "not_below": "turns_min"}),
 				_c("auto_removal", "Wears off", ["turn_end", "action_end", "none"], "turn_end").merged({
 					"show_if": {"key": "duration", "equals": "turns"}, "drop_hidden": true,
-					"option_labels": ["End of the turn", "End of the battler's action (MV style)", "Never (only an effect removes it)"],
-					"help": "When the turns count down. End of the turn: once per battle turn, together with slip damage and regeneration (timed battles: after the battler's own turn). End of the action: right after the battler acts (RPG Maker MV's Action End). Never: the turns are kept but never counted. Re-adding a state resets its turns with a fresh roll; durations never stack."}),
+					"option_labels": ["End of the turn", "End of the battler's action (Action End)", "Never (only an effect removes it)"],
+					"help": "When the state wears off. End of the turn: with the battle turn, together with slip damage and regeneration (timed battles: after the battler's own turn). End of the action: when the battler's action ends (RPG Maker VX Ace / MV's Action End). Under the VX Ace rules the turns count down at the end of each turn and an Action End state goes at the end of the battler's next action once they have run out, so a 1-turn state a battler puts on itself lasts through its next action; under the Classic rules it counts down right after each of the battler's actions. Never: the turns are kept but never counted. Re-adding a state resets its turns with a fresh roll; durations never stack."}),
 				_i("remove_on_damage", "Chance removed by damage %", 0, 0, 100),
 				_obj("messages", "Messages (%1 = name)", [_t("added", "When added"), _t("removed", "When removed")]),
 				{"key": "slip", "kind": "object", "default": null, "off_value": {}, "toggle_label": "Takes damage at the end of each turn", "label": "Damage each turn", "fields": [
