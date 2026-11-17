@@ -7,6 +7,7 @@ Codes in **Show Text** and the other message commands are replaced when the text
 | Code | Shows / does |
 | --- | --- |
 | `\V[id]` | The value of variable `id` |
+| `\E[name]` | A self variable of the event showing the text: `\E[times_opened]`. Also `\E[event/name]` for another event on this map, and `\E[map/event/name]` for any event anywhere |
 | `\S[id]` | `ON` or `OFF`: the state of switch `id` |
 | `\N[actor_id]` | The name of the actor, as it is now (after *Change Name*) |
 | `\P[n]` | The name of party member *n* (1 is the leader) |

@@ -32,6 +32,10 @@ var screen_position := Vector2.ZERO
 var hidden := false          ## enemy not yet appeared (troop member "hidden")
 var action := {}             ## action chosen for the current turn
 var escaped := false
+## The battler's own turn count (#11), incremented wherever its states tick: once per battle turn
+## in the turn system, once per own gauge fill in ATB/CTB — lost turns (a state, a failed escape)
+## count too. The enemy_turns / actor_turns page conditions read it.
+var turns_taken := 0
 
 
 func is_actor() -> bool:
@@ -82,8 +86,10 @@ func set_resource(res_id: String, value: int) -> void:
 	resources[res_id] = value
 
 
+## Dead means the death state: every path that empties the life resource adds it, and a battler
+## that resists it never gets it — it stays alive at 0 life (immortal, as VX Ace's Immortal flag).
 func is_dead() -> bool:
-	return has_state(death_state) or (resources.has(life_resource) and int(resources[life_resource]) <= 0)
+	return has_state(death_state)
 
 
 func is_alive() -> bool:

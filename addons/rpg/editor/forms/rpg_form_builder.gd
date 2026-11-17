@@ -45,10 +45,20 @@ const COMMAND_LIST_SCRIPT := "res://addons/rpg/editor/event_editor/rpg_command_l
 const TROOP_EDITOR_SCRIPT := "res://addons/rpg/editor/database/rpg_troop_editor.gd"
 const TILE_PICKER_SCRIPT := "res://addons/rpg/editor/forms/rpg_tile_picker.gd"
 ## Operand modes (RPGGameState.resolve_operand): a number, {variable}, {random: [a, b]},
-## {game_data: {kind, id?, field?}} (RPGGameState.game_data).
-const OPERAND_MODES := ["Number", "Variable", "Random", "Game data"]
-const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor"]
-const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor"]
+## {game_data: {kind, ...}} (RPGGameState.game_data), {pointer: id} (the value of the variable
+## whose id that variable holds), {self_variable: {map, event, name}} (an event's own value).
+const OPERAND_MODES := ["Number", "Variable", "Random", "Game data", "Pointer", "Self variable"]
+const GAME_DATA_KINDS := ["item", "weapon", "armor", "gold", "steps", "play_time", "party_size", "actor", "character", "map_id", "party_member", "last_used", "counter", "enemy"]
+const GAME_DATA_LABELS := ["Items held", "Weapons held", "Armour held", "Gold", "Steps", "Play time (seconds)", "Party size", "Actor", "Character", "Map id", "Party member", "Last used", "Counter", "Enemy"]
+## Character game data: targets (an event's ID is typed in directly) and fields.
+const CHAR_TARGETS := ["player", "this", "follower", "event"]
+const CHAR_TARGET_LABELS := ["Player", "This event", "Follower…", "Event…"]
+const CHARACTER_GAME_FIELDS := ["x", "y", "direction", "screen_x", "screen_y"]
+const CHARACTER_GAME_FIELD_LABELS := ["X (map cell)", "Y (map cell)", "Direction (2=down 4=left 6=right 8=up)", "Screen X (pixels)", "Screen Y (pixels)"]
+const LAST_USED_WHATS := ["item", "skill", "actor", "target_actor", "target_enemy"]
+const LAST_USED_LABELS := ["Item", "Skill", "Actor", "Target actor", "Target enemy"]
+const COUNTER_WHICHES := ["saves", "battles", "victories", "defeats", "escapes"]
+const COUNTER_LABELS := ["Saves", "Battles", "Victories", "Defeats", "Escapes"]
 
 ## Rule-system stat and resource lists per project root (actor fields of Game data operands).
 static var _rule_lists_cache: Dictionary = {}
@@ -60,11 +70,12 @@ const OP_LABELS := ["=", "≠", "<", "≤", ">", "≥"]
 const CONDITION_FIELDS := {
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
 	"variable": [{"key": "id", "kind": "ref", "ref": "variable", "label": "Variable", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}],
-	"self_switch": [{"key": "id", "kind": "choice", "options": ["A", "B", "C", "D"], "default": "A", "label": "Self switch"}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
+	"self_switch": [{"key": "id", "kind": "choice", "options": ["A", "B", "C", "D"], "default": "A", "label": "Self switch"}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}, {"key": "event", "kind": "text", "default": "", "label": "Event (blank = this event)"}, {"key": "map", "kind": "ref", "ref": "map", "label": "Map (blank = this map)"}],
+	"self_variable": [{"key": "name", "kind": "text", "label": "Name", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}, {"key": "event", "kind": "text", "default": "", "label": "Event (blank = this event)"}, {"key": "map", "kind": "ref", "ref": "map", "label": "Map (blank = this map)"}],
 	"item": [{"key": "item_kind", "kind": "choice", "options": ["items", "weapons", "armors"], "option_labels": ["Item", "Weapon", "Armour"], "default": "items", "label": "Kind"}, {"key": "id", "kind": "ref", "ref": "item", "ref_from": "item_kind", "label": "Which one", "required": true}, {"key": "count", "kind": "int", "default": 1, "min": 1, "label": "At least"}],
 	"actor": [
 		{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true},
-		{"key": "check", "kind": "choice", "options": ["in_party", "name", "class", "skill", "weapon", "armor", "state"], "option_labels": ["Is in the party", "Name is", "Class is", "Has learned a skill", "Has a weapon equipped", "Has armour equipped", "Is affected by a state"], "default": "in_party", "label": "Check"},
+		{"key": "check", "kind": "choice", "options": ["in_party", "name", "class", "skill", "weapon", "armor", "state", "level", "hp", "sp"], "option_labels": ["Is in the party", "Name is", "Class is", "Has learned a skill", "Has a weapon equipped", "Has armour equipped", "Is affected by a state", "Level is", "HP is", "SP is"], "default": "in_party", "label": "Check"},
 		{"key": "value", "kind": "bool", "default": true, "label": "is in the party", "show_if": {"key": "check", "equals": ["in_party", null]}},
 		{"key": "name", "kind": "text", "label": "Name", "required": true, "show_if": {"key": "check", "equals": "name"}},
 		{"key": "class", "kind": "ref", "ref": "class", "label": "Class", "required": true, "show_if": {"key": "check", "equals": "class"}},
@@ -72,22 +83,48 @@ const CONDITION_FIELDS := {
 		{"key": "weapon", "kind": "ref", "ref": "weapon", "label": "Weapon", "required": true, "show_if": {"key": "check", "equals": "weapon"}},
 		{"key": "armor", "kind": "ref", "ref": "armor", "label": "Armour", "required": true, "show_if": {"key": "check", "equals": "armor"}},
 		{"key": "state", "kind": "ref", "ref": "state", "label": "State", "required": true, "show_if": {"key": "check", "equals": "state"}},
+		{"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Compare", "show_if": {"key": "check", "equals": ["level", "hp", "sp"]}},
+		{"key": "value", "kind": "operand", "default": 1, "min": 0, "label": "Value", "show_if": {"key": "check", "equals": ["level", "hp", "sp"]}},
+		{"key": "percent", "kind": "bool", "default": false, "label": "Percent (of max)", "show_if": {"key": "check", "equals": ["hp", "sp"]}},
 	],
 	"gold": [{"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Gold"}, {"key": "value", "kind": "operand", "default": 0, "min": 0, "label": "Amount"}],
 	"vehicle": [{"key": "id", "kind": "choice", "options": ["boat", "ship", "airship", "none"], "option_labels": ["Boat", "Ship", "Airship", "On foot (no vehicle)"], "default": "boat", "label": "Player is riding"}],
 	"facing": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "is facing"}],
-	"button": [{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button held down"}],
+	"button": [
+		{"key": "button", "kind": "choice", "options": ["ok", "cancel", "dash", "up", "down", "left", "right"], "option_labels": ["OK (Z, Enter, Space)", "Cancel (X, Esc)", "Dash (Shift)", "Up", "Down", "Left", "Right"], "default": "ok", "label": "Button"},
+		{"key": "mode", "kind": "choice", "options": ["held", "pressed", "repeated"], "option_labels": ["is held down", "was just pressed", "is held down (repeating)"], "default": "held", "label": "Mode"},
+	],
+	"started_by": [{"key": "by", "kind": "choice", "options": ["action_button", "player_touch", "event_touch", "autorun", "parallel", "call"], "option_labels": ["The action button", "The player touching it", "It touching the player", "Autorun", "Parallel", "Call Event"], "default": "action_button", "label": "This event was started by"}],
+	"formula": [{"key": "text", "kind": "multiline", "label": "Formula", "required": true, "help": "The formula language (a and b are empty here): variables are v.name, e.g. v.chests >= 3; rand() and roll() use the project's RNG. A true result or non-zero number passes."}],
+	"can_pass": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "can step"}, {"key": "distance", "kind": "int", "default": 1, "min": 1, "max": 20, "label": "Cells"}],
 }
 ## Condition kinds offered only in Conditional Branch (they need a running event), not on pages.
-const BRANCH_ONLY_CONDITIONS := ["facing", "button"]
+const BRANCH_ONLY_CONDITIONS := ["facing", "button", "started_by", "can_pass", "actor_can_act", "enemy_can_act", "enemy_is_target"]
+## Condition kinds offered only on battle pages, not in Conditional Branch (a branch never runs
+## at that moment, so they could only ever be false).
+const PAGE_ONLY_CONDITIONS := ["turn_end"]
 ## Command fields that name a character on the map ("player", "this" or an event ID) and get a
 ## dropdown instead of a text box: {command type: [field keys]}.
 const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"], "show_balloon": ["target"]}
 const BATTLE_CONDITION_FIELDS := {
 	"turn": [{"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Turn"}, {"key": "every", "kind": "int", "default": 0, "min": 0, "label": "Then every (0 = once)"}],
 	"enemy_hp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"enemy_mp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "MP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"enemy_turns": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Turns"}, {"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Count"}],
 	"actor_hp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"actor_mp": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "MP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
+	"actor_turns": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Turns"}, {"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Count"}],
+	"command_used": [
+		{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true},
+		{"key": "command", "kind": "choice", "options": ["attack", "skill", "item", "guard", "escape"], "option_labels": ["Attack", "Skill", "Item", "Guard", "Escape"], "default": "attack", "label": "Used"},
+		{"key": "skill", "kind": "ref", "ref": "skill", "label": "Skill", "show_if": {"key": "command", "equals": "skill"}},
+	],
 	"switch": [{"key": "id", "kind": "ref", "ref": "switch", "label": "Switch", "required": true}, {"key": "value", "kind": "bool", "default": true, "label": "is ON"}],
+	"variable": [{"key": "id", "kind": "ref", "ref": "variable", "label": "Variable", "required": true}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "==", "label": "Compare"}, {"key": "value", "kind": "operand", "default": 0, "label": "Value"}],
+	"turn_end": [],
+	"actor_can_act": [{"key": "id", "kind": "ref", "ref": "actor", "label": "Actor", "required": true}],
+	"enemy_can_act": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
+	"enemy_is_target": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}],
 }
 
 var fields: Array = []
@@ -241,7 +278,7 @@ func missing_required() -> Array:
 	var out := []
 	for f in fields:
 		var k := str(f.get("key", ""))
-		if k == "" or not f.get("required", false) or not RPGCommand._visible(f, _value):
+		if k == "" or not f.get("required", false) or not RPGCommand._visible(f, _value, fields):
 			continue
 		var v: Variant = _value[k] if _value.has(k) else f.get("default")
 		if v == null or (typeof(v) == TYPE_STRING and str(v).strip_edges() == ""):
@@ -346,7 +383,7 @@ func _update_visibility() -> void:
 	for key in _editors:
 		var ed: Dictionary = _editors[key]
 		var f: Dictionary = ed.field
-		var vis := RPGCommand._visible(f, _value)
+		var vis := RPGCommand._visible(f, _value, fields)
 		if f.get("kind", "") == "commands" and options.get("hide_command_lists", false):
 			vis = false
 		if f.get("kind", "") == "variant" and variant_case(f, _value).is_empty():
@@ -678,6 +715,10 @@ static func preview_text(text: String, p_data: RPGProjectData) -> String:
 
 func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var hb := HBoxContainer.new()
+	var mode := OptionButton.new()
+	mode.add_item("Fixed place")
+	mode.add_item("From variables")
+	mode.tooltip_text = "From variables: the map, x and y are read from variables at runtime (Memorize / Recall Place)"
 	var map := RPGRefPicker.new("map", data, [], false)
 	map.custom_minimum_size.x = 140
 	var x := SpinBox.new()
@@ -691,15 +732,35 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var pick := Button.new()
 	pick.text = "Pick on map…"
 	pick.tooltip_text = "Open the destination map and click the tile to land on"
+	# The "From variables" controls: where the map, x and y are read from (#16).
+	var vmap := RPGRefPicker.new("variable", data, [], false)
+	var vx := RPGRefPicker.new("variable", data, [], false)
+	var vy := RPGRefPicker.new("variable", data, [], false)
+	for pair in [[vmap, "map"], [vx, "x"], [vy, "y"]]:
+		pair[0].tooltip_text = "The variable holding the %s" % pair[1]
+	hb.add_child(mode)
 	hb.add_child(map)
 	hb.add_child(x)
 	hb.add_child(y)
+	hb.add_child(vmap)
+	hb.add_child(vx)
+	hb.add_child(vy)
 	hb.add_child(pick)
 	var state := {"v": null}
+	var apply_mode := func() -> void:
+		var fixed := mode.selected == 0
+		for c in [map, x, y, pick]:
+			c.visible = fixed
+		for c in [vmap, vx, vy]:
+			c.visible = not fixed
 	var read := func() -> Variant:
 		var out: Dictionary = state.v.duplicate(true) if state.v is Dictionary else {}
-		out["map"] = str(map.get_value())
-		out["position"] = [int(x.value), int(y.value)]
+		if mode.selected == 1:
+			out["map"] = {"variable": str(vmap.get_value())}
+			out["position"] = [{"variable": str(vx.get_value())}, {"variable": str(vy.get_value())}]
+		else:
+			out["map"] = str(map.get_value())
+			out["position"] = [int(x.value), int(y.value)]
 		return out
 	var emit := func(_a = null) -> void:
 		state.v = read.call()
@@ -707,11 +768,25 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	map.value_changed.connect(emit)
 	x.value_changed.connect(emit)
 	y.value_changed.connect(emit)
+	vmap.value_changed.connect(emit)
+	vx.value_changed.connect(emit)
+	vy.value_changed.connect(emit)
+	mode.item_selected.connect(func(_i: int) -> void:
+		apply_mode.call()
+		emit.call())
 	var setter := func(v: Variant) -> void:
 		state.v = v
-		if v is Dictionary:
+		var p: Variant = v.get("position", [0, 0]) if v is Dictionary else [0, 0]
+		var from_vars: bool = (v is Dictionary and v.get("map") is Dictionary) or (p is Array and p.any(func(i): return i is Dictionary))
+		mode.select(1 if from_vars else 0)
+		apply_mode.call()
+		if from_vars:
+			vmap.set_value(str(v.map.get("variable", "")) if v is Dictionary and v.map is Dictionary else "")
+			for pair in [[vx, 0], [vy, 1]]:
+				var item: Variant = p[pair[1]] if p is Array and p.size() > pair[1] else null
+				pair[0].set_value(str(item.variable) if item is Dictionary and item.has("variable") else "")
+		elif v is Dictionary:
 			map.set_value(str(v.get("map", "")))
-			var p: Variant = v.get("position", [0, 0])
 			if p is Array and p.size() == 2:
 				x.set_value_no_signal(float(p[0]))
 				y.set_value_no_signal(float(p[1]))
@@ -719,6 +794,7 @@ func _location_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 			map.set_value("")
 			x.set_value_no_signal(0)
 			y.set_value_no_signal(0)
+	apply_mode.call()
 	pick.pressed.connect(func():
 		var cb := func(map_id: String, cell: Vector2i) -> void:
 			if map_id == "":
@@ -811,7 +887,7 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var mode := OptionButton.new()
 	for m in OPERAND_MODES:
 		mode.add_item(m)
-	mode.tooltip_text = "A fixed number, a variable's value, a random number, or game data (items held, gold, an actor's level...)"
+	mode.tooltip_text = "A fixed number, a variable's value, a random number, game data (items held, gold, an actor's level...), a variable chosen by another variable, or an event's self variable"
 	var sb := SpinBox.new()
 	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sb.min_value = float(f.get("min", -9999999))
@@ -840,8 +916,17 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	var gfield := OptionButton.new()
 	gfield.tooltip_text = "Which number of the actor"
 	var lists := rule_lists(data)
+	# Actor fields: level, EXP, equip slots (the slot's name is the field: the item id in it),
+	# resources, then stats.
 	var field_ids: Array = ["level", "exp"]
 	var field_labels: Array = ["Level", "Experience"]
+	if data != null:
+		for a in data.db.get("actors", {}).values():
+			if a is Dictionary and a.get("equips") is Dictionary:
+				for slot in a.equips:
+					if not field_ids.has(str(slot)):
+						field_ids.append(str(slot))
+						field_labels.append(str(slot).capitalize())
 	for r in lists.resources:
 		field_ids.append(str(r.id))
 		field_labels.append(str(r.get("label", r.id)))
@@ -851,9 +936,66 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 			field_labels.append(str(st.get("label", st.id)))
 	for i in field_ids.size():
 		gfield.add_item(field_labels[i])
-	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield]:
+	# Enemy fields: its resources and stats (enemies have no level or EXP to read).
+	var enemy_ids: Array = []
+	var enemy_labels: Array = []
+	for r in lists.resources:
+		enemy_ids.append(str(r.id))
+		enemy_labels.append(str(r.get("label", r.id)))
+	for st in lists.stats:
+		if not enemy_ids.has(str(st.id)):
+			enemy_ids.append(str(st.id))
+			enemy_labels.append(str(st.get("label", st.id)))
+	# Pointer: the variable whose value is the id of the real source variable.
+	var pp := RPGRefPicker.new("variable", data, [], false)
+	# Character: which character (an event's ID is typed in), then which position number.
+	var ct := OptionButton.new()
+	for l in CHAR_TARGET_LABELS:
+		ct.add_item(l)
+	var ce := LineEdit.new()
+	ce.placeholder_text = "Event ID"
+	ce.custom_minimum_size.x = 90.0
+	var fi := SpinBox.new()
+	fi.min_value = 0
+	fi.max_value = 99
+	fi.prefix = "number"
+	fi.tooltip_text = "Which follower (0 is right behind the player)"
+	var cf := OptionButton.new()
+	for l in CHARACTER_GAME_FIELD_LABELS:
+		cf.add_item(l)
+	# Party member: the slot number (0 is the leader).
+	var pm := SpinBox.new()
+	pm.min_value = 0
+	pm.max_value = 99
+	pm.prefix = "slot"
+	# Last used (what the most recent battle action used and targeted) and play counters.
+	var lu := OptionButton.new()
+	for l in LAST_USED_LABELS:
+		lu.add_item(l)
+	var cn := OptionButton.new()
+	for l in COUNTER_LABELS:
+		cn.add_item(l)
+	# Enemy: which enemy (0 is the first) and which of its numbers.
+	var ei := SpinBox.new()
+	ei.min_value = 0
+	ei.max_value = 99
+	ei.prefix = "enemy #"
+	var ef := OptionButton.new()
+	for i in enemy_ids.size():
+		ef.add_item(enemy_labels[i])
+	# Self variable: an event's own named value (blank event and map = this event's).
+	var sv_name := LineEdit.new()
+	sv_name.placeholder_text = "name (times_opened)"
+	sv_name.tooltip_text = "The self variable's name (set by Control Variable with the Self variable target)"
+	sv_name.custom_minimum_size.x = 110.0
+	var sv_event := LineEdit.new()
+	sv_event.placeholder_text = "event"
+	sv_event.tooltip_text = "An event ID; blank means this event"
+	sv_event.custom_minimum_size.x = 90.0
+	var sv_map := RPGRefPicker.new("map", data)
+	for c in [mode, sb, vp, rlo, rhi, gk, gref, gfield, pp, ct, ce, fi, cf, pm, lu, cn, ei, ef, sv_name, sv_event, sv_map]:
 		hb.add_child(c)
-	var state := {"v": null, "fields": field_ids}
+	var state := {"v": null, "fields": field_ids, "enemy_fields": enemy_ids}
 	var gkind := func() -> String:
 		return GAME_DATA_KINDS[gk.selected] if gk.selected >= 0 else "gold"
 	var show := func() -> void:
@@ -862,10 +1004,25 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 		vp.visible = m == 1
 		rlo.visible = m == 2
 		rhi.visible = m == 2
+		pp.visible = m == 4
 		gk.visible = m == 3
 		var k: String = gkind.call()
 		gref.visible = m == 3 and k in ["item", "weapon", "armor", "actor"]
 		gfield.visible = m == 3 and k == "actor"
+		var is_char := m == 3 and k == "character"
+		var ct_sel := ct.selected if ct.selected >= 0 else 0
+		ct.visible = is_char
+		ce.visible = is_char and CHAR_TARGETS[ct_sel] == "event"
+		fi.visible = is_char and CHAR_TARGETS[ct_sel] == "follower"
+		cf.visible = is_char
+		pm.visible = m == 3 and k == "party_member"
+		lu.visible = m == 3 and k == "last_used"
+		cn.visible = m == 3 and k == "counter"
+		ei.visible = m == 3 and k == "enemy"
+		ef.visible = ei.visible
+		sv_name.visible = m == 5
+		sv_event.visible = m == 5
+		sv_map.visible = m == 5
 		if gref.visible:
 			gref.set_ref_kind(k)
 	var read := func() -> Variant:
@@ -883,16 +1040,42 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				var g: Dictionary = out3.get("game_data", {})
 				var k: String = gkind.call()
 				g["kind"] = k
+				for opt in ["id", "field", "target", "index", "slot", "what", "which"]:
+					g.erase(opt)
 				if k in ["item", "weapon", "armor", "actor"]:
 					g["id"] = str(gref.get_value()) if gref.get_value() != null else ""
-				else:
-					g.erase("id")
-				if k == "actor":
-					g["field"] = str(state.fields[gfield.selected]) if gfield.selected >= 0 else "level"
-				else:
-					g.erase("field")
+				match k:
+					"actor":
+						g["field"] = str(state.fields[gfield.selected]) if gfield.selected >= 0 else "level"
+					"character":
+						var t: String = CHAR_TARGETS[ct.selected] if ct.selected >= 0 else "player"
+						g["target"] = ce.text.strip_edges() if t == "event" else t
+						if t == "follower":
+							g["index"] = int(fi.value)
+						g["field"] = CHARACTER_GAME_FIELDS[cf.selected] if cf.selected >= 0 else "x"
+					"party_member":
+						g["slot"] = int(pm.value)
+					"last_used":
+						g["what"] = LAST_USED_WHATS[lu.selected] if lu.selected >= 0 else "item"
+					"counter":
+						g["which"] = COUNTER_WHICHES[cn.selected] if cn.selected >= 0 else "battles"
+					"enemy":
+						g["index"] = int(ei.value)
+						g["field"] = str(state.enemy_fields[ef.selected]) if ef.selected >= 0 else "hp"
 				out3["game_data"] = g
 				return out3
+			4:
+				var out4: Dictionary = state.v.duplicate(true) if state.v is Dictionary and state.v.has("pointer") else {}
+				out4["pointer"] = str(pp.get_value())
+				return out4
+			5:
+				var out5: Dictionary = state.v.duplicate(true) if state.v is Dictionary and state.v.get("self_variable") is Dictionary else {}
+				var sv: Dictionary = out5.get("self_variable", {})
+				sv["name"] = sv_name.text.strip_edges()
+				sv["event"] = sv_event.text.strip_edges()
+				sv["map"] = str(sv_map.get_value()) if sv_map.get_value() != null else ""
+				out5["self_variable"] = sv
+				return out5
 		return sb.value if is_float else int(sb.value)
 	var emit := func(_a = null) -> void:
 		show.call()
@@ -903,12 +1086,25 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 	vp.value_changed.connect(emit)
 	rlo.value_changed.connect(emit)
 	rhi.value_changed.connect(emit)
+	pp.value_changed.connect(emit)
 	gk.item_selected.connect(func(_i):
 		# A new kind starts without the old kind's record.
 		gref.set_value("")
 		emit.call())
 	gref.value_changed.connect(emit)
 	gfield.item_selected.connect(emit)
+	ct.item_selected.connect(emit)
+	ce.text_changed.connect(emit)
+	fi.value_changed.connect(emit)
+	cf.item_selected.connect(emit)
+	pm.value_changed.connect(emit)
+	lu.item_selected.connect(emit)
+	cn.item_selected.connect(emit)
+	ei.value_changed.connect(emit)
+	ef.item_selected.connect(emit)
+	sv_name.text_changed.connect(emit)
+	sv_event.text_changed.connect(emit)
+	sv_map.value_changed.connect(emit)
 	var setter := func(v: Variant) -> void:
 		state.v = v
 		if v is Dictionary and v.get("random") is Array:
@@ -929,6 +1125,39 @@ func _operand_editor(f: Dictionary, on_edit: Callable) -> Dictionary:
 				state.fields.append(fld)
 				gfield.add_item("⚠ %s" % fld)
 			gfield.select(state.fields.find(fld))
+			var t := str(g.get("target", "player"))
+			var ti := CHAR_TARGETS.find(t)
+			if ti < 0:
+				# An event id (or anything else): show it in the Event line.
+				ti = CHAR_TARGETS.find("event")
+				ce.text = t
+			ct.select(ti)
+			fi.set_value_no_signal(float(int(g.get("index", 0))))
+			var cfl := str(g.get("field", "x"))
+			var ci := CHARACTER_GAME_FIELDS.find(cfl)
+			cf.select(ci if ci >= 0 else 0)
+			pm.set_value_no_signal(float(int(g.get("slot", 0))))
+			var wl := LAST_USED_WHATS.find(str(g.get("what", "item")))
+			lu.select(wl if wl >= 0 else 0)
+			var cl := COUNTER_WHICHES.find(str(g.get("which", "battles")))
+			cn.select(cl if cl >= 0 else 0)
+			ei.set_value_no_signal(float(int(g.get("index", 0))))
+			var efl := str(g.get("field", "hp"))
+			var efi: int = state.enemy_fields.find(efl)
+			if efi < 0:
+				state.enemy_fields.append(efl)
+				ef.add_item("⚠ %s" % efl)
+				efi = state.enemy_fields.size() - 1
+			ef.select(efi)
+		elif v is Dictionary and v.has("pointer"):
+			mode.select(4)
+			pp.set_value(str(v.pointer))
+		elif v is Dictionary and v.get("self_variable") is Dictionary:
+			mode.select(5)
+			var sv: Dictionary = v.self_variable
+			sv_name.text = str(sv.get("name", ""))
+			sv_event.text = str(sv.get("event", ""))
+			sv_map.set_value(str(sv.get("map", "")))
 		elif v is Dictionary:
 			mode.select(1)
 			vp.set_value(str(v.get("variable", "")))

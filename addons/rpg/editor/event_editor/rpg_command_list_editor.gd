@@ -472,7 +472,9 @@ func _open_command_dialog(c: Dictionary, on_ok: Callable) -> ConfirmationDialog:
 	else:
 		var form := RPGFormBuilder.for_command(type, registry, data, {"hide_command_lists": true, "map_id": map_id, "inline_errors": false})
 		form.name = "Form"
-		form.set_value(c)
+		# Descriptor defaults first: commands saved before a field existed (or that omit the field
+		# its other fields' show_if reads) must still show those fields in the form.
+		form.set_value(cmd.with_defaults(c))
 		form.pick_location_requested.connect(func(cb, cur): pick_location_requested.emit(cb, cur))
 		form.route_preview_requested.connect(func(r): route_preview_requested.emit(r, str(form.get_value().get("target", "player")) if form.get_value() is Dictionary else "player"))
 		form.value_changed.connect(func(_k, _v): footer.text = form.problems_text())

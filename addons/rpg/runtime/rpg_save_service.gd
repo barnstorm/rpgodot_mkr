@@ -103,7 +103,7 @@ func build_save() -> Dictionary:
 		"timestamp": Time.get_datetime_string_from_system(true),
 		"unix_time": int(Time.get_unix_time_from_system()),
 		"play_time": rpg.state.play_time,
-		"map": {"id": m.map_id if m else "", "position": [p.cell.x, p.cell.y] if p else [0, 0], "facing": p.facing if p else "down"},
+		"map": {"id": m.map_id if m else "", "position": [p.cell.x, p.cell.y] if p else [0, 0], "facing": p.facing if p else "down", "camera": p.camera_save() if p else {}},
 		"state": rpg.state.to_dict(),
 		# With their positions (MV's saveBgm), so a load resumes the music where it was.
 		"audio": {"bgm": rpg.audio.save_bgm(), "bgs": rpg.audio.save_bgs()},
@@ -128,6 +128,9 @@ func save(slot: int) -> RPGResult:
 	var why := save_blocked_reason()
 	if why != "":
 		return RPGResult.error(why)
+	# The save-in-progress counts itself (RM2000's "number of saves" reads one higher during the
+	# save), so the bump happens before the state is captured below. Autosaves count too.
+	rpg.state.bump_counter("saves")
 	var data := build_save()
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var err := RPGJson.save_file(slot_path(slot), data)

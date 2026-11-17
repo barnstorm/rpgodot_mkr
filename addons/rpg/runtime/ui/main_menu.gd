@@ -744,6 +744,7 @@ func use_item(id: String, targets: Array) -> bool:
 		return false
 	if bool(record("items", id).get("consumable", true)):
 		rpg.state.change_items(id, "decrease", 1)
+	_note_use({"item": id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
 	play("heal")
@@ -764,6 +765,7 @@ func use_skill(user: Object, skill_id: String, targets: Array) -> bool:
 	if not effect:
 		return false
 	rules().pay_cost(user, action)
+	_note_use({"skill": skill_id}, user, targets)
 	for t in targets:
 		rpg.state.notify_actor_changed(t.id)
 	rpg.state.notify_actor_changed(user.id)
@@ -773,6 +775,17 @@ func use_skill(user: Object, skill_id: String, targets: Array) -> bool:
 
 func _had_effect(r: Dictionary) -> bool:
 	return RPGRuleSystem.had_effect(r)
+
+
+## Records the "last used" game data (#54): what was used, who used it, and the first target.
+func _note_use(what: Dictionary, user: Object, targets: Array) -> void:
+	if user != null and "id" in user:
+		what["actor"] = str(user.id)
+	for t in targets:
+		if t != null and "id" in t:
+			what["target_actor"] = str(t.id)
+			break
+	rpg.state.record_last_used(what)
 
 
 ## Reserves the action's Common Event effects (once per use, not per target). True when any.

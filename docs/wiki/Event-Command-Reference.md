@@ -2,13 +2,14 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 79 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 89 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
 | Command | ID | Fields |
 | --- | --- | --- |
 | **Input Number** | `input_number` | Store in, Digits |
+| **Select Item** | `select_item` | Store in, Which items |
 | **Show Balloon Icon** | `show_balloon` | Character, Balloon, Wait until done |
 | **Show Choices** | `show_choices` | Choices, Cursor starts on, When cancelled, On cancel |
 | **Show Scrolling Text** | `show_scrolling_text` | Text, Speed, No fast forward |
@@ -20,22 +21,25 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | --- | --- | --- |
 | **Break Loop** | `break_loop` |  |
 | **Call Common Event** | `call_common_event` | Common event |
+| **Call Event** | `call_event` | Event (This event / Event ID / From a variable), Event ID, Holds the event's id, Page |
 | **Comment** | `comment` | Comment |
 | **Conditional Branch** | `if` | If, Then, Else |
+| **Despawn Event** | `despawn_event` | Event (an ID, this, or a variable holding an ID) |
 | **Erase Event** | `erase_event` |  |
 | **Exit Event Processing** | `exit_event` |  |
 | **Jump to Label** | `jump_to_label` | Label name |
 | **Label** | `label` | Label name |
 | **Loop** | `loop` | Repeat |
+| **Spawn Event** | `spawn_event` | Template event, Template map, Cell, Store its ID in |
 | **Wait** | `wait` | Seconds |
 
 ## Switches and variables
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Control Self Switch** | `set_self_switch` | Self switch, ON, Event (blank = this event) |
+| **Control Self Switch** | `set_self_switch` | Action, Self switch, ON, Event (blank = this event), Map (blank = this map) |
 | **Control Switch** | `set_switch` | Switch, Set to |
-| **Control Variable** | `set_variable` | Variable, Operation, Value |
+| **Control Variable** | `set_variable` | Target (One variable / Range / Indirect / Self variable), Variable, From, To, Holds the target's id, Name, Event (blank = this event), Map (blank = this map), Operation, Value |
 | **Get Location Info** | `get_location_info` | Store in, Info, Layer, X, Y |
 
 ## Party
@@ -73,6 +77,7 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 | **Change Transparency** | `change_transparency` | Player is transparent |
 | **Change Vehicle Graphic** | `change_vehicle_graphic` | Vehicle, Graphic, Music while riding (blank = keep) |
 | **Get On/Off Vehicle** | `get_on_off_vehicle` |  |
+| **Memorize Place** | `memorize_place` | Store map in, Store x in, Store y in |
 | **Scroll Map** | `scroll_map` | Direction, Tiles, Speed, Wait until done |
 | **Set Event Location** | `set_event_location` | Event, Mode, Cell [x, y], Swap with event, Facing |
 | **Set Move Route** | `move_route` | Character, Route, Repeat, Skip if blocked, Wait until done |
@@ -119,10 +124,11 @@ There are 79 built-in commands. The *ID* is the command's `type` in the event JS
 
 | Command | ID | Fields |
 | --- | --- | --- |
-| **Battle Processing** | `battle` | Enemy group, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage, Store outcome in, If won, If escaped, If lost |
+| **Battle Processing** | `battle` | Enemy group source (Enemy group / Enemy group named by a variable / Random encounter on this map), Enemy group, Variable, Can escape, Continue when lost, Battle scene (blank = default), Background (blank = map's), Advantage (normal / preemptive / surprise / initiative / back attack / surround / pincer — a pincer also blocks escaping; see [Lesson 7](Lesson-7-Battles.md)), Store outcome in, If won, If escaped, If lost |
 | **Change Battle Background** | `change_battle_back` | Background (blank = map default) |
 | **Change Menu / Save Access** | `change_access` | Access to, Allowed |
 | **Enemy Appear** | `enemy_appear` | Enemy, Enemy # (1 = first in the group) |
+| **Force Flee** | `force_flee` | Who flees (Enemy # / Every enemy / The party), Enemy # (1 = first in the group) |
 | **End Battle** | `abort_battle` | Result (abort / win / lose), Give victory rewards |
 | **Game Over** | `game_over` |  |
 | **Name Input Processing** | `name_input` | Actor, Max characters |

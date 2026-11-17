@@ -41,7 +41,8 @@ The screenshots are produced by `tools/screenshot.gd` and `tools/editor_preview.
 1. Open the folder in Godot.
    - The **RPG** and **Database** tabs appear next to 2D / 3D / Script.
    - If they don't, enable *RPG Kit* in *Project > Project Settings > Plugins*. It turns on the Database tab by itself.
-   - To use the addon in your own Godot project, copy `addons/rpg/` and `addons/rpg_database/` into it (and `assets/starter/` for the starter art), enable the plugin, and press **Create RPG project** on the RPG tab. That writes a starter database, the Classic rules and a first map into `res://rpg/`. Pick a **Style** first: RPG Maker 2000/2003 (320×240), VX / VX Ace (544×416) or MV (816×624).
+   - To start your own game from the sample, choose **Project > New project...** on the RPG tab. Enter a name, choose a new or empty folder outside this project, and pick a **Style**: RPG Maker 2000/2003 (320×240), VX / VX Ace (544×416) or MV (816×624). This creates a separate Godot project with the kit, starter art, database and first map, and opens it in another editor window.
+   - To add the kit to an existing empty Godot project, copy `addons/rpg/` and `addons/rpg_database/` into it (and `assets/starter/` for the starter art), enable the plugin, and press **Create RPG project** on the RPG tab.
    - Coming from RPG Maker? [Following the RPG Maker tutorials in RPG Kit](addons/rpg/docs/RPG_MAKER_TUTORIALS.md) maps RPG Maker's menus, tabs and commands to RPG Kit's.
 2. **RPG tab: the map editor.**
    - It looks like RPG Maker's window. A menu bar (Project, Edit, Mode, Draw, Layer, Scale, Tools, Game, Help) and an icon toolbar sit above the map. **Maker view** hides Godot's own docks while you're on the RPG or Database tab; turn it off in *Project > Maker view*.
@@ -289,7 +290,7 @@ Helper scripts:
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 79 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
+| 1 | Event core | Done. JSON with stable IDs, interpreter, scheduler, cancellation, grid movement, 89 built-in commands including `run_scene`, labels and jumps, vehicles and the RPG Maker actor, map and screen commands |
 | 2 | Asset import (2000/2003) | Done for ChipSet, CharSet, FaceSet and System graphic, with passability overrides that survive reimport. The ChipSet layout follows public docs plus fixtures; see *Limitations* |
 | 3 | Main window and map editor | Done. Map tree and properties, all painting tools, autotiles, 4 layers, regions, shadows, event mode, overlays, Playtest |
 | 4 | Event editor | Done. Pages, form-built commands, pickers, move route editor, quick events, `project` extension |

@@ -52,9 +52,10 @@ static func apply_defaults(d: Dictionary, args: Dictionary) -> Dictionary:
 ## Structural checks against the descriptor. Returns an Array of {severity, field, message}.
 func validate(args: Dictionary) -> Array:
 	var problems := []
-	for f in desc.get("fields", []):
+	var fields: Array = desc.get("fields", [])
+	for f in fields:
 		var k: String = f.get("key", "")
-		if not _visible(f, args):
+		if not _visible(f, args, fields):
 			continue
 		var has := args.has(k) and args[k] != null
 		if f.get("required", false) and not has:
@@ -65,7 +66,7 @@ func validate(args: Dictionary) -> Array:
 		var v: Variant = args[k]
 		match f.get("kind", ""):
 			"int", "float":
-				if typeof(v) != TYPE_INT and typeof(v) != TYPE_FLOAT and not (v is Dictionary and (v.has("variable") or v.has("random") or v.has("game_data"))):
+				if typeof(v) != TYPE_INT and typeof(v) != TYPE_FLOAT and not (v is Dictionary and (v.has("variable") or v.has("pointer") or v.has("random") or v.has("game_data"))):
 					problems.append({"severity": "error", "field": k, "message": "'%s' must be a number." % f.get("label", k)})
 				elif typeof(v) != TYPE_DICTIONARY:
 					if f.has("min") and float(v) < float(f.min):
@@ -90,11 +91,20 @@ func validate(args: Dictionary) -> Array:
 	return problems
 
 
-static func _visible(f: Dictionary, args: Dictionary) -> bool:
+## Whether a field shows for these args. A show_if key the args do not carry falls back to that
+## field's descriptor default, so commands saved before a gated field existed still check the
+## branch the default picks (same as with_defaults).
+static func _visible(f: Dictionary, args: Dictionary, fields: Array = []) -> bool:
 	if not f.has("show_if"):
 		return true
 	var cond: Dictionary = f.show_if
-	var actual: Variant = args.get(cond.get("key", ""))
+	var gate := str(cond.get("key", ""))
+	var actual: Variant = args.get(gate)
+	if not args.has(gate):
+		for s in fields:
+			if s is Dictionary and str(s.get("key", "")) == gate and s.has("default"):
+				actual = s.default
+				break
 	if cond.has("equals"):
 		if cond.equals is Array:
 			return cond.equals.has(actual)
@@ -106,12 +116,20 @@ static func _visible(f: Dictionary, args: Dictionary) -> bool:
 static func describe_operand(v: Variant) -> String:
 	if v is Dictionary and v.has("variable"):
 		return "[%s]" % v.variable
+	if v is Dictionary and v.has("pointer"):
+		return "[*%s]" % v.pointer
+	if v is Dictionary and v.get("self_variable") is Dictionary:
+		var sv: Dictionary = v.self_variable
+		var who := str(sv.get("event", "this"))
+		if str(sv.get("map", "")) != "":
+			who = "%s@%s" % [who, sv.map]
+		return "%s.%s" % [who, sv.get("name", "?")]
 	if v is Dictionary and v.get("random") is Array and v.random.size() == 2:
 		return "random %s..%s" % [v.random[0], v.random[1]]
 	if v is Dictionary and v.get("game_data") is Dictionary:
 		var g: Dictionary = v.game_data
 		var bits := PackedStringArray([str(g.get("kind", ""))])
-		for k in ["id", "field"]:
+		for k in ["id", "target", "index", "slot", "what", "which", "field"]:
 			if str(g.get(k, "")) != "":
 				bits.append(str(g[k]))
 		return "(%s)" % " ".join(bits)
@@ -121,5 +139,5 @@ static func describe_operand(v: Variant) -> String:
 static func describe_location(v: Variant) -> String:
 	if v is Dictionary and v.has("map"):
 		var p: Array = v.get("position", [0, 0])
-		return "%s (%s, %s)" % [v.map, p[0], p[1]]
+		return "%s (%s, %s)" % [describe_operand(v.map), describe_operand(p[0]), describe_operand(p[1])]
 	return str(v)

@@ -212,11 +212,16 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 		rpg.state.change_items(id, "decrease", 1)
 		return true
 	core.item_refund = func(id: String) -> void: rpg.state.change_items(id, "increase", 1)
+	core.last_used_recorder = func(d: Dictionary) -> void: rpg.state.record_last_used(d)
 	core.switch_reader = func(id: String) -> bool: return rpg.state.get_switch(id)
+	core.switch_setter = func(id: String, value: bool) -> void: rpg.state.set_switch(id, value)
 	core.condition_reader = extension_condition
 	if rpg.has_method("battle_hook"):
 		core.hooks = rpg
 	core.checkpoint.connect(func(kind: String): _pending_checkpoints.append(kind))
+	# Transform: the member's sprite is rebuilt where the old one stood (deferred — the core
+	# emits mid-action, while this scene is still showing the old one).
+	core.enemy_transformed.connect(func(old_b, new_b): _rebuild_enemy_sprite.call_deferred(old_b, new_b))
 	_resolve_style()
 	core.battle_system = battle_system
 	core.atb_mode = atb_mode
@@ -400,12 +405,13 @@ func _make_backdrop(bg_name: String) -> void:
 
 func _make_enemies() -> void:
 	for e in core.enemies:
-		_make_enemy_node(e)
+		var spr := _build_enemy_sprite(e)
+		field.add_child(spr)
+		enemy_nodes[e] = spr
 
 
-## One enemy's sprite, from its record's battler graphic (or a silhouette), placed at its troop
-## position and centred on the stage. Transform Enemy rebuilds a slot's node with this.
-func _make_enemy_node(e: RPGBattler) -> TextureRect:
+## One enemy's sprite, laid out at its troop position (not yet added to the field).
+func _build_enemy_sprite(e: RPGBattler) -> TextureRect:
 	var rec := record("enemies", e.id)
 	var tex: Texture2D = rpg.ui.load_texture("battler", str(rec.get("battler", ""))) if rpg.ui and str(rec.get("battler", "")) != "" else null
 	if tex != null and RPGAssets.sheet_profile("battler", str(rec.get("battler", "")), str(rpg.data.profile.get("profile", "rm2k"))) == "rm2k":
@@ -431,19 +437,41 @@ func _make_enemy_node(e: RPGBattler) -> TextureRect:
 	var c: Vector2 = e.screen_position
 	if c == Vector2.ZERO:
 		c = Vector2(W / 2.0 + (e.index - (core.enemies.size() - 1) / 2.0) * 64, 100)
+	c = condition_enemy_position(c, e.index, core.advantage)
 	if battle_view == "side":
 		c = side_enemy_position(c)
 	# Centred on its troop position, but never below the stage floor or above its top edge.
 	var top := clampf(c.y - spr.size.y / 2, 2.0, maxf(2.0, FIELD_H - 4 - spr.size.y))
 	spr.position = Vector2(round(c.x - spr.size.x / 2), round(top))
+	if condition_mirrored(e.index, core.advantage):
+		spr.flip_h = true
 	spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	spr.visible = not e.hidden
 	var hue := float(rec.get("battler_hue", 0))
 	if hue != 0.0:
 		spr.self_modulate = Color.from_hsv(fposmod(hue / 360.0, 1.0), 0.35, 1.0)
-	field.add_child(spr)
-	enemy_nodes[e] = spr
 	return spr
+
+
+## Transform: the member's old sprite goes, the new record's takes its place in the field (same
+## draw order, same troop position, so it happens where the monster stood).
+func _rebuild_enemy_sprite(old_b: RPGBattler, new_b: RPGBattler) -> void:
+	if core == null or not is_inside_tree():
+		return
+	var old_spr: TextureRect = enemy_nodes.get(old_b)
+	var at := old_spr.get_index() if old_spr != null else -1
+	if old_spr != null:
+		enemy_nodes.erase(old_b)
+		old_spr.queue_free()
+	var spr := _build_enemy_sprite(new_b)
+	if at >= 0:
+		field.add_child(spr)
+		field.move_child(spr, at)
+	else:
+		field.add_child(spr)
+	enemy_nodes[new_b] = spr
+	_place_battler_nodes()
+	_refresh_status()
 
 
 ## Side view: a troop position (laid out for the front view across the whole 320 px stage) moved
@@ -451,6 +479,26 @@ func _make_enemy_node(e: RPGBattler) -> TextureRect:
 ## on the right.
 static func side_enemy_position(c: Vector2) -> Vector2:
 	return Vector2(round(18.0 + c.x * 0.52), c.y)
+
+
+## The 2003 battle starts move the enemies (#39): a back attack mirrors them to the far side of
+## the stage (they came from behind), a surround packs them around the middle (160 ± 16, as RPG
+## Maker spaces them), a pincer mirrors every other one so the group splits half and half.
+static func condition_enemy_position(c: Vector2, index: int, advantage: String) -> Vector2:
+	match advantage:
+		"back_attack":
+			return Vector2(W - c.x, c.y)
+		"surround":
+			return Vector2(W / 2.0 + (16.0 if index % 2 == 1 else -16.0), c.y)
+		"pincer":
+			return Vector2(W - c.x, c.y) if index % 2 == 0 else c
+	return c
+
+
+## True when the condition put this enemy on the far side, so its battler is mirrored to keep
+## facing the party.
+static func condition_mirrored(index: int, advantage: String) -> bool:
+	return advantage == "back_attack" or (advantage == "pincer" and index % 2 == 0)
 
 
 ## Side view: the band of the stage the party stands in (below the message line).
@@ -872,29 +920,31 @@ func _shake() -> void:
 func transform_enemy(member_index: int, enemy_id: String, hp_policy := "keep", clear_states := false) -> RPGBattler:
 	if core == null or member_index < 0 or member_index >= core.enemies.size():
 		return null
-	var b: RPGBattler = core.enemies[member_index]
-	var old_name := b.name
-	var result: RPGBattler = core.transform(member_index, enemy_id, hp_policy, clear_states)
+	var old_name := (core.enemies[member_index] as RPGBattler).name
+	var result: RPGBattler = core.transform_enemy((core.enemies[member_index] as RPGBattler).index, enemy_id, hp_policy, clear_states)
 	if result == null:
 		return null
-	var old: TextureRect = enemy_nodes.get(b)
-	if old != null:
-		old.queue_free()
-		enemy_nodes.erase(b)
-	var spr := _make_enemy_node(result)
-	if not result.hidden:
-		spr.modulate = Color(1, 1, 1, 0)
-		spr.visible = true
-		if auto or not is_inside_tree():
-			spr.modulate.a = 1.0
-		else:
-			spr.create_tween().tween_property(spr, "modulate:a", 1.0, 0.3)
-	_place_battler_nodes()
+	# The enemy_transformed signal swaps the sprite (deferred, same draw order and position);
+	# the fade-in queues behind it. Hidden members transform unseen, as they stay hidden.
+	_fade_in_enemy_node.call_deferred(result)
 	_refresh_order_strip()
 	refresh_after_event()
 	await say(_battle_term("transform", "%1 transformed into %2!", [old_name, result.name]), 0.45)
 	log_win.visible = false
 	return result
+
+
+## Transform Enemy fades the new sprite in where the old one stood (queued behind the deferred
+## enemy_transformed rebuild, so the node it fades is the new one).
+func _fade_in_enemy_node(b: RPGBattler) -> void:
+	var spr: TextureRect = enemy_nodes.get(b)
+	if spr == null or b.hidden:
+		return
+	spr.modulate = Color(1, 1, 1, 0)
+	if auto or not is_inside_tree():
+		spr.modulate.a = 1.0
+	else:
+		spr.create_tween().tween_property(spr, "modulate:a", 1.0, 0.3)
 
 
 ## Enemy Appear (event command): brings troop member `member_index` (-1: every hidden member)
@@ -921,6 +971,31 @@ func enemy_appear(member_index: int) -> Array:
 	if not shown.is_empty():
 		log_win.visible = false
 	return shown
+
+
+## Force Flee (event command): the party, every enemy, or enemy #`member_index` (-1: every
+## enemy) runs away. Enemies fade out, the order strip and status redraw, and the core ends the
+## battle when nothing is left to fight. Returns the battlers that fled.
+func enemy_flee(target: String, member_index := -1) -> Array:
+	if core == null:
+		return []
+	var fled: Array = core.force_flee(target, member_index)
+	for e in fled:
+		if not e.is_enemy():
+			continue
+		var s: TextureRect = enemy_nodes.get(e)
+		if s == null:
+			continue
+		if auto or not is_inside_tree():
+			s.visible = false
+		else:
+			var t := s.create_tween()
+			t.tween_property(s, "modulate:a", 0.0, 0.25)
+			t.tween_callback(func(): s.visible = false)
+	_place_battler_nodes()
+	_refresh_order_strip()
+	_refresh_status()
+	return fled
 
 
 func _collapse(b: RPGBattler) -> void:
@@ -1066,6 +1141,14 @@ func _run() -> void:
 			await say(_battle_term("preemptive", "%1 got the jump on the enemy!", [_party_name()]), 0.6)
 		"surprise":
 			await say(_battle_term("surprise", "%1 was taken by surprise!", [_party_name()]), 0.6)
+		"initiative":
+			await say(_battle_term("initiative", "%1 strikes first!", [_party_name()]), 0.6)
+		"back_attack":
+			await say(_battle_term("back_attack", "The party was attacked from behind!"), 0.6)
+		"surround":
+			await say(_battle_term("surround", "The party is surrounded!"), 0.6)
+		"pincer":
+			await say(_battle_term("pincer", "A pincer attack! There is no escaping!"), 0.6)
 	log_win.visible = false
 	if core.is_timed():
 		await _run_timed()
@@ -1105,20 +1188,15 @@ func _run() -> void:
 					await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 				if not is_inside_tree():
 					return
+			# States that wear off at the battler's action end (MV's Action End timing).
+			await _show_ticks(r.get("ticks", []))
 			await _flush_checkpoints()
 			if r.escaped or core.battle_over() != "":
 				break
 			r = core.next_action()
 		if core.battle_over() != "":
 			break
-		for t in core.end_turn():
-			for l in t.lines:
-				await say(l, 0.45)
-			if int(t.get("damage", 0)) > 0:
-				popup(t.battler, str(t.damage), Color.WHITE, "slip")
-			if t.get("knocked_out", false) and t.battler.is_enemy():
-				_collapse(t.battler)
-			_refresh_status()
+		await _show_ticks(core.end_turn())
 		await _flush_checkpoints()
 		_refresh_status()
 		log_win.visible = false
@@ -1126,6 +1204,18 @@ func _run() -> void:
 			await get_tree().process_frame
 	outcome = core.battle_over()
 	await _end_battle()
+
+
+## Shows end-of-action / end-of-turn state effects (slip damage, states wearing off, a knockout).
+func _show_ticks(ticks: Array) -> void:
+	for t in ticks:
+		for l in t.lines:
+			await say(l, 0.45)
+		if int(t.get("damage", 0)) > 0:
+			popup(t.battler, str(t.damage), Color.WHITE, "slip")
+		if t.get("knocked_out", false) and t.battler.is_enemy():
+			_collapse(t.battler)
+	_refresh_status()
 
 
 ## A battle term from the rule system (Terms record "battle_<key>"), or `fallback` when the
@@ -1212,14 +1302,7 @@ func _timed_turn(b: RPGBattler) -> void:
 			await run_page({"id": "common:" + str(ce_id), "commands": ce.get("commands", [])})
 		if not is_inside_tree():
 			return
-	for t in r.get("ticks", []):
-		for l in t.lines:
-			await say(l, 0.45)
-		if int(t.get("damage", 0)) > 0:
-			popup(t.battler, str(t.damage), Color.WHITE, "slip")
-		if t.get("knocked_out", false) and t.battler.is_enemy():
-			_collapse(t.battler)
-	_refresh_status()
+	await _show_ticks(r.get("ticks", []))
 	await _flush_checkpoints()
 	if r.get("turn_end", false) and core.battle_over() == "":
 		core.begin_turn()
@@ -1362,6 +1445,8 @@ func refresh_after_event() -> void:
 	for e in core.enemies:
 		if e.is_dead() and enemy_nodes.has(e) and enemy_nodes[e].visible:
 			_collapse(e)
+		elif e.escaped and enemy_nodes.has(e) and enemy_nodes[e].visible:
+			enemy_nodes[e].visible = false
 	_refresh_status()
 
 
@@ -1435,11 +1520,23 @@ func show_action(r: Dictionary) -> void:
 		if res.get("knocked_out", false) and t.is_enemy():
 			_collapse(t)
 		_refresh_status()
+	# Self-Destruct: the user goes with its blast.
+	if str(r.get("kind", "")) == "self_destruct" and user.is_enemy():
+		_collapse(user)
 	await _wait(0.2)
 	for i in range(1, lines.size()):
 		await say(lines[i], 0.5)
 	if side_actor and not r.get("escaped", false):
 		await _step(user, false)
+	# An enemy that ran (the 2003 basic action) fades out like Force Flee.
+	if user.is_enemy() and user.escaped and enemy_nodes.has(user):
+		var fs: TextureRect = enemy_nodes[user]
+		if auto or not is_inside_tree():
+			fs.visible = false
+		else:
+			var t := fs.create_tween()
+			t.tween_property(fs, "modulate:a", 0.0, 0.25)
+			t.tween_callback(func(): fs.visible = false)
 	_refresh_status()
 
 
@@ -1695,6 +1792,15 @@ func _show_party_command() -> void:
 ## `keep_cursor`: coming back from a sub-list or a target (cancel), the cursor stays on the
 ## command the player had picked, as in RPG Maker; a new actor's turn starts on Attack.
 func _show_actor_command(keep_cursor := false) -> void:
+	# A battle event (Force Flee on the party, a mid-input knockout) can take the remaining
+	# inputters out of the fight while the menus are open: skip them, and finish input at once
+	# when nobody is left to ask.
+	while input_pos < inputs.size() and (not core.party[inputs[input_pos]].is_active() or not rules().can_act(core.party[inputs[input_pos]])):
+		core.party[inputs[input_pos]].action = {}
+		input_pos += 1
+	if input_pos >= inputs.size():
+		_input_done.emit("fight")
+		return
 	phase = "actor"
 	cmd_win.visible = true
 	select_win.visible = false

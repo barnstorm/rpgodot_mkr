@@ -292,6 +292,13 @@ func test_enemy_conditions_and_slip_have_forms() -> void:
 	le.set_value([{"condition": {"kind": "turn", "every": 3, "n": 3}, "rating": 6, "skill": "attack"}])
 	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in action patterns")
 	assert_eq(le.get_value()[0].condition, {"kind": "turn", "every": 3, "n": 3}, "round trip")
+	le.set_value([
+		{"condition": {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "rating": 6, "skill": "attack"},
+		{"condition": {"kind": "mp", "op": "<", "percent": 25}, "rating": 6, "skill": "guard"},
+	])
+	assert_eq(_find(le, func(n): return n is TextEdit).size(), 0, "no raw JSON in the #9 conditions")
+	assert_eq(le.get_value()[0].condition, {"kind": "variable", "variable": "fish_caught", "op": ">=", "against": 3}, "variable round trip")
+	assert_eq(le.get_value()[1].condition, {"kind": "mp", "op": "<", "percent": 25}, "mp round trip")
 	le.queue_free()
 	await frames(1)
 
@@ -489,12 +496,74 @@ func test_vehicle_condition() -> void:
 	ce._on_kind(ce._kinds.find("vehicle"))
 	assert_eq(ce.get_value(), {"kind": "vehicle", "id": "boat"}, "new vehicle condition")
 	var out := []
-	RPGValidator._condition_structure({"kind": "vehicle", "id": "airship"}, "f", "r", "p", out, false)
+	RPGValidator._condition_structure({"kind": "vehicle", "id": "airship"}, "f", "r", "p", out, "map")
 	assert_eq(out.size(), 0, str(out))
-	RPGValidator._condition_structure({"kind": "vehicle", "id": "car"}, "f", "r", "p", out, false)
+	RPGValidator._condition_structure({"kind": "vehicle", "id": "car"}, "f", "r", "p", out, "map")
 	assert_eq(out.size(), 1, "unknown vehicle reported")
 	ce.queue_free()
 	await frames(1)
+
+
+func test_turn_end_battle_condition() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var ce := RPGConditionEditor.new(data, null, true)
+	tree.root.add_child(ce)
+	assert_has(ce._kinds, "turn_end", "battle pages offer Turn end")
+	ce.set_value({"kind": "turn_end"})
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "round trip with no fields")
+	ce._on_kind(ce._kinds.find("turn_end"))
+	assert_eq(ce.get_value(), {"kind": "turn_end"}, "picking Turn end needs no fields")
+	var out := []
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, "battle_page")
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._condition_structure({"kind": "turn_end"}, "f", "r", "p", out, "branch")
+	assert_eq(out.size(), 1, "turn end is not a branch condition")
+	ce.queue_free()
+	await frames(1)
+
+
+## The branch-only battle checks (#50): offered where they work, hidden where they cannot.
+func test_battle_branch_condition_kinds() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	# A Conditional Branch in a battle event: the battle table plus the branch-only checks.
+	var ce := RPGConditionEditor.new(data, null, true, {}, true)
+	tree.root.add_child(ce)
+	for k in ["turn", "enemy_hp", "actor_hp", "actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_has(ce._kinds, k, "battle branches offer %s" % k)
+	assert_false(ce._kinds.has("turn_end"), "turn end is never a branch")
+	ce.set_value({"kind": "actor_can_act", "id": "hero"})
+	assert_eq(ce.get_value(), {"kind": "actor_can_act", "id": "hero"}, "round trip")
+	ce._on_kind(ce._kinds.find("enemy_is_target"))
+	assert_eq(ce.get_value(), {"kind": "enemy_is_target", "index": 0}, "new condition defaults to the first enemy")
+	ce.queue_free()
+	await frames(1)
+	# A battle page: the branch-only checks are gone.
+	var page := RPGConditionEditor.new(data, null, true)
+	tree.root.add_child(page)
+	for k in ["actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_false(page._kinds.has(k), "battle pages do not offer %s" % k)
+	page.queue_free()
+	await frames(1)
+	# A branch on a map: none of the battle checks.
+	var map_branch := RPGConditionEditor.new(data, null, false, {}, true)
+	tree.root.add_child(map_branch)
+	for k in ["turn", "enemy_hp", "actor_hp", "turn_end", "actor_can_act", "enemy_can_act", "enemy_is_target"]:
+		assert_false(map_branch._kinds.has(k), "map branches do not offer %s" % k)
+	map_branch.queue_free()
+	await frames(1)
+	# The validator's view of the same split.
+	var out := []
+	RPGValidator._condition_structure({"kind": "actor_can_act", "id": "hero"}, "f", "r", "p", out, "battle")
+	assert_eq(out.size(), 0, str(out))
+	var bad_id := []
+	RPGValidator._condition_structure({"kind": "actor_can_act"}, "f", "r", "p", bad_id, "battle")
+	assert_eq(bad_id.size(), 1, "the actor is required")
+	var bad_index := []
+	RPGValidator._condition_structure({"kind": "enemy_can_act", "index": -1}, "f", "r", "p", bad_index, "common")
+	assert_eq(bad_index.size(), 1, "a negative enemy index is reported")
+	var as_page := []
+	RPGValidator._condition_structure({"kind": "enemy_is_target", "index": 0}, "f", "r", "p", as_page, "battle_page")
+	assert_eq(as_page.size(), 1, "branch-only kinds are not page conditions")
 
 
 func test_operand_editor_random_and_game_data() -> void:
@@ -550,6 +619,149 @@ func test_operand_editor_random_and_game_data() -> void:
 	assert_eq(out.size(), 0, str(out))
 	RPGValidator._operand_structure({"game_data": {"kind": "bogus"}}, "f", "r", "p", out)
 	assert_eq(out.size(), 1)
+	# The #54 operand shapes validate too: pointer sources and the new game data kinds.
+	RPGValidator._operand_structure({"pointer": "holder"}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	for kind in ["character", "map_id", "party_member", "last_used", "counter", "enemy"]:
+		RPGValidator._operand_structure({"game_data": {"kind": kind}}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	form.queue_free()
+	await frames(1)
+
+
+## #54: the operand editor's Pointer mode and the character / map / party member / last used /
+## counter / enemy game data kinds, plus their structure checks.
+func test_operand_editor_pointer_and_new_game_data() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup([{"key": "value", "kind": "operand", "default": 0, "label": "Value"}], data)
+	var ed := form.editor_for("value")
+	var mode: OptionButton = ed.get_child(0)
+	var pp: RPGRefPicker = ed.get_child(8)
+	var ct: OptionButton = ed.get_child(9)
+	var ce: LineEdit = ed.get_child(10)
+	var fi: SpinBox = ed.get_child(11)
+	var cf: OptionButton = ed.get_child(12)
+	var pm: SpinBox = ed.get_child(13)
+	var lu: OptionButton = ed.get_child(14)
+	var cn: OptionButton = ed.get_child(15)
+	var ei: SpinBox = ed.get_child(16)
+	var ef: OptionButton = ed.get_child(17)
+	# Pointer: the value of the variable whose id another variable holds.
+	form.set_value({"value": {"pointer": "counter"}})
+	assert_eq(mode.selected, 4)
+	assert_true(pp.visible)
+	assert_eq(form.get_value().value, {"pointer": "counter"}, "round trip")
+	pp.set_value("ticks")
+	pp.value_changed.emit("ticks")
+	assert_eq(form.get_value().value, {"pointer": "ticks"})
+	# Character: a follower's direction, then the same editor retargeted to an event id.
+	var ch := {"game_data": {"kind": "character", "target": "follower", "index": 2, "field": "direction"}}
+	form.set_value({"value": ch})
+	assert_eq(form.get_value().value, ch, "round trip")
+	assert_true(fi.visible, "follower number shown")
+	assert_false(ce.visible, "no event id line for a follower")
+	assert_eq(cf.selected, 2, "direction picked")
+	fi.value = 3
+	assert_eq(form.get_value().value.game_data.index, 3)
+	ct.select(3)  # Event…
+	ct.item_selected.emit(3)
+	assert_eq(form.get_value().value.game_data.target, "", "event id starts empty")
+	ce.text = "chest"
+	ce.text_changed.emit("chest")
+	assert_eq(form.get_value().value.game_data.target, "chest")
+	assert_false(form.get_value().value.game_data.has("index"), "an event target drops the follower number")
+	assert_true(ce.visible and not fi.visible)
+	# The remaining kinds round trip and only show their own controls.
+	form.set_value({"value": {"game_data": {"kind": "map_id"}}})
+	assert_eq(form.get_value().value, {"game_data": {"kind": "map_id"}})
+	assert_false(pp.visible or ct.visible or pm.visible or lu.visible or cn.visible or ei.visible or ef.visible)
+	form.set_value({"value": {"game_data": {"kind": "party_member", "slot": 1}}})
+	assert_eq(pm.value, 1.0)
+	assert_true(pm.visible)
+	form.set_value({"value": {"game_data": {"kind": "last_used", "what": "target_enemy"}}})
+	assert_eq(lu.selected, RPGFormBuilder.LAST_USED_WHATS.find("target_enemy"))
+	assert_true(lu.visible)
+	form.set_value({"value": {"game_data": {"kind": "counter", "which": "saves"}}})
+	assert_eq(cn.selected, RPGFormBuilder.COUNTER_WHICHES.find("saves"))
+	assert_true(cn.visible)
+	cn.select(RPGFormBuilder.COUNTER_WHICHES.find("escapes"))
+	cn.item_selected.emit(cn.selected)
+	assert_eq(form.get_value().value.game_data.which, "escapes")
+	form.set_value({"value": {"game_data": {"kind": "enemy", "index": 1, "field": "sp"}}})
+	assert_eq(ei.value, 1.0)
+	assert_eq(ef.selected, 1, "SP")
+	assert_true(ei.visible and ef.visible)
+	assert_false(ct.visible or ce.visible or fi.visible or cf.visible, "character controls hidden")
+	ei.value = 0
+	assert_eq(form.get_value().value.game_data.index, 0)
+	# The structure checks accept the new shapes and reject bad ones.
+	var out := []
+	for v in [
+		{"pointer": "counter"},
+		{"game_data": {"kind": "map_id"}},
+		{"game_data": {"kind": "character", "target": "player", "field": "screen_x"}},
+		{"game_data": {"kind": "character", "target": "event", "field": "x"}},
+		{"game_data": {"kind": "party_member", "slot": 3}},
+		{"game_data": {"kind": "last_used", "what": "target_actor"}},
+		{"game_data": {"kind": "counter", "which": "victories"}},
+		{"game_data": {"kind": "enemy", "index": 0, "field": "hp"}},
+	]:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	var bad := [
+		{"pointer": "not an id"},
+		{"game_data": {"kind": "counter", "which": "years"}},
+		{"game_data": {"kind": "last_used", "what": "spell"}},
+		{"game_data": {"kind": "character", "target": "player", "field": "z"}},
+		{"game_data": {"kind": "character", "target": "follower", "index": -1, "field": "x"}},
+		{"game_data": {"kind": "party_member", "slot": -2}},
+		{"game_data": {"kind": "enemy", "index": -1, "field": "hp"}},
+	]
+	for v in bad:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), bad.size(), "each rejected: %s" % str(out))
+	form.queue_free()
+	await frames(1)
+
+
+## #57: the operand editor's Self variable mode (name, event, map) round trips.
+func test_operand_editor_self_variable() -> void:
+	var data := RPGProjectData.open(TMP + "/rpg")
+	var form := RPGFormBuilder.new()
+	tree.root.add_child(form)
+	form.setup([{"key": "value", "kind": "operand", "default": 0, "label": "Value"}], data)
+	var ed := form.editor_for("value")
+	var mode: OptionButton = ed.get_child(0)
+	var sv_name: LineEdit = ed.get_child(18)
+	var sv_event: LineEdit = ed.get_child(19)
+	var sv_map: RPGRefPicker = ed.get_child(20)
+	form.set_value({"value": {"self_variable": {"name": "times_opened"}}})
+	assert_eq(mode.selected, 5)
+	assert_true(sv_name.visible and sv_event.visible and sv_map.visible)
+	assert_eq(form.get_value().value, {"self_variable": {"name": "times_opened"}}, "round trip")
+	sv_event.text = "blocker"
+	sv_event.text_changed.emit("blocker")
+	sv_map.set_value("house_inside")
+	sv_map.value_changed.emit("house_inside")
+	assert_eq(form.get_value().value, {"self_variable": {"name": "times_opened", "event": "blocker", "map": "house_inside"}})
+	# A fully-qualified one fills the boxes; a number hides them again.
+	form.set_value({"value": {"self_variable": {"name": "score", "event": "chest", "map": "town"}}})
+	assert_eq(sv_name.text, "score")
+	assert_eq(sv_event.text, "chest")
+	assert_eq(form.get_value().value, {"self_variable": {"name": "score", "event": "chest", "map": "town"}})
+	form.set_value({"value": 3})
+	assert_eq(mode.selected, 0)
+	assert_false(sv_name.visible or sv_event.visible or sv_map.visible)
+	# The structure check accepts the shape and rejects a bad name or event id.
+	var out := []
+	RPGValidator._operand_structure({"self_variable": {"name": "score", "event": "chest", "map": "town"}}, "f", "r", "p", out)
+	RPGValidator._operand_structure({"self_variable": {"name": "score"}}, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	for v in [{"self_variable": {"name": "not an id"}}, {"self_variable": {"name": "score", "event": "Not An Id"}}]:
+		RPGValidator._operand_structure(v, "f", "r", "p", out)
+	assert_eq(out.size(), 2, "each rejected: %s" % str(out))
 	form.queue_free()
 	await frames(1)
 

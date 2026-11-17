@@ -378,3 +378,107 @@ func test_d8_zero_roll_never_makes_a_state_permanent() -> void:
 	var h2 := rules.new_actor_battler("hero")
 	rules.add_state(h2, "cursed")
 	assert_eq(int(h2.states[0].turns), -1, "at most 0: until removed")
+
+
+# --- State timing (#49) -----------------------------------------------------------------------
+
+
+func _turns_of(b: RPGBattler, state_id: String) -> int:
+	for s in b.states:
+		if s.id == state_id:
+			return int(s.turns)
+	return -1
+
+
+func test_state_auto_removal_timings() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	poison["turns_min"] = 2
+	poison["turns_max"] = 2
+	var hero := rules.new_actor_battler("hero")
+	assert_true(rules.add_state(hero, "poison"))
+	# Default timing: only the turn's end counts it down.
+	rules.tick_states(hero, "action_end")
+	assert_eq(_turns_of(hero, "poison"), 2, "an action does not count it down")
+	rules.tick_states(hero)
+	assert_eq(_turns_of(hero, "poison"), 1, "the turn's end does")
+	# Action end: only the battler's action counts it down.
+	hero.remove_state("poison")
+	poison["auto_removal"] = "action_end"
+	assert_true(rules.add_state(hero, "poison"))
+	rules.tick_states(hero)
+	assert_eq(_turns_of(hero, "poison"), 2, "the turn's end does not count it down")
+	rules.tick_states(hero, "action_end")
+	assert_eq(_turns_of(hero, "poison"), 1, "the battler's action does")
+	# Never: nothing counts it down.
+	hero.remove_state("poison")
+	poison["auto_removal"] = "none"
+	assert_true(rules.add_state(hero, "poison"))
+	rules.tick_states(hero)
+	rules.tick_states(hero, "action_end")
+	assert_true(hero.has_state("poison"))
+	assert_eq(_turns_of(hero, "poison"), 2, "never wears off on its own")
+
+
+func test_re_adding_a_state_resets_its_turns() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	poison["turns_min"] = 3
+	poison["turns_max"] = 3
+	var hero := rules.new_actor_battler("hero")
+	assert_true(rules.add_state(hero, "poison"))
+	assert_eq(_turns_of(hero, "poison"), 3)
+	hero.states[0].turns = 1
+	assert_true(rules.add_state(hero, "poison"), "re-adding reports success")
+	assert_eq(_turns_of(hero, "poison"), 3, "a fresh roll replaces the remaining turns")
+	assert_eq(hero.states.size(), 1, "durations never stack")
+	poison.erase("turns_min")
+	poison.erase("turns_max")
+	assert_true(rules.add_state(hero, "poison"))
+	assert_eq(_turns_of(hero, "poison"), -1, "an until-removed state stays that way")
+	assert_eq(hero.states.size(), 1)
+
+
+func test_resisting_the_death_state_is_immortal() -> void:
+	db.record("actors", "hero")["traits"].append({"kind": "state_resist", "id": "knockout"})
+	var hero := rules.new_actor_battler("hero")
+	hero.set_resource("hp", 0)
+	assert_false(hero.is_dead(), "0 HP alone does not mean death")
+	assert_false(rules.add_state(hero, "knockout"), "the death state is refused")
+	assert_true(hero.is_alive(), "the battler is immortal")
+	assert_true(rules.can_act(hero), "and keeps fighting at 0 HP")
+	assert_eq(hero.get_resource("hp"), 0)
+	var mira := rules.new_actor_battler("mira")
+	assert_true(rules.add_state(mira, "knockout"))
+	assert_true(mira.is_dead())
+	assert_eq(mira.get_resource("hp"), 0, "without the resist, death zeroes life")
+
+
+func test_slip_damage_knockout_rules_default_and_state_override() -> void:
+	var poison: Dictionary = db.record("states", "poison")
+	var slip: Dictionary = poison["slip"]
+	var hero := rules.new_actor_battler("hero")
+	rules.add_state(hero, "poison")
+	hero.set_resource("hp", 5)
+	var tick := rules.tick_states(hero)
+	assert_eq(hero.get_resource("hp"), 1, "the database's poison cannot knock out")
+	assert_false(tick.knocked_out)
+	# Without "can_kill", the rules' option decides (true in both shipped presets).
+	slip.erase("can_kill")
+	hero.set_resource("hp", 5)
+	tick = rules.tick_states(hero)
+	assert_eq(hero.get_resource("hp"), 0)
+	assert_true(tick.knocked_out)
+	assert_true(hero.is_dead())
+	# The rules option can turn knockout off...
+	rules.definition["slip_knockout"] = false
+	rules.remove_state(hero, "knockout")
+	rules.add_state(hero, "poison")
+	hero.set_resource("hp", 5)
+	tick = rules.tick_states(hero)
+	assert_eq(hero.get_resource("hp"), 1, "the rules option floors at 1")
+	assert_false(tick.knocked_out)
+	# ...and one state can still allow it.
+	slip["can_kill"] = true
+	hero.set_resource("hp", 5)
+	tick = rules.tick_states(hero)
+	assert_eq(hero.get_resource("hp"), 0)
+	assert_true(tick.knocked_out)

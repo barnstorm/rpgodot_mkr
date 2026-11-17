@@ -51,6 +51,24 @@ func test_save_and_load_round_trip() -> void:
 	assert_eq(env.game.map.get_event("chest").page_index, 1, "pages rebuilt from project data + saved self switch")
 
 
+func test_self_variables_and_remote_self_switches_round_trip() -> void:
+	var st: RPGGameState = env.rpg.state
+	st.set_self_switch("house_inside", "blocker", "A", true)
+	st.set_self_variable("town", "chest", "times_opened", 3)
+	st.set_self_variable("town", "chest", "label", "hello")
+	assert_true(env.rpg.saves.save(SLOT).is_ok(), "save")
+	# Wipe the per-event state, then load it back.
+	st.reset_self_state("town", "chest")
+	st.reset_self_state("house_inside", "blocker")
+	assert_eq(st.get_self_variable("town", "chest", "times_opened"), 0, "wiped before load")
+	var lr: RPGResult = await env.rpg.saves.load_slot(SLOT)
+	assert_true(lr.is_ok(), str(lr))
+	assert_true(st.get_self_switch("house_inside", "blocker", "A"), "another map's self switch restored")
+	assert_eq(st.get_self_variable("town", "chest", "times_opened"), 3)
+	assert_eq(typeof(st.get_self_variable("town", "chest", "times_opened")), TYPE_INT, "typed after load")
+	assert_eq(st.get_self_variable("town", "chest", "label"), "hello")
+
+
 func test_saving_refused_during_main_event() -> void:
 	var t: RPGScheduler.Ticket = env.rpg.scheduler.request_main("long", [{"type": "wait", "seconds": 30}], {"kind": "test"}, null)
 	await frames(2)

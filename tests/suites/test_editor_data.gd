@@ -342,7 +342,7 @@ func test_validator_finds_broken_references() -> void:
 	assert_false(p1.is_empty(), "broken transfer destination\n" + msgs)
 	assert_eq(p1.get("severity"), "error")
 	assert_eq(p1.get("record"), "broken")
-	assert_eq(p1.get("path"), "events/5/pages/0/commands/0/to")
+	assert_eq(p1.get("path"), "events/7/pages/0/commands/0/to")
 	assert_true(str(p1.get("fix_hint", "")) != "", "has a fix hint")
 	assert_false(find.call("Map 'nowhere' does not exist").is_empty(), "unknown map")
 	assert_false(find.call("Switch 'no_such_switch' does not exist").is_empty(), "unknown switch in condition")
@@ -371,6 +371,28 @@ func test_structure_catches_shapes() -> void:
 	assert_eq(p2.size(), 2, str(p2))
 	var p3 := RPGValidator.structure("events", "not an object")
 	assert_eq(p3.size(), 1)
+
+
+func test_movement_type_choices_validate() -> void:
+	var mk_page := func(t): return {"movement": {"type": t}, "commands": []}
+	var mk_events := func(t): return {"schema_version": 1, "map": "town", "events": [
+		{"id": "walker", "position": [1, 1], "pages": [mk_page.call(t)]}]}
+	for t in ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"]:
+		var p := RPGValidator.structure("events", mk_events.call(t), registry)
+		var mv := p.filter(func(x): return str(x.message).find("movement type") != -1)
+		assert_eq(mv.size(), 0, "%s is a valid movement type: %s" % [t, str(mv.map(func(x): return x.message))])
+	var bad := RPGValidator.structure("events", mk_events.call("diagonal"), registry)
+	assert_true(bad.any(func(x): return str(x.message).find("movement type") != -1), "diagonal is refused")
+
+
+func test_forbid_overlap_page_option_validates() -> void:
+	var mk_events := func(opts): return {"schema_version": 1, "map": "town", "events": [
+		{"id": "no_pile_up", "position": [1, 1], "pages": [
+			{"priority": "below", "options": opts, "commands": []}]}]}
+	var p := RPGValidator.structure("events", mk_events.call({"forbid_overlap": true}), registry)
+	assert_eq(p, [], "forbid_overlap is a legal page option")
+	var bad := RPGValidator.structure("events", mk_events.call({"forbid_overlap": "yes"}), registry)
+	assert_true(bad.any(func(x): return str(x.message).find("forbid_overlap") != -1), "it must be true or false")
 
 
 func test_used_by_lists_reads_and_sets() -> void:
@@ -435,6 +457,48 @@ func test_rename_id_updates_every_typed_reference() -> void:
 	assert_eq(r4.data_by_file[path].events[4].id, "big_chest")
 
 
+## #55: a Control Switch range's "from"/"to" count as writes, so Used-by lists them and renames
+## rewrite them; the indirect target's variable ref stays a read.
+func test_set_switch_range_refs_are_sets_and_rename() -> void:
+	var extra := {"id": "ranger", "name": "", "position": [6, 6], "pages": [{"commands": [
+		{"type": "set_switch", "target": "range", "from": "door_unlocked", "to": "touched", "value": "on"},
+		{"type": "set_switch", "target": "pointer", "pointer": "counter", "value": "on"}]}]}
+	var path := RPGValidator.events_path(data, "town")
+	var files := _events_files([extra])
+	var u := RPGValidator.used_by(data, registry, "switch", "touched", files)
+	assert_true(u.any(func(x): return x.record == "ranger" and x.access == "set"), "range end is a set: %s" % str(u))
+	var uv := RPGValidator.used_by(data, registry, "variable", "counter", files)
+	assert_true(uv.any(func(x): return x.record == "ranger" and x.access == "read"), "pointer reads the variable: %s" % str(uv))
+	var r := RPGValidator.rename_id(data, registry, "switch", "touched", "poked", files)
+	assert_true(r.ok, r.error)
+	var ranger: Dictionary = r.data_by_file[path].events[r.data_by_file[path].events.size() - 1]
+	var cmd: Dictionary = ranger.pages[0].commands[0]
+	assert_eq(cmd.to, "poked", "range end renamed")
+	assert_eq(cmd.from, "door_unlocked", "range start untouched")
+
+
+## #57: the map named by Control Self Switch, Control Variable's Self variable target and
+## self-switch / self-variable conditions counts as a read, and a map rename rewrites them.
+func test_self_state_map_refs_and_rename() -> void:
+	var extra := {"id": "selfer", "name": "", "position": [6, 6], "pages": [
+		{"conditions": [{"kind": "self_switch", "id": "A", "map": "house_inside", "event": "blocker"}], "commands": [
+			{"type": "set_self_switch", "switch": "B", "value": "on", "event": "blocker", "map": "house_inside"},
+			{"type": "set_variable", "target": "self", "name": "score", "event": "blocker", "map": "house_inside", "operation": "set", "value": 1},
+			{"type": "if", "condition": {"kind": "self_variable", "name": "score", "op": "==", "value": 1, "map": "house_inside", "event": "blocker"}, "then": [], "else": []}]}]}
+	var path := RPGValidator.events_path(data, "town")
+	var files := _events_files([extra])
+	var u := RPGValidator.used_by(data, registry, "map", "house_inside", files)
+	var mine := u.filter(func(x): return x.record == "selfer")
+	assert_eq(mine.size(), 4, "page condition + three commands name the map: %s" % str(mine))
+	var r := RPGValidator.rename_id(data, registry, "map", "house_inside", "house", files)
+	assert_true(r.ok, r.error)
+	var selfer: Dictionary = r.data_by_file[path].events[r.data_by_file[path].events.size() - 1]
+	assert_eq(selfer.pages[0].conditions[0].map, "house", "condition map renamed")
+	assert_eq(selfer.pages[0].commands[0].map, "house", "set_self_switch map renamed")
+	assert_eq(selfer.pages[0].commands[1].map, "house", "set_variable self map renamed")
+	assert_eq(selfer.pages[0].commands[2].condition.map, "house", "self_variable condition map renamed")
+
+
 # --------------------------------------------------------------------------------------------
 # Schema
 # --------------------------------------------------------------------------------------------
@@ -455,6 +519,32 @@ func test_schema_has_a_branch_per_command() -> void:
 	assert_eq(RPGSchema.write(registry, dir), OK)
 	assert_true(FileAccess.file_exists(dir + "/events.schema.json"))
 	assert_true(FileAccess.file_exists(dir + "/README.md"))
+
+
+func test_route_step_schema_covers_the_new_step_kinds() -> void:
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].route_step.properties
+	for k in ["slide", "move_to", "call", "speed_up", "speed_down", "frequency_up",
+			"frequency_down", "opacity_up", "opacity_down"]:
+		assert_true(props.has(k), "route_step lists %s" % k)
+	assert_eq(props.slide, {"type": "string"})
+	assert_eq(props.move_to, {"oneOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "string"}]})
+	assert_eq(props.call.required, ["method"])
+	assert_eq(props.call.properties.args, {"type": "array"})
+
+
+func test_show_text_schema_covers_the_message_style_fields() -> void:
+	# Both style choices are keep/on/off, where keep reads the System setting (#62).
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].cmd_show_text.properties
+	assert_eq(props.avoid_player.enum, ["keep", "on", "off"], "avoid_player choice")
+	assert_eq(props.events_continue.enum, ["keep", "on", "off"], "events_continue choice")
+
+
+func test_scroll_map_schema_covers_the_pan_screen_lock() -> void:
+	# Scroll Map's direction offers RM2000/2003's Pan Screen Lock alongside the pans (#63).
+	var props: Dictionary = RPGSchema.events_schema(registry)["$defs"].cmd_scroll_map.properties
+	assert_has(props.direction.enum, "lock", "direction offers lock")
+	assert_has(props.direction.enum, "unlock", "direction offers unlock")
+	assert_has(props.direction.enum, "return", "direction still offers return")
 
 
 # --------------------------------------------------------------------------------------------
@@ -500,6 +590,200 @@ func test_form_builder_round_trips_every_descriptor() -> void:
 	assert_true(form3.problems().size() >= 1, "required switch reported")
 	host.queue_free()
 	await frames(1)
+
+
+## Control Switch target modes in the editor (#55): the fields of the chosen target validate,
+## the others stop mattering, and the summaries read back.
+func test_set_switch_target_modes() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var sw: RPGCommand = registry.get_command("set_switch")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(sw.desc.fields, data, registry)
+	form.command = sw
+	form.set_value({"type": "set_switch", "id": "door_unlocked", "value": "on"})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch [door_unlocked] = ON")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "door_unlocked")
+	form.set_field("to", "touched")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch door_unlocked..touched = ON")
+	form.set_field("target", "pointer")
+	form.set_field("pointer", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(sw.summary(form.get_value()), "Switch [hero_name] = ON")
+	host.queue_free()
+	await frames(1)
+
+
+## Control Variable target modes in the editor (#54), and the operand picker's new game data
+## kinds and pointer source.
+func test_set_variable_target_modes_and_operand_kinds() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var vc: RPGCommand = registry.get_command("set_variable")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(vc.desc.fields, data, registry)
+	form.command = vc
+	form.set_value({"type": "set_variable", "id": "counter", "operation": "set", "value": 0})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable [counter] = 0")
+	form.set_field("target", "range")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("from", "counter")
+	form.set_field("to", "ticks")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable counter..ticks = 0")
+	form.set_field("target", "pointer")
+	form.set_field("pointer", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Variable [hero_name] = 0")
+	# The operand editor keeps the new shapes through a set, and reads the same values back
+	# out of its controls (the mode buttons' item_selected is what editing fires).
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._operand_editor({"key": "v"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Number":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the operand mode picker is there")
+	for shape in [
+		{"pointer": "hero_name"},
+		{"game_data": {"kind": "map_id"}},
+		{"game_data": {"kind": "party_member", "slot": 1}},
+		{"game_data": {"kind": "last_used", "what": "item"}},
+		{"game_data": {"kind": "counter", "which": "saves"}},
+		{"game_data": {"kind": "enemy", "index": 0, "field": "hp"}},
+		{"game_data": {"kind": "actor", "id": "hero", "field": "weapon"}},
+	]:
+		ed.set.call(shape)
+		assert_eq(ed.get.call(), shape, "operand keeps %s" % str(shape))
+	ed.set.call({"game_data": {"kind": "character", "target": "player", "field": "direction"}})
+	mode_btn.item_selected.emit(3)
+	assert_eq(ed.get.call(), {"game_data": {"kind": "character", "target": "player", "field": "direction"}}, "the controls read back")
+	ed.set.call({"pointer": "hero_name"})
+	mode_btn.item_selected.emit(4)
+	assert_eq(ed.get.call(), {"pointer": "hero_name"}, "the pointer mode reads back")
+	host.queue_free()
+	await frames(1)
+
+
+## Locations from variables (#16): the location editor's fixed / from-variables modes, the
+## structure check on the new shape, and references() leaving dynamic destinations alone.
+func test_location_from_variables_editor_and_validator() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var built: Control = fb.new()
+	host.add_child(built)
+	var ed: Dictionary = built._location_editor({"key": "to"}, func(_v) -> void: pass)
+	var mode_btn: OptionButton = null
+	for c in ed.control.get_children():
+		if c is OptionButton and c.item_count > 0 and c.get_item_text(0) == "Fixed place":
+			mode_btn = c
+			break
+	assert_true(mode_btn != null, "the fixed / variables mode picker is there")
+	assert_eq(mode_btn.selected, 0, "a fixed location starts in fixed mode")
+	# Both shapes survive a set/get round trip.
+	ed.set.call({"map": "town", "position": [3, 2]})
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]})
+	var warp := {"map": {"variable": "hero_name"}, "position": [{"variable": "counter"}, {"variable": "ticks"}]}
+	ed.set.call(warp)
+	assert_eq(mode_btn.selected, 1, "a variable location switches the mode")
+	assert_eq(ed.get.call(), warp)
+	# Switching modes keeps each side's controls, so nothing is lost going back and forth.
+	mode_btn.select(0)
+	mode_btn.item_selected.emit(0)
+	assert_eq(ed.get.call(), {"map": "town", "position": [3, 2]}, "the fixed controls kept their values")
+	mode_btn.select(1)
+	mode_btn.item_selected.emit(1)
+	assert_eq(ed.get.call(), warp, "the variable pickers kept their values")
+	host.queue_free()
+	await frames(1)
+	# The structure check accepts both shapes and rejects a map that is neither.
+	var out := []
+	RPGValidator._location_structure(warp, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": "town", "position": [3, 2]}, "f", "r", "p", out)
+	RPGValidator._location_structure({"map": {"variable": "hero_name"}, "position": [{"pointer": "hero_name"}, 2]}, "f", "r", "p", out)
+	assert_eq(out.size(), 0, str(out))
+	RPGValidator._location_structure({"map": 5, "position": [1, 1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 1, str(out))
+	RPGValidator._location_structure({"map": "town", "position": [1]}, "f", "r", "p", out)
+	assert_eq(out.size(), 2, str(out))
+	# The summary names the variables, not raw dictionaries.
+	var vc: RPGCommand = registry.get_command("transfer_player")
+	assert_eq(vc.summary({"to": warp}), "Transfer Player: [hero_name] ([counter], [ticks])")
+	# references() checks a fixed map but leaves a variable-held destination to the runtime.
+	var ev := {
+		"id": "warper", "name": "Warper", "position": [2, 2], "notes": "",
+		"pages": [{"conditions": [], "graphic": null, "priority": "same", "trigger": "action_button",
+			"commands": [
+				{"type": "memorize_place", "map_variable": "hero_name", "x_variable": "counter", "y_variable": "ticks"},
+				{"type": "transfer_player", "to": warp, "fade": "none"},
+			]}],
+	}
+	var files := _events_files([ev])
+	var probs := RPGValidator.full(data, registry, files)
+	for p in probs:
+		assert_false(str(p.message).contains("does not exist") and str(p.path).contains("warper"), "dynamic destination is not a reference problem: %s" % p.message)
+		assert_false(str(p.message).contains("position"), "dynamic cells are not bounds-checked: %s" % p.message)
+
+
+## Battle Processing's group sources (#38): picked here, named by a variable, or the map's own
+## encounter roll. The editor switches fields, and the validator warns where it cannot check.
+func test_battle_troop_sources_editor_and_validator() -> void:
+	var host := Control.new()
+	tree.root.add_child(host)
+	var fb: Script = load("res://addons/rpg/editor/forms/rpg_form_builder.gd")
+	var vc: RPGCommand = registry.get_command("battle")
+	var form: Control = fb.new()
+	host.add_child(form)
+	form.setup(vc.desc.fields, data, registry)
+	form.command = vc
+	# A picked group is the default; old events without a source are still one.
+	form.set_value({"type": "battle", "troop": "slimes"})
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: slimes")
+	# Named by a variable.
+	form.set_field("troop_source", "variable")
+	assert_true(form.problems().any(func(p): return str(p.message).contains("required")), str(form.problems()))
+	form.set_field("variable", "hero_name")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: group V[hero_name]")
+	# The map's encounter roll needs no group at all.
+	form.set_field("troop_source", "encounter")
+	assert_eq(form.problems(), [], str(form.problems()))
+	assert_eq(vc.summary(form.get_value()), "Battle: random encounter")
+	host.queue_free()
+	await frames(1)
+	# The validator warns about a variable group (it is checked when the battle starts) instead
+	# of erroring, asks nothing of the roll, and still requires a picked group.
+	var warns := RPGValidator.command_structure({"type": "battle", "troop_source": "variable", "variable": "hero_name"}, registry, "f", "r", "p")
+	assert_eq(warns.size(), 1, str(warns))
+	assert_eq(warns[0].severity, "warning")
+	assert_true(str(warns[0].message).contains("hero_name"), str(warns))
+	assert_eq(RPGValidator.command_structure({"type": "battle", "troop_source": "encounter"}, registry, "f", "r", "p"), [], "the roll is only checked at runtime")
+	var errs := RPGValidator.command_structure({"type": "battle"}, registry, "f", "r", "p")
+	assert_true(errs.any(func(p): return p.severity == "error" and str(p.message).contains("required")), str(errs))
+	# And through a whole project: the variable must exist, the warning rides along, no error.
+	var ev := {
+		"id": "bossy", "name": "Bossy", "position": [2, 2], "notes": "",
+		"pages": [{"conditions": [], "graphic": null, "priority": "same", "trigger": "action_button",
+			"commands": [{"type": "battle", "troop_source": "variable", "variable": "hero_name", "can_escape": false}]}],
+	}
+	var probs := RPGValidator.full(data, registry, _events_files([ev]))
+	var w := probs.filter(func(p): return str(p.message).contains("only checked when the battle starts"))
+	assert_eq(w.size(), 1, str(probs))
+	assert_eq(w[0].severity, "warning")
+	assert_false(probs.any(func(p): return p.severity == "error" and str(p.path).contains("bossy")), "a variable group is no error: %s" % str(probs.filter(func(p): return p.severity == "error")))
 
 
 # --------------------------------------------------------------------------------------------
