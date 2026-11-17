@@ -71,7 +71,7 @@ Effects can recover HP or SP, deal damage, add or remove a state, raise a stat p
 
 1. On **Skills**, press **New**: `firebolt`, *Firebolt*.
 2. **Skill type**: Magic. **Cost**: 6 SP. **Target**: one enemy. **Element**: fire.
-3. **Damage type**: *damage* (the others are *none*, *recover* and *drain*), **Affects**: HP. **Damage formula**: for example `a.int * 2 + 30 - b.mdef / 2`, where `a` is the user and `b` the target (the sample's *Fire* skill uses `a.int * 2 + 12 - b.mdef / 2`). Formulas use a small, safe expression language; they can't run arbitrary code.
+3. **Damage type**: *damage* (the others are *none*, *recover* and *drain*; a drain takes HP or MP from the target, at most what it has left, and gives it to the user), **Affects**: HP. **Damage formula**: for example `a.int * 2 + 30 - b.mdef / 2`, where `a` is the user and `b` the target (the sample's *Fire* skill uses `a.int * 2 + 12 - b.mdef / 2`). Formulas use a small, safe expression language; they can't run arbitrary code.
 4. **Battle animation**: an animation, or one of the built-in effects (slash, fire, ice, thunder, heal, hit).
 5. Add the skill to a class's **Skills learned** at level 3.
 

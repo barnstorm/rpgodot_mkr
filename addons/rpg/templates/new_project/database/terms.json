@@ -43,6 +43,7 @@
 		{"id": "battle_no_damage", "name": "Battle message: no_damage", "notes": "", "category": "battle", "custom": {}, "text": "%1 takes no damage."},
 		{"id": "battle_recover", "name": "Battle message: recover", "notes": "", "category": "battle", "custom": {}, "text": "%1 recovers %2 %3!"},
 		{"id": "battle_resource_damage", "name": "Battle message: resource_damage", "notes": "", "category": "battle", "custom": {}, "text": "%1 loses %2 %3!"},
+		{"id": "battle_drain", "name": "Battle message: drain", "notes": "", "category": "battle", "custom": {}, "text": "%1 was drained of %2 %3!"},
 		{"id": "battle_miss", "name": "Battle message: miss", "notes": "", "category": "battle", "custom": {}, "text": "%1 missed!"},
 		{"id": "battle_evade", "name": "Battle message: evade", "notes": "", "category": "battle", "custom": {}, "text": "%1 dodged the attack!"},
 		{"id": "battle_critical", "name": "Battle message: critical", "notes": "", "category": "battle", "custom": {}, "text": "A critical hit!"},
