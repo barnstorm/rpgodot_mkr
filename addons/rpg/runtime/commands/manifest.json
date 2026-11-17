@@ -90,6 +90,7 @@
 		"change_victory_me.gd",
 		"change_map_name_display.gd",
 		"change_tileset.gd",
+		"change_tile.gd",
 		"change_parallax.gd",
 		"change_battle_back.gd",
 		"enemy_appear.gd",

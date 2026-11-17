@@ -33,6 +33,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Common events that run on game moments (plugins: Yanfly Utility Common Events, Galv's Auto Common Events, Hime's Level Up Events) | Built in: a common event's Trigger can be an **engine moment** (map enter/leave, every N steps, region/terrain, level up, state added/removed, knockout, battle start/end, game over, menu, party change, vehicles, new game, load), with filters and the moment's data as Game Data `hook.*` |
 | Timer Operations (2000/2003) | **Control Timer**: two timers; Set (time, show on screen, corner), Start, Stop, and what it does in battle (pause, count, or abort at 0); the **Timer** condition checks the time left |
 | Key Input Processing (2000/2003) | The same (*message* category); the key codes match 2003's numbering, and the kit's rpg_* actions (menu, debug, through, overlay, or your own) can be accepted too |
+| Change Tile (2000/2003) | The same (*screen* category): replaces every tile of a layer matching a key, or sets the single cell at X, Y; **Keep** stores the change in the save (without it the map resets when reloaded, as in RPG Maker) |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
