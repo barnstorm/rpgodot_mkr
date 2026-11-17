@@ -112,6 +112,8 @@ A code is `\XY[arg]`; a tag is `<name>`, `<name:arg>` or `</name>`. A handler re
 
 Any scene with a `start(args, context)` method that emits `finished(result)` or `cancelled(reason)` can be started from an event with **Run Scene**, and its result stored in a variable. The fishing minigame in [`scenes/fishing/`](https://github.com/barnstorm/rpgodot_mkr/tree/main/scenes/fishing) is an example.
 
+To tidy screens from code, `rpg.ui.close_all(opts)` closes every open screen — but the battle screen is left running by default, because a **Battle Processing** command is waiting for it and closing it under that wait would strand the event forever. Pass an outcome to end the fight with it instead (`close_all({"battle": "escape"})`; the screen's `force_finish(outcome)` is called when it has one), or `{"battle": "close"}` to free it — the Battle command then returns an error the interpreter reports (with the event and command that were affected) instead of hanging. A contract screen freed by anything else returns the same way, so no screen can strand its command.
+
 ## Replacing default screens
 
 The title, menu, shop, save, name input, game over, options, debug and battle screens are scripts in `addons/rpg/runtime/ui/`. Point `rpg/project.json` `"scenes"` at your own to replace any of them. The battle can also be replaced per map (Map properties > Battle scene) or per Battle Processing command.

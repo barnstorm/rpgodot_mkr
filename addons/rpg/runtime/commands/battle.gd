@@ -107,7 +107,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 	# battle): each hooked common event finishes before the scene starts (issue #52).
 	if ctx.rpg.has_method("run_hook_common_events"):
 		await ctx.rpg.run_hook_common_events("on_battle_start", {"troop": troop, "map": ctx.map_id()})
-	var r: Dictionary = await ctx.ui.run_contract_scene(scene, bargs, context, ctx.token)
+	var r: Dictionary = await ctx.ui.run_contract_scene(scene, bargs, context, ctx.token, 0.0, true, "battle")
 	var res0: Variant = r.get("value")
 	if ctx.rpg.has_signal("battle_ended"):
 		var oc := ""

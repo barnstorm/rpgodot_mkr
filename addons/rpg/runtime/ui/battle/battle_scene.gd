@@ -402,6 +402,14 @@ func _fail(reason: String) -> void:
 	cancelled.emit(reason)
 
 
+## Ends the battle with `outcome` ("escape"…): what ui.close_all({"battle": outcome}) calls, so
+## tidying screens cannot leave a Battle command waiting (#23). The fight ends at its next
+## checkpoint — immediately while auto-battling or between actions; the normal result, rewards
+## and branch handling follow.
+func force_finish(outcome: String) -> void:
+	core.force_result(outcome)
+
+
 # --- visuals -------------------------------------------------------------------------------
 
 func _make_backdrop(bg_name: String) -> void:
