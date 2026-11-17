@@ -462,10 +462,12 @@ func test_battle_page_eligibility() -> void:
 	var switches := {"boss_flag": false}
 	core.switch_reader = func(id): return switches.get(id, false)
 	core.begin_turn()
+	core.begin_actions()
 	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["per_turn", "every"], "priority desc, then page order")
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), ["every"], "once_per_turn ran already")
 	core.end_turn()
 	core.begin_turn()
+	core.begin_actions()
 	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn", false)), ["turn2", "per_turn", "every"], "peek")
 	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["turn2", "per_turn", "every"])
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), ["every"])
@@ -476,6 +478,7 @@ func test_battle_page_eligibility() -> void:
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), ["every", "flag"], "once spans consumed")
 	core.end_turn()
 	core.begin_turn()
+	core.begin_actions()
 	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["per_turn", "every", "hurt_hero", "flag"], "turn 3")
 
 
@@ -491,6 +494,7 @@ func test_turn_end_page_condition() -> void:
 	var switches := {"boss_flag": false}
 	core.switch_reader = func(id): return switches.get(id, false)
 	core.begin_turn()
+	core.begin_actions()
 	assert_false(core.page_conditions_met({"conditions": [{"kind": "turn_end"}]}, "start_of_turn"), "only true when a turn ends")
 	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), [], "not at the start of a turn")
 	assert_eq(_page_ids(core.eligible_battle_pages("after_action")), [], "nor after an action")
@@ -498,12 +502,133 @@ func test_turn_end_page_condition() -> void:
 	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["flagged", "once", "each", "per_turn"], "turn 1 ends; the switch AND holds")
 	core.end_turn()
 	core.begin_turn()
+	core.begin_actions()
 	switches.boss_flag = false
 	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["each", "per_turn"], "turn 2 ends: once per battle is done, switch off")
 	core.end_turn()
 	core.begin_turn()
+	core.begin_actions()
 	switches.boss_flag = true
 	assert_eq(_page_ids(core.eligible_battle_pages("end_of_turn")), ["flagged", "each", "per_turn"], "turn 3 ends: every check keeps firing")
+
+
+# --- RPG Maker's turn numbering (#143) ------------------------------------------------------------------
+
+
+func _turn_troop() -> Dictionary:
+	return {"id": "t", "members": [{"enemy": "slime"}], "pages": [
+		{"id": "opening", "conditions": [{"kind": "turn", "n": 0}], "span": "once_per_battle"},
+		{"id": "first", "conditions": [{"kind": "turn", "n": 1}], "span": "once_per_battle"},
+		{"id": "from_zero", "conditions": [{"kind": "turn", "n": 0, "every": 2}], "span": "once_per_turn"},
+		{"id": "odd", "conditions": [{"kind": "turn", "n": 1, "every": 2}], "span": "once_per_turn"},
+	]}
+
+
+## The turn number is 0 while the battle opens and through the first input, so "Turn 0" runs
+## before the first command; it goes up when a turn's actions begin, so "Turn 1" runs after the
+## first input and before the first action.
+func test_turn_zero_is_the_battle_opening_and_turns_start_with_their_actions() -> void:
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], _turn_troop(), rules, RPGRandom.new(1))
+	var seen := []
+	core.checkpoint.connect(func(kind: String): seen.append([kind, core.turn]))
+	core.start()
+	assert_eq(core.turn, 0)
+	core.begin_battle()
+	assert_eq(seen, [["battle_start", 0]], "the battle opens with a check at turn 0")
+	assert_eq(_page_ids(core.eligible_battle_pages("battle_start")), ["opening", "from_zero"], "Turn 0 and, under the 2000/2003 rules, 0 + 2X")
+	core.begin_turn()
+	assert_eq(core.turn, 0, "the first input comes before turn 1")
+	assert_eq(core.inputs_needed(), [0], "the hero is asked for a command")
+	assert_eq(seen.size(), 1, "no check while the commands are entered")
+	core.begin_actions()
+	assert_eq(seen[-1], ["start_of_turn", 1], "the turn number goes up when the actions begin")
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["first", "odd"], "Turn 1 runs before the first action")
+	core.begin_actions()
+	assert_eq(core.turn, 1, "once per turn")
+	core.end_turn()
+	assert_eq(seen[-1], ["end_of_turn", 1])
+	core.begin_turn()
+	assert_eq(core.turn, 1, "still turn 1 while turn 2's commands are entered")
+	assert_eq(_page_ids(core.eligible_battle_pages("after_action", false)), [], "nothing new before turn 2 begins")
+	core.begin_actions()
+	assert_eq(core.turn, 2)
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["from_zero"], "0 + 2X: turn 2")
+	core.end_turn()
+	core.begin_turn()
+	core.begin_actions()
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["odd"], "1 + 2X: turn 3")
+
+
+## A driver that never calls begin_actions() still gets its turns: next_action() starts them.
+func test_next_action_begins_the_turn_when_the_driver_did_not() -> void:
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], _turn_troop(), rules, RPGRandom.new(1))
+	var seen := []
+	core.checkpoint.connect(func(kind: String): seen.append([kind, core.turn]))
+	core.start()
+	core.begin_turn()
+	for i in core.inputs_needed():
+		core.set_action(i, {"kind": "guard"})
+	var r: Dictionary = core.next_action()
+	assert_false(r.is_empty(), "an action ran")
+	assert_eq(core.turn, 1)
+	assert_eq(seen[0], ["start_of_turn", 1], "the turn began before its first action")
+	while not r.is_empty():
+		r = core.next_action()
+	assert_eq(core.turn, 1, "one turn, however many actions")
+
+
+## VX, VX Ace and MV: "a + b×X" never matches before turn 1 (their `n >= 1`), so 0 + 2X is turns
+## 2, 4, ... and not the opening. "Turn 0" alone is the opening under every rule set.
+func test_repeating_turn_conditions_skip_the_opening_under_the_vx_rules() -> void:
+	assert_eq(rules.turn_repeat(), "from_start", "the classic rules count as 2000/2003 do")
+	var ace := RPGRuleSystem.load_rules("vx_ace", db)
+	assert_eq(ace.turn_repeat(), "from_first_turn")
+	rules.definition["turn_repeat"] = "from_first_turn"
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], _turn_troop(), rules, RPGRandom.new(1))
+	core.start()
+	core.begin_battle()
+	assert_eq(_page_ids(core.eligible_battle_pages("battle_start")), ["opening"], "0 + 2X waits for turn 2")
+	core.begin_turn()
+	core.begin_actions()
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["first", "odd"])
+	core.end_turn()
+	core.begin_turn()
+	core.begin_actions()
+	assert_eq(_page_ids(core.eligible_battle_pages("start_of_turn")), ["from_zero"], "turn 2")
+	rules.definition.erase("turn_repeat")
+
+
+## A timed battle has no input phase of its own: the opening check at turn 0, then begin_turn()
+## starts turn 1 as before.
+func test_timed_battles_open_at_turn_zero_too() -> void:
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], _turn_troop(), rules, RPGRandom.new(1))
+	core.battle_system = "atb"
+	var seen := []
+	core.checkpoint.connect(func(kind: String): seen.append([kind, core.turn]))
+	core.start()
+	core.begin_battle()
+	core.begin_turn()
+	assert_eq(seen, [["battle_start", 0], ["start_of_turn", 1]])
+	core.begin_actions()
+	assert_eq(core.turn, 1, "begin_actions is the turn-based step; it does nothing here")
+
+
+## A surprise attack still costs the party its first commands (the check moved with the turn
+## number: the first input happens at turn 0).
+func test_a_surprised_party_gets_no_first_command() -> void:
+	var core := RPGBattleCore.new([rules.new_actor_battler("hero")], _turn_troop(), rules, RPGRandom.new(1))
+	core.advantage = "surprise"
+	core.start()
+	core.begin_battle()
+	core.begin_turn()
+	assert_eq(core.inputs_needed(), [], "surprised: no command on the first turn")
+	var r: Dictionary = core.next_action()
+	while not r.is_empty():
+		assert_true(r.user.is_enemy(), "only the enemies act")
+		r = core.next_action()
+	core.end_turn()
+	core.begin_turn()
+	assert_eq(core.inputs_needed(), [0], "the second turn is a normal one")
 
 
 # --- troop page conditions, the RM2003 set (#11) ------------------------------------------------------

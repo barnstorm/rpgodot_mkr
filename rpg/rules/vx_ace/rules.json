@@ -30,6 +30,7 @@
 	"parallel_switch_off": "restart",
 	"parallel_map_change": "restart",
 	"parallel_map_event_survives_map_change": false,
+	"turn_repeat": "from_first_turn",
 	"levels": {"min": 1, "max": 99},
 	"growth": "class",
 	"growth_shapes": {"linear": 1.0, "fast": 0.75, "slow": 1.5, "very_fast": 0.5, "very_slow": 2.0, "early": 0.75, "late": 1.5},

@@ -109,7 +109,7 @@ const PAGE_ONLY_CONDITIONS := ["turn_end"]
 ## dropdown instead of a text box: {command type: [field keys]}.
 const CHARACTER_FIELDS := {"move_route": ["target"], "show_animation": ["target"], "show_balloon": ["target"]}
 const BATTLE_CONDITION_FIELDS := {
-	"turn": [{"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Turn"}, {"key": "every", "kind": "int", "default": 0, "min": 0, "label": "Then every (0 = once)"}],
+	"turn": [{"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Turn", "help": "0 is the battle's opening, before the first command. Turn 1 begins when the first commands are entered, before the first action."}, {"key": "every", "kind": "int", "default": 0, "min": 0, "label": "Then every (0 = once)", "help": "Repeats the page every this many turns. With the VX Ace rules a repeating page never runs at the opening (turn 0)."}],
 	"enemy_hp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "HP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
 	"enemy_mp": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "MP %"}, {"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent"}],
 	"enemy_turns": [{"key": "index", "kind": "int", "default": 0, "min": 0, "label": "Enemy #"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Turns"}, {"key": "n", "kind": "int", "default": 1, "min": 0, "label": "Count"}],

@@ -4,9 +4,11 @@ extends RefCounted
 ##
 ##   var core := RPGBattleCore.new(party, troop_record, rules, rng)
 ##   core.start()
+##   core.begin_battle()                         # turn 0; emits checkpoint("battle_start")
 ##   while core.battle_over() == "":
-##       core.begin_turn()                       # emits checkpoint("start_of_turn")
+##       core.begin_turn()                       # the input phase; the turn number is unchanged
 ##       for i in core.inputs_needed(): core.set_action(i, {...})
+##       core.begin_actions()                    # turn += 1; emits checkpoint("start_of_turn")
 ##       var r := core.next_action()             # emits checkpoint("after_action")
 ##       while not r.is_empty(): show(r); r = core.next_action()
 ##       core.end_turn()                         # emits checkpoint("end_of_turn")
@@ -16,6 +18,10 @@ extends RefCounted
 ##
 ## Battle events: connect to `checkpoint`, call eligible_battle_pages(kind) and run the
 ## returned pages' commands (the battle waits while they run).
+## The turn number is RPG Maker's (issue #143): 0 while the battle opens and through the first
+## input, so a "Turn 0" page runs at "battle_start" before the first command; it goes up when a
+## turn's actions begin, so "Turn 1" runs after the first input and before the first action.
+## next_action() calls begin_actions() itself when the driver did not.
 ## Troop members marked "hidden" ("Appears later") stay out of the battle until appear(index)
 ## brings them in (the Enemy Appear command).
 ##
@@ -27,6 +33,7 @@ extends RefCounted
 ##
 ##   core.battle_system = "atb"
 ##   core.start()
+##   core.begin_battle()                          # turn 0; emits checkpoint("battle_start")
 ##   core.begin_turn()                            # turn 1; emits checkpoint("start_of_turn")
 ##   while core.battle_over() == "":
 ##       var b := core.next_auto_ready()          # a full enemy, or an actor with its action set
@@ -98,6 +105,7 @@ var troop := {}
 var party: Array = []          ## RPGBattler (actors)
 var enemies: Array = []        ## RPGBattler (troop members, index = member index)
 var turn := 0
+var _actions_begun := false    ## turn-based: this turn's actions have begun (the turn number moved on)
 var phase := "idle"            ## idle, input, actions, turn_end, over
 var can_escape := true
 var escape_attempts := 0
@@ -202,6 +210,7 @@ func start() -> void:
 	if advantage == "pincer":
 		can_escape = false
 	turn = 0
+	_actions_begun = false
 	escape_attempts = 0
 	phase = "idle"
 	_result = ""
@@ -247,15 +256,25 @@ func active_enemies() -> Array:
 # Turn loop
 # --------------------------------------------------------------------------------------------
 
+## The battle opens: troop pages are checked with the turn at 0, before the first input (RPG
+## Maker's "Turn 0", the boss's opening line).
+func begin_battle() -> void:
+	if battle_over() != "":
+		return
+	checkpoint.emit("battle_start")
+
+
+## A turn's input phase begins. The turn number stays where it is until begin_actions(), as in
+## RPG Maker; a timed battle has no input phase of its own, so its turn starts here.
 func begin_turn() -> void:
 	if battle_over() != "":
 		return
-	turn += 1
 	phase = "input"
 	_used_commands.clear()   # command_used conditions only see the current battle turn
 	if is_timed():
 		# Timed battles: nobody's action or guard is reset here (that happens per battler, when
 		# its gauge fills); only the turn counter moves on.
+		turn += 1
 		_acted.clear()
 		_turn_members = all_battlers().filter(func(b): return b.is_active())
 		checkpoint.emit("start_of_turn")
@@ -265,13 +284,25 @@ func begin_turn() -> void:
 		b.action = {}
 	_queue.clear()
 	_queue_built = false
+	_actions_begun = false
+
+
+## Turn-based: the commands are in and the turn's actions begin. The turn number goes up and
+## troop pages are checked before the first action. Once per turn; next_action() calls it when
+## the driver has not.
+func begin_actions() -> void:
+	if is_timed() or _actions_begun or battle_over() != "":
+		return
+	_actions_begun = true
+	turn += 1
 	checkpoint.emit("start_of_turn")
 
 
 ## Party indices that need an action this turn.
 func inputs_needed() -> Array:
 	var out := []
-	if is_timed() or (turn == 1 and advantage in ["surprise", "back_attack", "pincer"]):
+	# The first input comes before turn 1 begins (the turn number is still 0 then).
+	if is_timed() or (turn == 0 and advantage in ["surprise", "back_attack", "pincer"]):
 		return out
 	for i in party.size():
 		var b: RPGBattler = party[i]
@@ -348,6 +379,7 @@ func next_action() -> Dictionary:
 	if battle_over() != "":
 		phase = "over"
 		return {}
+	begin_actions()
 	if not _queue_built:
 		_build_queue()
 	phase = "actions"
@@ -1610,8 +1642,13 @@ func _page_condition(c: Dictionary, checkpoint_kind := "") -> bool:
 	return false
 
 
+## "Turn n" (every 0), or "turn n, then every `every` turns". The repeating form never matches
+## before turn 1 under the VX / VX Ace / MV rules (their `n >= 1`); under the 2000/2003 rules
+## 0 + every×X includes the battle's opening (rules.turn_repeat()).
 func _turn_matches(n: int, every: int) -> bool:
 	if every > 0:
+		if turn < 1 and rules != null and rules.has_method("turn_repeat") and rules.turn_repeat() == "from_first_turn":
+			return false
 		return turn >= n and (turn - n) % every == 0
 	return turn == n
 
