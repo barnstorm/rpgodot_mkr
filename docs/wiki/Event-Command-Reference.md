@@ -73,7 +73,7 @@ records how long the wait took, in tenths of a second.
 | **Change Actor Graphic** | `change_actor_graphic` | Actor, Map sprite sheet (blank = keep), Sprite index, Face sheet (blank = keep), Face index, Battler image (blank = keep) |
 | **Change Encounter** | `change_encounter` | Random encounters on |
 | **Change Gold** | `change_gold` | Operation, Amount |
-| **Change HP / SP** | `change_hp_mp` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy #, Resource, Operation, Amount, Allow knockout |
+| **Change HP / SP** | `change_hp_mp` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy #, Resource, Operation, Amount, Allow knockout (on the map, the whole party down is Game Over, or the System's defeat handler) |
 | **Change Items** | `change_items` | Kind, Item, Operation, Amount |
 | **Change Name** | `change_name` | Actor, Name |
 | **Change Nickname** | `change_nickname` | Actor, Nickname |
