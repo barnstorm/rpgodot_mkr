@@ -48,6 +48,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Control Variables: Game Data / Random | The value's mode: **Game data** (items held, gold, steps, play time, party size, an actor's level, EXP or stats) or **Random** |
 | System tab: Boat / Ship / Airship | Database > System > **Vehicles** (graphic, start position with Pick on map, music, speed) |
 | Conditional Branch: Vehicle | Condition kind **Vehicle** |
+| Timer Operations (2000/2003) | **Control Timer**: two timers; Set (time in seconds, show on screen, which corner), Start, Stop, and what it does in battle (pause, keep counting, or abort at 0 — no rewards, the escape branch). The **Timer** condition (pages and branches) checks the time left, any comparison |
 | Conditional Branch: the actor's HP / MP / level | Condition kind **Actor**: level, HP or SP (SP is MP), as a value or a percentage of the max, with any comparison |
 | Conditional Branch: Script (VX Ace/MV/MZ) | Condition kind **Formula**: the kit's formula language, e.g. `v.treasures >= 3` (no Ruby/JavaScript) |
 | Conditional Branch: what started the event / collision checks | **Started by** (action button, a touch, autorun, parallel, Call Event) and **Can pass** (a character can step N cells a direction), branch-only kinds |

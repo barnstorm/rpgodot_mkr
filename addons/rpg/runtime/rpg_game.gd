@@ -610,6 +610,30 @@ func _restore(old_map: RPGMap, fade: String) -> void:
 	rpg.scheduler.unlock_input("transfer")
 
 
+## The map copy of the timers' readout, under the UI root so scenes and menus draw over it. Only
+## kept while a timer is visible; the battle scene draws its own copy.
+func _ensure_timer_display() -> void:
+	if rpg.ui == null or rpg.ui.root == null:
+		return
+	var want := false
+	for id in ["1", "2"]:
+		if bool(rpg.state.timer(id).get("visible", false)):
+			want = true
+			break
+	var node: Node = rpg.ui.root.get_node_or_null("TimerDisplay")
+	if not want:
+		if node != null:
+			node.queue_free()
+		return
+	if node == null:
+		var d := RPGTimerDisplay.new()
+		d.name = "TimerDisplay"
+		d.state = rpg.state
+		d.service = rpg
+		d.yield_to_battle = true
+		rpg.ui.root.add_child(d)
+
+
 func _show_map_name(props: Dictionary) -> void:
 	var dn: String = props.get("display_name", "")
 	if dn == "" or not rpg.state.map_name_display:
@@ -731,6 +755,14 @@ func _process(_delta: float) -> void:
 		rpg.saves.autosave(autosave_reason)
 	if map != null:
 		rpg.state.play_time += _delta
+	# The timers count down everywhere except a "pause" timer in a battle; an "abort" timer that
+	# runs out mid-battle ends it like End Battle's abort (no rewards, the escape branch).
+	var in_battle: bool = rpg.battle != null and rpg.battle.valid()
+	for tid in rpg.state.tick_timers(_delta, in_battle):
+		if in_battle and str(rpg.state.timer(tid).get("battle", "pause")) == "abort":
+			rpg.battle.end("escape")
+	if map != null:
+		_ensure_timer_display()
 	# The save screen asked for by an event opens once the main event has finished (safe point).
 	if rpg.ui.pending_save_screen and not rpg.scheduler.is_main_busy() and not rpg.ui.scene_open() and not transferring:
 		rpg.ui.pending_save_screen = false

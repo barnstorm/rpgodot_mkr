@@ -88,6 +88,7 @@ const CONDITION_FIELDS := {
 		{"key": "percent", "kind": "bool", "default": false, "label": "Percent (of max)", "show_if": {"key": "check", "equals": ["hp", "sp"]}},
 	],
 	"gold": [{"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": ">=", "label": "Gold"}, {"key": "value", "kind": "operand", "default": 0, "min": 0, "label": "Amount"}],
+	"timer": [{"key": "timer", "kind": "choice", "options": ["1", "2"], "option_labels": ["Timer 1", "Timer 2"], "default": "1", "label": "Timer"}, {"key": "op", "kind": "choice", "options": OPS, "option_labels": OP_LABELS, "default": "<=", "label": "Time left"}, {"key": "seconds", "kind": "operand", "default": 0, "min": 0, "label": "Seconds"}],
 	"vehicle": [{"key": "id", "kind": "choice", "options": ["boat", "ship", "airship", "none"], "option_labels": ["Boat", "Ship", "Airship", "On foot (no vehicle)"], "default": "boat", "label": "Player is riding"}],
 	"facing": [{"key": "target", "kind": "character", "default": "player", "label": "Character"}, {"key": "facing", "kind": "facing", "allow_keep": false, "default": "down", "label": "is facing"}],
 	"button": [

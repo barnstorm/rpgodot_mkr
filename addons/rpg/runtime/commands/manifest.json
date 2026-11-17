@@ -28,6 +28,7 @@
 		"set_switch.gd",
 		"set_variable.gd",
 		"set_self_switch.gd",
+		"control_timer.gd",
 		"change_gold.gd",
 		"change_items.gd",
 		"change_party.gd",
