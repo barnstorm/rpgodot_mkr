@@ -472,78 +472,21 @@
 				{
 					"commands": [
 						{
-							"type": "show_text",
-							"name": "Innkeeper",
-							"face": {
-								"index": 4,
-								"sheet": "hero_face"
-							},
-							"gold_window": true,
-							"text": "Welcome! A night's stay is 20 gold. Would you like to rest?"
-						},
-						{
-							"type": "show_choices",
-							"choices": [
+							"type": "call_inn",
+							"left": [
 								{
-									"label": "Yes",
-									"then": [
-										{
-											"type": "if",
-											"condition": {
-												"kind": "gold",
-												"op": ">=",
-												"value": 20
-											},
-											"else": [
-												{
-													"type": "show_text",
-													"text": "Sorry, you don't have enough gold."
-												}
-											],
-											"then": [
-												{
-													"type": "change_gold",
-													"amount": 20,
-													"operation": "decrease"
-												},
-												{
-													"type": "fade_out"
-												},
-												{
-													"type": "play_jingle",
-													"sound": {
-														"role": "inn_rest"
-													}
-												},
-												{
-													"type": "wait",
-													"seconds": 3
-												},
-												{
-													"type": "recover_all",
-													"target": "party"
-												},
-												{
-													"type": "fade_in"
-												},
-												{
-													"type": "show_text",
-													"text": "Good morning! Safe travels."
-												}
-											]
-										}
-									]
-								},
-								{
-									"label": "No",
-									"then": [
-										{
-											"type": "show_text",
-											"text": "Please come again."
-										}
-									]
+									"type": "show_text",
+									"text": "Please come again."
 								}
-							]
+							],
+							"price": 20,
+							"stayed": [
+								{
+									"type": "show_text",
+									"text": "Good morning! Safe travels."
+								}
+							],
+							"style": "1"
 						}
 					],
 					"conditions": [],

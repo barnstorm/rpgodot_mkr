@@ -2,7 +2,7 @@
 
 Every built-in event command, by the category it has in the command picker. Each is edited in a form; the fields are listed here. Plugins add more commands under their own ★ categories (see [Plugins](Plugins.md)), and you can write your own ([For programmers](For-Programmers.md#custom-event-commands)).
 
-There are 93 built-in commands. The *ID* is the command's `type` in the event JSON files.
+There are 94 built-in commands. The *ID* is the command's `type` in the event JSON files.
 
 ## Message
 
@@ -69,6 +69,7 @@ records how long the wait took, in tenths of a second.
 
 | Command | ID | Fields |
 | --- | --- | --- |
+| **Call Inn** | `call_inn` | Price, Message style (1 / 2), Ask text, Not enough gold text, Jingle, Gold window, When the party stays, When they don't stay |
 | **Change Actor Graphic** | `change_actor_graphic` | Actor, Map sprite sheet (blank = keep), Sprite index, Face sheet (blank = keep), Face index, Battler image (blank = keep) |
 | **Change Encounter** | `change_encounter` | Random encounters on |
 | **Change Gold** | `change_gold` | Operation, Amount |
@@ -79,6 +80,8 @@ records how long the wait took, in tenths of a second.
 | **Change Party Member** | `change_party` | Actor, Operation, Initialize (reset level and equipment), Only for this battle |
 | **Change State** | `change_state` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy #, State, Operation, Ignore resist rates |
 | **Recover All** | `recover_all` | Target (actors, or in a battle *Entire troop* / *Enemy #*), Enemy # |
+
+**Call Inn** runs the whole inn stay: it asks with one of the System's two inn messages (Terms records `inn_1` / `inn_2`; the *Message style* field picks between them, as in RPG Maker 2003) beside a Yes/No — cancelling counts as No. **Yes** without the price shows the System's can't-afford message (Terms `inn_no_gold`), and both that and **No** run the *When they don't stay* branch. **Yes** with the gold takes the price, fades out, plays the inn jingle (ME — the `inn_rest` sound role, or the *Jingle* field), recovers the party exactly as **Recover All** would, fades back in and runs *When the party stays*. In every message `%1` is the price and `\G` the currency unit, and the *Ask text* / *Not enough gold text* fields replace the System messages for this call alone. The *Price* is an operand, so it can come from a variable.
 
 ## Actors and rules
 

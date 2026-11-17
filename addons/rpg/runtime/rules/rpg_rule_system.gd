@@ -67,6 +67,14 @@ const DEFAULT_TERMS := {
 	"nothing": "Nothing happened.",
 }
 
+## Call Inn's messages: the two System message styles RM2003 offers ("1"/"2") and the
+## can't-afford text. %1 is the price; \G the currency unit.
+const DEFAULT_INN_TERMS := {
+	"1": "Welcome! A room is %1 \\G a night. Will you be staying?",
+	"2": "A room costs %1 \\G. Stay the night?",
+	"no_gold": "Sorry, you don't have enough \\G.",
+}
+
 var definition := {}
 var db = null
 var rng := RPGRandom.new()
@@ -263,8 +271,18 @@ func _rec(type: String, id: String) -> Dictionary:
 ## Battle text from terms.json record "battle_<key>" (field "text"), falling back to
 ## DEFAULT_TERMS. %1, %2, %3 are replaced by args.
 func term(key: String, args: Array = []) -> String:
-	var t := _rec("terms", "battle_" + key)
-	var text: String = str(t.get("text", DEFAULT_TERMS.get(key, key)))
+	return _term_text(_rec("terms", "battle_" + key), key, args, DEFAULT_TERMS)
+
+
+## Inn text from terms.json record "inn_<key>" (field "text"), falling back to
+## DEFAULT_INN_TERMS: keys "1"/"2" are the message styles Call Inn picks between,
+## "no_gold" the can't-afford message.
+func inn_term(key: String, args: Array = []) -> String:
+	return _term_text(_rec("terms", "inn_" + key), key, args, DEFAULT_INN_TERMS)
+
+
+func _term_text(t: Dictionary, key: String, args: Array, defaults: Dictionary) -> String:
+	var text: String = str(t.get("text", defaults.get(key, key)))
 	for i in range(args.size() - 1, -1, -1):
 		text = text.replace("%" + str(i + 1), str(args[i]))
 	# \G is the currency unit, as in messages (one source: RPGProjectData.currency()).

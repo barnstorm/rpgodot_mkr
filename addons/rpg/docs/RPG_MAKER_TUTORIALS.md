@@ -34,6 +34,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Timer Operations (2000/2003) | **Control Timer**: two timers; Set (time, show on screen, corner), Start, Stop, and what it does in battle (pause, count, or abort at 0); the **Timer** condition checks the time left |
 | Key Input Processing (2000/2003) | The same (*message* category); the key codes match 2003's numbering, and the kit's rpg_* actions (menu, debug, through, overlay, or your own) can be accepted too |
 | Change Tile (2000/2003) | The same (*screen* category): replaces every tile of a layer matching a key, or sets the single cell at X, Y; **Keep** stores the change in the save (without it the map resets when reloaded, as in RPG Maker) |
+| Call Inn (2000/2003) | **Call Inn** (*party* category): the ask message from one of the two System styles (Terms), Yes/No with cancel as No, the can't-afford message, gold, fade, jingle (ME), a full Recover All and branches for stayed / didn't stay |
 | Change HP / MP | Change HP / SP (with the Classic rules; MP with the VX Ace rules) |
 | Change Party Member | Change Party Member |
 | Set Vehicle Location, Get On/Off Vehicle | The same commands (*movement* category) |
