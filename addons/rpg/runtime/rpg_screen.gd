@@ -20,6 +20,14 @@ var shake_time := 0.0
 var shake_offset := Vector2.ZERO
 var is_faded := false
 var tint_color := Color.WHITE
+## Battle mode (issue #7): while a battle scene is up, the three screen effects act on its
+## stage instead of the map. The battle has its own screen state, cleared when it ends; the
+## map's tint waits underneath, untouched and restored as it was.
+var battle_stage: Control = null
+var battle_flash_rect: ColorRect = null
+var battle_tint_color := Color.WHITE
+var _battle_base := Vector2.ZERO
+var _battle_tweens: Array[Tween] = []
 
 
 func _init() -> void:
@@ -88,6 +96,14 @@ func set_faded(on: bool) -> void:
 
 
 func tint_screen(color: Color, seconds := 0.5) -> Signal:
+	if _in_battle():
+		# The battle field tints (background and battlers, not the windows — they are siblings
+		# of the stage, and self_modulate only reaches the subtree).
+		battle_tint_color = color
+		var bt := create_tween()
+		_track_battle_tween(bt)
+		bt.tween_property(battle_stage, "self_modulate", color, maxf(seconds, 0.01))
+		return bt.finished
 	tint_color = color
 	var t := create_tween()
 	t.tween_property(tint, "color", color, maxf(seconds, 0.01))
@@ -95,9 +111,12 @@ func tint_screen(color: Color, seconds := 0.5) -> Signal:
 
 
 func flash(color: Color, seconds := 0.5) -> Signal:
-	flash_rect.color = color
+	var rect := battle_flash_rect if _in_battle() else flash_rect
+	rect.color = color
 	var t := create_tween()
-	t.tween_property(flash_rect, "color:a", 0.0, maxf(seconds, 0.01))
+	if _in_battle():
+		_track_battle_tween(t)
+	t.tween_property(rect, "color:a", 0.0, maxf(seconds, 0.01))
 	return t.finished
 
 
@@ -115,9 +134,55 @@ func _process(delta: float) -> void:
 		shake_offset = Vector2(randf_range(-shake_power, shake_power), randf_range(-shake_power, shake_power) * 0.5)
 		if shake_time <= 0.0:
 			shake_offset = Vector2.ZERO
+	if _in_battle():
+		# In battle the field shakes, not the map's camera behind it.
+		battle_stage.position = _battle_base + shake_offset
+		return
 	var cam := get_viewport().get_camera_2d()
 	if cam != null:
 		cam.offset = shake_offset
+
+
+# --- battle mode (issue #7) ---------------------------------------------------------------------
+
+func _in_battle() -> bool:
+	return battle_stage != null and is_instance_valid(battle_stage)
+
+
+## The battle scene registers its stage and flash rect when it starts. From then on tint, flash
+## and shake act on the battle field, starting from a clean state (RPG Maker's battle screen
+## has its own; a map tint never leaks in).
+func enter_battle(stage: Control, flash_rect: ColorRect) -> void:
+	battle_stage = stage
+	battle_flash_rect = flash_rect
+	battle_tint_color = Color.WHITE
+	_battle_base = stage.position
+	stage.self_modulate = Color.WHITE
+	if flash_rect != null:
+		flash_rect.color.a = 0.0
+
+
+## The battle's screen state ends with the fight. The map's own tint, flash and shake were
+## never touched, so they continue exactly as they were.
+func exit_battle() -> void:
+	for t in _battle_tweens:
+		if t.is_valid():
+			t.kill()
+	_battle_tweens.clear()
+	if _in_battle():
+		battle_stage.self_modulate = Color.WHITE
+		battle_stage.position = _battle_base
+	if battle_flash_rect != null and is_instance_valid(battle_flash_rect):
+		battle_flash_rect.color.a = 0.0
+	battle_stage = null
+	battle_flash_rect = null
+	shake_time = 0.0
+	shake_offset = Vector2.ZERO
+
+
+func _track_battle_tween(t: Tween) -> void:
+	_battle_tweens.append(t)
+	t.finished.connect(func(): _battle_tweens.erase(t))
 
 
 func set_weather(type: String, power := 5) -> void:

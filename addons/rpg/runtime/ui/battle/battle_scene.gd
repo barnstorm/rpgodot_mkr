@@ -83,6 +83,9 @@ var log_lines: Array = []
 
 var stage: Control
 var field: Control
+## The battle's own flash overlay (issue #7): tint, flash and shake from battle events act on
+## the stage through rpg.screen's battle mode, and end with the fight.
+var flash_rect: ColorRect
 var popups: Control
 var enemy_nodes: Dictionary = {}       # RPGBattler -> TextureRect
 var log_win: Panel
@@ -139,6 +142,11 @@ func _build() -> void:
 	field.size = Vector2(W, FIELD_H)
 	field.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(field)
+	flash_rect = ColorRect.new()
+	flash_rect.color = Color(1, 1, 1, 0)
+	flash_rect.size = Vector2(W, FIELD_H)
+	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(flash_rect)
 	popups = Control.new()
 	popups.size = Vector2(W, H)
 	popups.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -237,6 +245,10 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 	core.start()
 	core.can_escape = core.can_escape and bool(args.get("can_escape", true))
 	_make_backdrop(str(args.get("background", "")))
+	# The battle owns the three screen effects while it runs (issue #7): tint, flash and shake
+	# from its events act on this stage, from a clean state.
+	if rpg != null and rpg.screen != null and rpg.screen.has_method("enter_battle"):
+		rpg.screen.enter_battle(stage, flash_rect)
 	_make_enemies()
 	if battle_view == "side":
 		_make_party()
@@ -259,6 +271,9 @@ func start(p_args: Dictionary, p_context: Variant = null) -> void:
 func _exit_tree() -> void:
 	if rpg != null and "battle" in rpg and rpg.battle != null and rpg.battle.scene() == self:
 		rpg.battle = null
+	# Hand the screen effects back to the map (only if a later battle has not taken them).
+	if rpg != null and rpg.screen != null and rpg.screen.has_method("exit_battle") and rpg.screen.get("battle_stage") == stage:
+		rpg.screen.exit_battle()
 
 
 # --- extension hooks -----------------------------------------------------------------------------
@@ -1606,6 +1621,10 @@ func _end_battle() -> void:
 	_temp_actors.clear()
 	if rpg != null and "battle" in rpg and rpg.battle != null and rpg.battle.scene() == self:
 		rpg.battle = null
+	# The screen effects go back to the map with the fight itself (issue #7), before the battle
+	# command's branches run — _exit_tree only covers closes that skip _end_battle.
+	if rpg != null and rpg.screen != null and rpg.screen.has_method("exit_battle") and rpg.screen.get("battle_stage") == stage:
+		rpg.screen.exit_battle()
 	if _done:
 		return
 	_done = true
