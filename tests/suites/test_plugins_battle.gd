@@ -88,7 +88,7 @@ func _start_battle(args: Dictionary, out: Dictionary) -> Node:
 
 
 ## Lets a battle that waits for the player play itself out (the open command is confirmed).
-func _finish(scene: Node, out: Dictionary) -> void:
+func _finish(scene, out: Dictionary) -> void:
 	env.rpg.ui.auto_advance = true
 	var end := Time.get_ticks_msec() + 20000
 	while not out.has("r") and Time.get_ticks_msec() < end:

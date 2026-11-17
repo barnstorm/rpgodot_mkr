@@ -60,6 +60,7 @@
 		{"kind": "mp_regen", "label": "Ex-Parameter: MP Regen Rate", "value": "percent", "default": 0},
 		{"kind": "tp_regen", "label": "Ex-Parameter: TP Regen Rate", "value": "percent", "default": 0},
 		{"kind": "tp_charge_rate", "label": "Sp-Parameter: TP Charge Rate", "value": "percent", "default": 100},
+		{"kind": "debuff_rate", "label": "Sp-Parameter: Debuff Rate", "id_ref": "stat", "value": "percent", "default": 100},
 		{"kind": "attack_element", "label": "Attack Element", "id_ref": "element"},
 		{"kind": "extra_attack", "label": "Attack Times+", "value": "int", "default": 1},
 		{"kind": "action_times", "label": "Action Times+", "value": "percent", "default": 100},
@@ -98,5 +99,6 @@
 	"damage": {"variance": 20, "min": 0, "guard_percent": 50},
 	"turn_order": {"speed": "a.agi + rand(0, a.agi / 4)"},
 	"escape": {"chance": "clamp(150 - 100 * b.agi / max(1, a.agi), 0, 100)"},
+	"buffs": {"params": ["mhp", "mmp", "atk", "def", "mat", "mdf", "agi", "luk"], "step": 25, "max_levels": 2, "luck_stat": "luk"},
 	"roll_check": {"roll": "1d100", "bonus": "s.value / 10", "compare": ">="}
 }

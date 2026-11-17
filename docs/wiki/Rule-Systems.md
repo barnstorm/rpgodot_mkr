@@ -21,8 +21,9 @@ Stats, resources, damage formulas and battle maths are not built into the kit. T
 - Item and skill **effects** *Gain TP* (flat TP, capped at the maximum) and *Special Effect: Escape* (whoever it hits leaves the battle — an enemy just goes; a whole party escaping ends the fight as an escape).
 - MV/MZ **scopes**: *N random enemies* (1-4 picks, each re-rolled from the living), the *(dead or alive)* ally scopes, and *Everyone* (both sides).
 - MV **invocation fields**: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss — through the rules' `gain_on_use`).
+- Buffs and debuffs: the *Add Buff* / *Add Debuff* / *Remove Buff* / *Remove Debuff* effects step a stat ±25% per level (two levels max), roll debuff chances against Debuff Rate traits and the user's luck, and wear off after their turns or at battle's end. Classic has none — its halve/double stat changes are states.
 
-Not covered yet: buffs and debuffs, Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
+Not covered yet: Sp-Parameters other than critical rate, Counter Attack and Magic Reflection, Special Flags, Fix Equip, Attack State. Action Times+ repeats the same action. Change Class keeps the level (no separate EXP per class). Lowering a level keeps the stats gained on the way up.
 
 ## Switching
 
@@ -57,4 +58,4 @@ A battle scene declares what it needs from the rule system (`const CAPABILITIES 
 
 ## Writing your own
 
-Copy a folder in `rpg/rules/`, rename it and its `id`, and edit `rules.json`. The keys are: `stats`, `resources`, `life_resource`, `death_state`, `levels`, `growth`, `exp_curve`, `traits`, `attack`, `hit_check`, `critical`, `damage`, `turn_order`, `escape`, `roll_check` and `capabilities`. The rule system contract is described in [docs/ARCHITECTURE.md](https://github.com/barnstorm/rpgodot_mkr/blob/main/docs/ARCHITECTURE.md#rule-system-contract-runtimerules). The **Roll Check** event command uses the rule system's `roll_check` (a skill check for tabletop-style games).
+Copy a folder in `rpg/rules/`, rename it and its `id`, and edit `rules.json`. The keys are: `stats`, `resources`, `life_resource`, `death_state`, `levels`, `growth`, `exp_curve`, `traits`, `buffs`, `attack`, `hit_check`, `critical`, `damage`, `turn_order`, `escape`, `roll_check` and `capabilities`. The rule system contract is described in [docs/ARCHITECTURE.md](https://github.com/barnstorm/rpgodot_mkr/blob/main/docs/ARCHITECTURE.md#rule-system-contract-runtimerules). The **Roll Check** event command uses the rule system's `roll_check` (a skill check for tabletop-style games). A `buffs` block (`params`, `step`, `max_levels`, `luck_stat`) turns the buff effects on; without one they do nothing.

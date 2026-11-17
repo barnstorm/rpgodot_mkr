@@ -482,3 +482,16 @@ func test_slip_damage_knockout_rules_default_and_state_override() -> void:
 	tick = rules.tick_states(hero)
 	assert_eq(hero.get_resource("hp"), 0)
 	assert_true(tick.knocked_out)
+
+
+func test_no_buffs_config_is_a_noop() -> void:
+	# Classic's rules.json has no "buffs" block: its halve/double stat changes are states, so
+	# the buff helpers and effects do nothing there (#42's config hook).
+	assert_eq(rules.buffs_config(), {})
+	assert_false(rules.buffable("atk"))
+	var hero := rules.new_actor_battler("hero")
+	var before := rules.stat_block(hero)
+	assert_false(rules.add_buff(hero, "atk"))
+	assert_false(rules.add_debuff(hero, "atk"))
+	assert_false(rules.remove_buff(hero, "atk"))
+	assert_eq(rules.stat_block(hero), before, "nothing changed")

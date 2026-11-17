@@ -37,6 +37,12 @@ var escaped := false
 ## count too. The enemy_turns / actor_turns page conditions read it.
 var turns_taken := 0
 
+## Buffs/debuffs (#42): stat id -> {"level": +1..+2 / -1..-2, "turns": n (-1 = until removed)}.
+## Battle-only, like guarding: cleared by end_battle and never saved. All the math (stacking,
+## stat scaling, expiry) lives in the rule system, which only fills this when its rules.json
+## has a "buffs" config.
+var buffs := {}
+
 
 func is_actor() -> bool:
 	return kind == "actor"
