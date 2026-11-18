@@ -96,7 +96,7 @@ const EFFECT_REFS := {"add_state": "state", "remove_state": "state", "learn_skil
 const TRAIT_REFS := {"element_rate": "element", "state_rate": "state", "state_resist": "state", "stat_rate": "stat",
 	"attack_element": "element", "attack_state": "state", "add_skill_type": "skill_type", "seal_skill_type": "skill_type",
 	"add_skill": "skill", "seal_skill": "skill", "equip_weapon_type": "weapon_type", "equip_armor_type": "armor_type",
-	"dual_wield": "equip_slot", "seal_equip": "equip_slot"}
+	"dual_wield": "equip_slot", "seal_equip": "equip_slot", "fix_equip": "equip_slot"}
 ## id_ref values that name an entry of a Types list -> the Types record holding the list.
 const TYPE_LISTS := {"element": "elements", "skill_type": "skill_types", "equip_slot": "equip_slots", "weapon_type": "weapon_types", "armor_type": "armor_types"}
 ## Built-in battle effects (RPGBattleEffects.BUILTIN): an `animation` may name one instead of a record.

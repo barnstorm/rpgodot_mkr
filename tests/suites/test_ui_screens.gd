@@ -407,8 +407,8 @@ func test_main_menu_items_skills_equip() -> void:
 	hero_rec["traits"] = [{"kind": "dual_wield", "id": "shield"}, {"kind": "seal_equip", "id": "body"}]
 	menu.equip_actor = hero
 	assert_true(menu.candidates(hero, "shield").has("bronze_sword"), "a weapon in the shield slot with Dual Wield")
-	assert_true(menu._sealed("body"))
-	assert_false(menu._sealed("weapon"))
+	assert_true(menu._locked("body"))
+	assert_false(menu._locked("weapon"))
 	if old_traits == null:
 		hero_rec.erase("traits")
 	else:

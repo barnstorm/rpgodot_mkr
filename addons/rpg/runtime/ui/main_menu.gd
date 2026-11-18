@@ -911,7 +911,7 @@ func _refresh_slots() -> void:
 	for s in slot_ids:
 		var id := str(equip_actor.equips.get(s, ""))
 		var nm := str(record(_slot_kind(s), id).get("name", "")) if id != "" else "-"
-		var sealed := _sealed(s)
+		var sealed := _locked(s)
 		items.append({"text": _slot_name(s), "right": nm, "colour": system_colour() if not sealed else Color(1, 1, 1, 0.45), "right_colour": colour(0) if not sealed else Color(1, 1, 1, 0.45),
 			"right_icon": record_icon(record(_slot_kind(s), id)) if id != "" else null})
 	slot_list.set_items(items)
@@ -919,9 +919,13 @@ func _refresh_slots() -> void:
 	help.text = str(record(_slot_kind(current_slot()), cur).get("description", "")) if cur != "" else ""
 
 
-## Seal Equip (VX Ace rules): the slot can't be changed.
-func _sealed(slot: String) -> bool:
-	return equip_actor != null and rules() != null and rules().has_method("is_slot_sealed") and equip_actor.has_method("is_actor") and bool(rules().is_slot_sealed(equip_actor, slot))
+## Seal Equip and Fix Equip (VX Ace rules): the slot can't be changed here.
+func _locked(slot: String) -> bool:
+	if equip_actor == null or rules() == null or not equip_actor.has_method("is_actor"):
+		return false
+	if rules().has_method("equip_change_ok"):
+		return not bool(rules().equip_change_ok(equip_actor, slot))
+	return rules().has_method("is_slot_sealed") and bool(rules().is_slot_sealed(equip_actor, slot))
 
 
 func current_slot() -> String:
@@ -1018,7 +1022,7 @@ func _input_equip(a: String) -> void:
 					_refresh_slots()
 					_refresh_candidates(false)
 			"ok":
-				if _sealed(current_slot()):
+				if _locked(current_slot()):
 					play("buzzer")
 					return
 				play("decision")
@@ -1079,7 +1083,9 @@ func _end_candidates() -> void:
 	_refresh_equip_stats()
 
 
-## Puts item `id` (or nothing, "") into `slot`. The old item goes back to the inventory.
+## Puts item `id` (or nothing, "") into `slot`. The old item goes back to the inventory, and so
+## does anything the change leaves unwearable (the shield under a two-handed sword that seals
+## its slot: RPGRuleSystem.set_equip).
 func equip(b: Object, slot: String, id: String) -> bool:
 	var kind := _slot_kind(slot)
 	var old := str(b.equips.get(slot, ""))
@@ -1091,7 +1097,11 @@ func equip(b: Object, slot: String, id: String) -> bool:
 		rpg.state.change_items(old, "increase", 1, kind)
 	if id != "":
 		rpg.state.change_items(id, "decrease", 1, kind)
-	b.equips[slot] = id
+	if rules() != null and b is RPGBattler and rules().has_method("set_equip"):
+		for off in rules().set_equip(b, slot, id):
+			rpg.state.change_items(str(off.item), "increase", 1, str(off.kind) + "s")
+	else:
+		b.equips[slot] = id
 	if rules() != null:
 		rules().clamp_resources(b)
 	rpg.state.notify_actor_changed(b.id)

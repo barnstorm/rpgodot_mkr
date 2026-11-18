@@ -3,7 +3,9 @@ extends RPGCommand
 ## RPG Maker's "Change Equipment": puts a weapon or armour in one of the actor's slots (blank
 ## item = remove). The old item goes back to the inventory; the new one is taken from it when
 ## the party has one (as in RPG Maker VX, the actor is equipped even when the party has none).
-## An item the actor's class can't wear is ignored, as in RPG Maker.
+## An item the actor's class can't wear is ignored, as in RPG Maker. Whatever the change leaves
+## unwearable (a shield under a weapon that seals its slot) goes back to the inventory too.
+## Fix Equip does not hold this command back; a sealed slot does.
 
 
 static func descriptor() -> Dictionary:
@@ -57,8 +59,12 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 			ctx.state.change_items(old, "increase", 1, old_kind)
 		if item != "" and ctx.state.item_count(item, kind) > 0:
 			ctx.state.change_items(item, "decrease", 1, kind)
-		equips[slot] = item
-		RPGPartyUtil.set_field(b, "equips", equips)
+		if b is RPGBattler and RPGPartyUtil.rules_has(ctx, "set_equip", 3):
+			for off in ctx.rpg.rules.set_equip(b, slot, item):
+				ctx.state.change_items(str(off.item), "increase", 1, str(off.kind) + "s")
+		else:
+			equips[slot] = item
+			RPGPartyUtil.set_field(b, "equips", equips)
 		RPGPartyUtil.clamp_after_change(ctx, b)
 	ctx.state.notify_actor_changed(id)
 	return RPGResult.ok()

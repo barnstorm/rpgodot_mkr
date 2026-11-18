@@ -99,6 +99,7 @@
 		{"kind": "seal_skill", "label": "Seal Skill", "id_ref": "skill"},
 		{"kind": "dual_wield", "label": "Dual Wield (slot becomes a weapon slot)", "id_ref": "equip_slot"},
 		{"kind": "seal_equip", "label": "Seal Equip", "id_ref": "equip_slot"},
+		{"kind": "fix_equip", "label": "Fix Equip (the Equip menu can't change the slot; none = every slot)", "id_ref": "equip_slot"},
 		{"kind": "equip_weapon_type", "label": "Equip Weapon Type", "id_ref": "weapon_type"},
 		{"kind": "equip_armor_type", "label": "Equip Armor Type", "id_ref": "armor_type"},
 		{"kind": "preserve_tp", "label": "Preserve TP"},
