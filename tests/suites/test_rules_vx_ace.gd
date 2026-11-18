@@ -50,7 +50,8 @@ func before_each() -> void:
 	db.add("states", {"id": "drain", "name": "Drain", "traits": [{"kind": "hp_regen", "value": -10}]})
 	db.add("states", {"id": "silence", "name": "Silence", "traits": [{"kind": "seal_skill_type", "id": "magic"}]})
 	db.add("states", {"id": "sealed", "name": "Sealed", "traits": [{"kind": "seal_equip", "id": "body"}]})
-	db.add("states", {"id": "blind", "name": "Blind", "traits": [{"kind": "hit_rate", "value": 0}]})
+	db.add("states", {"id": "blind", "name": "Blind", "traits": [{"kind": "hit_rate", "value": -60}]})
+	db.add("states", {"id": "blackout", "name": "Blackout", "traits": [{"kind": "hit_rate", "value": -95}]})
 	db.add("states", {"id": "focus", "name": "Focus", "traits": [{"kind": "critical_rate", "value": 100}]})
 	db.add("states", {"id": "charger", "name": "Charger", "traits": [{"kind": "tp_charge_rate", "value": 200}]})
 	db.add("states", {"id": "keep_tp", "name": "Keep TP", "traits": [{"kind": "preserve_tp"}]})
@@ -188,9 +189,72 @@ func test_ex_parameters_hit_eva() -> void:
 	assert_true(evaded > 30, "most failures are evasions (%d/40)" % evaded)
 	assert_true(rules.hit_check(eric, ghost, {"kind": "skill", "skill": "fire"}).hit, "magic ignores EVA (MEV 0)")
 	rules.add_state(eric, "blind")
-	assert_eq(eric.snapshot().hit, 0)
+	assert_eq(eric.snapshot().hit, 35, "Blind takes 60 off the 95")
+	rules.add_state(eric, "blackout")
+	assert_eq(eric.snapshot().hit, -60)
 	for i in 20:
-		assert_false(rules.hit_check(eric, slime, {"kind": "attack"}).hit, "HIT 0 never hits")
+		assert_false(rules.hit_check(eric, slime, {"kind": "attack"}).hit, "HIT below 0 never hits")
+
+
+## Issue #146: HIT 95 / EVA 5 / CRI 4 are the default features of a class (enemies: 95 / 5 / 0),
+## and every other trait adds to them, as in VX Ace.
+func test_146_hit_eva_cri_defaults_are_a_base_that_traits_add_to() -> void:
+	db.add("armors", {"id": "cloth_shirt", "name": "Cloth Shirt", "params": {"def": 3},
+		"traits": [{"kind": "evasion_rate", "value": 3}, {"kind": "hit_rate", "value": 3}]})
+	db.add("weapons", {"id": "lightning_blade", "name": "Lightning Blade", "params": {"atk": 10},
+		"traits": [{"kind": "hit_rate", "value": 0}]})
+	db.add("actors", {"id": "lucky", "name": "Lucky", "class": "soldier", "equips": {},
+		"traits": [{"kind": "critical_rate", "value": 10}]})
+	var eric := rules.new_actor_battler("eric")
+	var s := eric.snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [95, 5, 4], "a class that lists none has the defaults")
+	eric.equips["body"] = "cloth_shirt"
+	s = eric.snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [98, 8, 4], "the Cloth Shirt's EVA +3 gives 8, not 3")
+	assert_eq(rules.trait_field(eric, "eva"), 8, "trait_field agrees with the snapshot")
+	eric.equips["weapon"] = "lightning_blade"
+	assert_eq(eric.snapshot().hit, 98, "HIT +0 on a weapon changes nothing (it used to make every attack miss)")
+	rules.add_state(eric, "blind")
+	assert_eq(eric.snapshot().hit, 38, "95 + 3 + 0 - 60")
+	assert_eq(rules.new_actor_battler("lucky").snapshot().cri, 14, "an actor's own trait adds too")
+	# Enemies: HIT 95, EVA 5, and no critical hits unless they are given some.
+	var slime := rules.new_enemy_battler("slime")
+	s = slime.snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [95, 5, 0])
+	rules.add_state(slime, "blind")
+	assert_eq(slime.snapshot().hit, 35, "a blinded enemy keeps 35")
+	rules.add_state(slime, "focus")
+	assert_eq(slime.snapshot().cri, 100)
+	# A class or an enemy that lists the trait itself has set its own base.
+	var ghost := rules.new_enemy_battler("ghost")
+	assert_eq([ghost.snapshot().hit, ghost.snapshot().eva], [95, 100], "the ghost's own EVA 100, the default HIT")
+	db.add("classes", {"id": "marksman", "name": "Marksman", "growth": db.record("classes", "brawler").growth,
+		"traits": [{"kind": "hit_rate", "value": 80}]})
+	db.add("actors", {"id": "robin", "name": "Robin", "class": "marksman", "equips": {"body": "cloth_shirt"}})
+	s = rules.new_actor_battler("robin").snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [83, 8, 4], "HIT from the class's 80, the others from the defaults")
+
+
+func test_146_a_new_class_or_enemy_starts_with_the_default_traits() -> void:
+	assert_eq(rules.default_traits(), [{"kind": "hit_rate", "value": 95}, {"kind": "evasion_rate", "value": 5},
+		{"kind": "critical_rate", "value": 4}])
+	assert_eq(rules.default_traits(true), [{"kind": "hit_rate", "value": 95}, {"kind": "evasion_rate", "value": 5}])
+	assert_eq(RPGRuleSystem.load_rules("classic", db).default_traits(), [], "the Classic rules have none")
+	# Listing them (as a class made with New does) changes nothing until the maker edits them.
+	db.add("armors", {"id": "cloth_shirt", "name": "Cloth Shirt", "traits": [{"kind": "evasion_rate", "value": 3}]})
+	db.add("classes", {"id": "fresh", "name": "Fresh", "growth": db.record("classes", "brawler").growth,
+		"traits": rules.default_traits()})
+	db.add("actors", {"id": "newbie", "name": "Newbie", "class": "fresh", "equips": {"body": "cloth_shirt"}})
+	var s := rules.new_actor_battler("newbie").snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [95, 8, 4])
+	db.add("enemies", {"id": "fresh_slime", "name": "Fresh Slime", "traits": rules.default_traits(true),
+		"stats": {"mhp": 100, "mmp": 0, "atk": 10, "def": 10, "mat": 10, "mdf": 10, "agi": 10, "luk": 10}})
+	s = rules.new_enemy_battler("fresh_slime").snapshot()
+	assert_eq([s.hit, s.eva, s.cri], [95, 5, 0])
+	# The trait editor proposes +0 for these, not the base again.
+	for t in rules.trait_kinds():
+		if str(t.kind) in ["hit_rate", "evasion_rate", "critical_rate"]:
+			assert_eq(int(t.get("default", -1)), 0, str(t.kind))
 
 
 func test_tp() -> void:

@@ -1553,6 +1553,15 @@ func test_d13_new_class_has_stats() -> void:
 	var g: Dictionary = classes.current_record().get("growth", {})
 	assert_false(g.is_empty(), "growth filled in")
 	assert_eq(g, _rec_of(_db("classes"), "warrior").growth)
+	assert_eq(classes.current_record().get("traits", []), [], "the Classic rules have no default traits")
+	# Issue #146: under the VX Ace rules a new class and a new enemy list the default features.
+	screen.rules = RPGRuleSystem.load_rules("vx_ace", screen.data)
+	classes.new_record()
+	assert_eq(classes.current_record().get("traits"), [{"kind": "hit_rate", "value": 95},
+		{"kind": "evasion_rate", "value": 5}, {"kind": "critical_rate", "value": 4}])
+	var enemies := _tab("enemies")
+	enemies.new_record()
+	assert_eq(enemies.current_record().get("traits"), [{"kind": "hit_rate", "value": 95}, {"kind": "evasion_rate", "value": 5}])
 
 
 ## D14: the tileset form picks images with a preview, labels profiles, hides other profiles'

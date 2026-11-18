@@ -67,7 +67,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The **VX Ace style** rule system uses the stats the Ace tutorials talk about: MHP, MMP, ATK, DEF, MAT, MDF, AGI, LUK and TP (0–100). It also has:
 
 - Ace's damage formulas, with 20% variance and ×3 critical hits.
-- HIT, EVA and CRI checks.
+- HIT, EVA and CRI checks. As in VX Ace a class starts from *Hit Rate 95%*, *Evasion Rate 5%* and *Critical Rate 4%* (an enemy from 95% and 5%), and every other trait adds to that: a shirt with *Evasion Rate +3%* gives 8%, a Blind state with *Hit Rate -60%* leaves 35%. A class or enemy made with **New** lists the three traits so you can edit them; one that lists none uses the same values. A class or enemy that lists one of them itself uses its own value as the base.
 - Class parameter curves (level 1 value, level 99 value and a growth shape).
 - The basis/extra/acceleration EXP curve.
 - Features: Element Rate, State Rate, Ex-Parameters, Sp-Parameters, Attack State, Attack Speed, Add/Seal Skill Type, Add/Seal Skill, Equip Weapon/Armor Type, Dual Wield, Seal Equip, Action Times+, Special Flags (Auto Battle, Guard, Substitute, Preserve TP), Collapse Effect, and HP/MP Regen.

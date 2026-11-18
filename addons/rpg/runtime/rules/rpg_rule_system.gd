@@ -699,8 +699,12 @@ func snapshot(b: RPGBattler) -> Dictionary:
 ## A snapshot value computed from traits (rules.json "snapshot_traits"):
 ##   {"hit": {"kind": "hit_rate", "mode": "sum", "default": 95, "enemy_default": 95, "id"?: ""}}
 ## "sum" adds the trait values; "rate" multiplies them as percents (150 = x1.5) and gives a percent.
-## When the battler has no trait of that kind, "default" (or "enemy_default" for enemies) is used:
-## like the default features of a new class in RPG Maker VX Ace.
+## "default" (or "enemy_default" for enemies) stands for the feature a new class or enemy carries
+## in RPG Maker VX Ace (HIT 95%, EVA 5%, CRI 4%). In "sum" mode it is the base every other trait
+## adds to: EVA +3% on a shirt gives 8%, a Blind state at HIT -60% leaves 35% (issue #146). A
+## class (for an actor) or an enemy that lists the trait itself has set its own base, as its
+## feature list does in VX Ace: then only the listed traits count. In "rate" mode the default is
+## the value with no trait at all.
 func _trait_field(b: RPGBattler, all: Array, def: Dictionary) -> int:
 	var kind := str(def.get("kind", ""))
 	var id_filter := str(def.get("id", ""))
@@ -715,10 +719,52 @@ func _trait_field(b: RPGBattler, all: Array, def: Dictionary) -> int:
 			total *= float(t.get("value", 100)) / 100.0
 		else:
 			total += float(t.get("value", 0))
-	if not found:
-		var d: Variant = def.get("enemy_default", def.get("default", 100 if rate_mode else 0)) if b.is_enemy() else def.get("default", 100 if rate_mode else 0)
-		return int(d)
-	return roundi(total * 100.0) if rate_mode else roundi(total)
+	var d := _trait_default(def, b.is_enemy())
+	if rate_mode:
+		return roundi(total * 100.0) if found else d
+	if d != 0 and not _base_lists_trait(b, kind, id_filter):
+		total += d
+	return roundi(total)
+
+
+## The default of a "snapshot_traits" field for an actor's class or for an enemy.
+static func _trait_default(def: Dictionary, enemy: bool) -> int:
+	var fallback := 100 if str(def.get("mode", "sum")) == "rate" else 0
+	var d: Variant = def.get("default", fallback)
+	if enemy:
+		d = def.get("enemy_default", d)
+	return int(d)
+
+
+## Whether the record that carries a battler's default features (the class of an actor, the
+## enemy record of an enemy) lists a trait of `kind` itself.
+func _base_lists_trait(b: RPGBattler, kind: String, id_filter := "") -> bool:
+	var rec := _rec("classes", b.class_id) if b.is_actor() else battler_record(b)
+	for t in rec.get("traits", []):
+		if t is Dictionary and str(t.get("kind", "")) == kind and (id_filter == "" or str(t.get("id", "")) == id_filter):
+			return true
+	return false
+
+
+## The traits a new class (or a new enemy) starts with, as VX Ace's new class does: one per
+## "snapshot_traits" field in "sum" mode with a default other than 0 (HIT 95%, EVA 5%, CRI 4%).
+## The same values are the base of a record that lists none, so adding them changes nothing
+## until the maker edits them. [{kind, value, id?}]
+func default_traits(enemy := false) -> Array:
+	var out := []
+	var defs: Dictionary = definition.get("snapshot_traits", {})
+	for code in defs:
+		var def: Dictionary = defs[code]
+		if str(def.get("mode", "sum")) == "rate":
+			continue
+		var d := _trait_default(def, enemy)
+		if d == 0:
+			continue
+		var t := {"kind": str(def.get("kind", "")), "value": d}
+		if str(def.get("id", "")) != "":
+			t["id"] = str(def.id)
+		out.append(t)
+	return out
 
 
 ## One "snapshot_traits" field of `b` as the rules aggregate it (the a.pdr of formulas, a.hit
