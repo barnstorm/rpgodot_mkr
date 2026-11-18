@@ -5,8 +5,10 @@ extends AcceptDialog
 ##   Tileset picker (records in rpg/database/tilesets.json), zoom
 ##   Mode list (left): Passage (4-dir), Passable on/off, Star (above), Bush, Counter, Ladder,
 ##     Damage floor, Terrain tag
-##   Tile grid (centre) with tabs Autotiles / Lower / Upper / Animated: every tile shows its value
-##     for the mode (O/X marks, arrows, star, terrain number); overridden tiles have an orange corner
+##   Tile grid (centre) with the tileset's own tabs (tab_layout): Autotiles / Lower / Upper /
+##     Animated for a 2000/2003 ChipSet, RPG Maker's A (A1 to A5), B, C, D, E for a VX / VX Ace /
+##     MV tileset, Autotiles / Tileset for XP. Every tile shows its value for the mode (O/X
+##     marks, arrows, star, terrain number); overridden tiles have an orange corner
 ##   Selected tile (right): its values and defaults; copy its settings to the selected tiles
 ## Mouse: left-click sets or toggles the value (Passage 4-dir: the side of the tile you click picks
 ## the direction, the centre toggles all four); Shift/Ctrl-click selects tiles without changing them;
@@ -36,7 +38,9 @@ const TABS := [
 	[RPGTilesetBuilder.SOURCE_UPPER, "C: Upper"],
 	[RPGTilesetBuilder.SOURCE_ANIMATED, "Anim: Animated"],
 ]
+## Tiles per row: a 2000/2003 ChipSet is six wide, RPG Maker's VX / VX Ace / MV and XP lists eight.
 const COLUMNS := 6
+const WIDE_COLUMNS := 8
 const CENTRE := 0.17
 const COL_OPEN := Color(0.55, 0.9, 1.0)
 const COL_BLOCK := Color(1.0, 0.4, 0.35)
@@ -61,7 +65,9 @@ var terrain_spin: SpinBox
 var mode_buttons: Dictionary = {}
 var _mode_help: Label
 var _scroll: ScrollContainer
-var _tab_sources: Array = []
+## The current tileset's tabs, [{label, cells, source}] (tab_layout), and their width in tiles.
+var _tab_list: Array = []
+var columns := COLUMNS
 var _message := ""
 
 
@@ -258,39 +264,145 @@ func set_edit_mode(m: String) -> void:
 
 
 func _rebuild_tabs() -> void:
-	var keep := current_source()
+	var keep := current_tab_label()
 	while tabs.tab_count > 0:
 		tabs.remove_tab(0)
-	_tab_sources.clear()
-	if settings != null:
-		for t in TABS:
-			if not settings.keys_for_source(t[0]).is_empty():
-				tabs.add_tab(t[1])
-				_tab_sources.append(t[0])
-	var idx := _tab_sources.find(keep)
-	if idx >= 0:
-		tabs.current_tab = idx
+	var layout := tab_layout(settings)
+	_tab_list = layout.tabs
+	columns = int(layout.columns)
+	for t in _tab_list:
+		tabs.add_tab(str(t.label))
+	for i in _tab_list.size():
+		if str(_tab_list[i].label) == keep:
+			tabs.current_tab = i
 	_layout_grid()
 
 
-## Atlas source shown by the current tab (-1 when none).
+## The tabs a tileset gets and how many tiles wide they are: {tabs: [{label, cells, source}],
+## columns}. `cells` are tile keys in reading order ("" = an empty cell); `source` is the atlas
+## source a tab shows, -1 when it holds several.
+##   2000/2003 ChipSet: one tab per source (Autotiles, Lower, Upper, Animated), six wide.
+##   VX / VX Ace / MV: RPG Maker's own tabs, eight wide. A holds A1 to A5 one under the other
+##     and B to E a sheet each; every tile sits at its number, so the rows line up with RPG
+##     Maker's list even when a sheet lacks a tile.
+##   XP: Autotiles and Tileset, eight wide.
+## A tile no tab above shows gets an "Other" tab, so none is ever out of reach.
+static func tab_layout(s: RPGTileSettings) -> Dictionary:
+	var out := {"tabs": [], "columns": COLUMNS}
+	if s == null or s.base_tileset == null:
+		return out
+	var used := {}
+	var by_source: Array = TABS
+	match str(s.record.get("profile", "")):
+		"vx", "mv":
+			out.columns = WIDE_COLUMNS
+			by_source = []
+			var a_cells := []
+			for prefix in ["a1", "a2", "a3", "a4", "a5"]:
+				a_cells.append_array(_numbered_cells(s, prefix, WIDE_COLUMNS, used))
+			if not a_cells.is_empty():
+				out.tabs.append({"label": "A", "cells": a_cells, "source": -1})
+			for prefix in RPGTilesheetVX.UPPER_SHEETS:
+				var cells := _numbered_cells(s, prefix, WIDE_COLUMNS, used)
+				if not cells.is_empty():
+					out.tabs.append({"label": prefix.to_upper(), "cells": cells, "source": RPGTilesheetVX.SOURCE_UPPER})
+		"xp":
+			out.columns = WIDE_COLUMNS
+			by_source = [[RPGTilesheetXP.SOURCE_AUTOTILE, "Autotiles"], [RPGTilesheetXP.SOURCE_TILES, "Tileset"]]
+	for t in by_source:
+		var keys: Array = s.keys_for_source(t[0]).filter(func(k): return not used.has(k))
+		if not keys.is_empty():
+			out.tabs.append({"label": str(t[1]), "cells": keys, "source": int(t[0])})
+			for k in keys:
+				used[k] = true
+	var rest := []
+	for k in s.all_keys():
+		if not used.has(k):
+			rest.append(str(k))
+	if not rest.is_empty():
+		rest.sort()
+		out.tabs.append({"label": "Other", "cells": rest, "source": -1})
+	return out
+
+
+## The keys "<prefix>_<n>" of a tileset, each in cell n, padded with empty cells to whole rows
+## of `cols` ([] when it has none). The keys are added to `used`.
+static func _numbered_cells(s: RPGTileSettings, prefix: String, cols: int, used: Dictionary) -> Array:
+	var found := {}
+	var top := -1
+	for k in s.all_keys():
+		var key := str(k)
+		if not key.begins_with(prefix + "_"):
+			continue
+		var tail := key.substr(prefix.length() + 1)
+		if not tail.is_valid_int() or int(tail) < 0:
+			continue
+		found[int(tail)] = key
+		top = maxi(top, int(tail))
+	var cells := []
+	if top < 0:
+		return cells
+	cells.resize(ceili((top + 1) / float(cols)) * cols)
+	cells.fill("")
+	for n in found:
+		cells[n] = found[n]
+		used[found[n]] = true
+	return cells
+
+
+func _tab() -> Dictionary:
+	if tabs == null or tabs.current_tab < 0 or tabs.current_tab >= _tab_list.size():
+		return {}
+	return _tab_list[tabs.current_tab]
+
+
+func current_tab_label() -> String:
+	return str(_tab().get("label", ""))
+
+
+## Atlas source shown by the current tab (-1 when none, or when the tab holds several).
 func current_source() -> int:
-	if _tab_sources.is_empty() or tabs.current_tab < 0 or tabs.current_tab >= _tab_sources.size():
-		return -1
-	return _tab_sources[tabs.current_tab]
+	return int(_tab().get("source", -1))
 
 
+## Shows the tab for an atlas source (the first one that holds a tile of it).
 func show_source(source_id: int) -> void:
-	var idx := _tab_sources.find(source_id)
-	if idx >= 0:
-		tabs.current_tab = idx
-		_layout_grid()
+	for i in _tab_list.size():
+		var t: Dictionary = _tab_list[i]
+		if int(t.source) == source_id or (t.cells as Array).any(func(k): return k != "" and int(settings.atlas_of(k).source) == source_id):
+			tabs.current_tab = i
+			_layout_grid()
+			return
 
 
+## Shows the tab named `label` ("A", "B", "B: Lower" ...). False when the tileset has none.
+func show_tab(label: String) -> bool:
+	for i in _tab_list.size():
+		if str(_tab_list[i].label) == label:
+			tabs.current_tab = i
+			_layout_grid()
+			return true
+	return false
+
+
+## Shows the tab that holds tile `key`. False when no tab does.
+func show_key(key: String) -> bool:
+	for i in _tab_list.size():
+		if (_tab_list[i].cells as Array).has(key):
+			tabs.current_tab = i
+			_layout_grid()
+			return true
+	return false
+
+
+## The current tab's cells in reading order: tile keys, "" for an empty cell.
+func current_cells() -> Array:
+	return _tab().get("cells", [])
+
+
+## The tiles on the current tab.
 func current_keys() -> Array:
-	if settings == null:
-		return []
-	return settings.keys_for_source(current_source())
+	return current_cells().filter(func(k): return k != "")
 
 
 func cell_px() -> int:
@@ -299,30 +411,30 @@ func cell_px() -> int:
 
 
 func _layout_grid() -> void:
-	var n := current_keys().size()
+	var n := current_cells().size()
 	var c := cell_px()
-	grid.custom_minimum_size = Vector2(COLUMNS * c, ceili(n / float(COLUMNS)) * c)
+	grid.custom_minimum_size = Vector2(columns * c, ceili(n / float(columns)) * c)
 	# The scroll area hugs the grid so its scrollbar sits next to the tiles.
-	_scroll.custom_minimum_size.x = COLUMNS * c + _scroll.get_v_scroll_bar().get_combined_minimum_size().x + 4
+	_scroll.custom_minimum_size.x = columns * c + _scroll.get_v_scroll_bar().get_combined_minimum_size().x + 4
 	grid.queue_redraw()
 
 
 ## Rect of a tile in grid coordinates (empty when it is not on the current tab).
 func tile_rect(key: String) -> Rect2:
-	var i := current_keys().find(key)
+	var i := current_cells().find(key) if key != "" else -1
 	if i < 0:
 		return Rect2()
 	var c := cell_px()
-	return Rect2(Vector2(i % COLUMNS, i / COLUMNS) * c, Vector2(c, c))
+	return Rect2(Vector2(i % columns, i / columns) * c, Vector2(c, c))
 
 
 func key_at(pos: Vector2) -> String:
 	var c := cell_px()
-	if pos.x < 0 or pos.y < 0 or pos.x >= COLUMNS * c:
+	if pos.x < 0 or pos.y < 0 or pos.x >= columns * c:
 		return ""
-	var i := int(pos.y / c) * COLUMNS + int(pos.x / c)
-	var keys := current_keys()
-	return str(keys[i]) if i < keys.size() else ""
+	var i := int(pos.y / c) * columns + int(pos.x / c)
+	var cells := current_cells()
+	return str(cells[i]) if i < cells.size() else ""
 
 
 # --- editing -------------------------------------------------------------------------------------
@@ -481,12 +593,15 @@ func _tileset_name() -> String:
 	return n if n != "" else tileset_id
 
 
-## A tile key as a maker reads it: "Autotile 8" for terrain_8, "Lower tile 12" for lower_12.
+## A tile key as a maker reads it: "Autotile 8" for terrain_8, "Lower tile 12" for lower_12,
+## "A2 autotile 5" for a2_5, "B tile 12" for b_12.
 static func tile_label(key: String) -> String:
-	var m := RegEx.create_from_string("^([a-z]+)_([0-9]+)$").search(key)
+	var m := RegEx.create_from_string("^([a-z]+[0-9]?)_([0-9]+)$").search(key)
 	if m == null:
 		return key
-	var kind := {"terrain": "Autotile", "water": "Water autotile", "lower": "Lower tile", "upper": "Upper tile", "anim": "Animated tile"}.get(m.get_string(1), m.get_string(1).capitalize())
+	var kind := {"terrain": "Autotile", "water": "Water autotile", "lower": "Lower tile", "upper": "Upper tile", "anim": "Animated tile",
+		"a1": "A1 autotile", "a2": "A2 autotile", "a3": "A3 autotile", "a4": "A4 autotile", "a5": "A5 tile",
+		"b": "B tile", "c": "C tile", "d": "D tile", "e": "E tile", "autotile": "Autotile", "tile": "Tile"}.get(m.get_string(1), m.get_string(1).capitalize())
 	return "%s %d" % [kind, int(m.get_string(2))]
 
 
@@ -545,10 +660,12 @@ func _draw_grid() -> void:
 	var ts := settings.base_tileset
 	var font := grid.get_theme_default_font()
 	var c := cell_px()
-	var keys := current_keys()
+	var keys := current_cells()
 	for i in keys.size():
 		var key: String = keys[i]
-		var r := Rect2(Vector2(i % COLUMNS, i / COLUMNS) * c, Vector2(c, c))
+		if key == "":
+			continue
+		var r := Rect2(Vector2(i % columns, i / columns) * c, Vector2(c, c))
 		var a := settings.atlas_of(key)
 		grid.draw_rect(r, Color(0.12, 0.12, 0.14))
 		var src: TileSetAtlasSource = null
