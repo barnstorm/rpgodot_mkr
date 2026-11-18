@@ -23,7 +23,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Quick Event Creation > Door / Treasure / Inn / Transfer | Right-click a tile > **Quick events** |
 | Database > Troops | Database > **Enemy groups** |
 | Features | **Traits** |
-| Tilesets tab: passability (○/×, ☆, directions) | The **Tiles** button on the RPG tab |
+| Tilesets tab: passability (○/×, ☆, directions), ladder, bush, counter, damage floor, terrain tag | The **Tiles** button on the RPG tab. A VX / VX Ace / MV tileset has RPG Maker's tabs there, **A** (A1 to A5, one under the other), **B**, **C**, **D** and **E**, eight tiles wide, so "switch to tab B" lands on sheet B |
 | Terms tab: skill, weapon and armour types | Database > **Types** |
 | Change Maximum… | **New** (IDs are names like `potion`, and are never reused) |
 | Switch/Variable 0001 | Named switches and variables, e.g. `talked_to_king` |

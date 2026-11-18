@@ -27,7 +27,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Quick Event Creation > Door / Treasure / Inn / Transfer | Right-click a tile > **Quick events** |
 | Database > Troops | Database > **Enemy groups** |
 | Features | **Traits** |
-| Tilesets tab: passability (○/×, ☆, directions) | The **Tiles** button on the RPG tab |
+| Tilesets tab: passability (○/×, ☆, directions), ladder, bush, counter, damage floor, terrain tag | The **Tiles** button on the RPG tab. A VX / VX Ace / MV tileset has RPG Maker's tabs there, **A** (A1 to A5, one under the other), **B**, **C**, **D** and **E**, eight tiles wide, so "switch to tab B" lands on sheet B |
 | Parallax mapping (a map drawn as one picture, with a plugin or blank tiles for collision) | Built in: [Image-backed maps](Image-Backed-Maps.md), with a foreground picture and painted navigation |
 | Terms tab: skill, weapon and armour types | Database > **Types** |
 | Change Maximum… | **New** (IDs are names like `potion`, and are never reused) |

@@ -25,7 +25,7 @@ What the kit doesn't do yet, and what hasn't been verified. This list is kept ho
 
 - **RPG Maker 2000/2003 ChipSets** were decoded from public descriptions and tested with the kit's own sheets and the official RTPs. An unusual third-party ChipSet may still show a layout mistake; per-tile overrides in **Tiles** can fix passability.
 - **VX/Ace A2 table legs** are not decoded.
-- **VX/Ace passability** isn't read (it is in a binary database): check imported tilesets in **Tiles**. An XP RTP (not a project) has no database, so its autotiles are only paired where the file names make it clear.
+- **VX/Ace passability** isn't read (it is in a binary database): check imported tilesets in **Tiles**. The dialog lists every tile of the tileset under RPG Maker's tabs A (A1 to A5), B, C, D and E. The guessed defaults leave A2 tiles (mountains, forests, tables) walkable and A4 wall tops blocked, so set those there. An XP RTP (not a project) has no database, so its autotiles are only paired where the file names make it clear.
 - **MZ** has not been tried on real files.
 
 ## Image-backed maps
