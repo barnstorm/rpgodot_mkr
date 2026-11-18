@@ -5,6 +5,7 @@
 	"version": 1,
 	"status": "supported",
 	"tile_size": 32,
+	"move_speeds": [0.46875, 0.9375, 1.875, 3.75, 7.5, 15.0],
 	"autotile_frame_time": 0.5,
 	"decoders": {
 		"tileset_a1": "RPGTilesheetVX: animated water (floor layout, frames 0,1,2,1) and waterfalls (frames 0,1,2)",

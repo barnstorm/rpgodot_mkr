@@ -10,7 +10,7 @@ rpg/
   state.json            switch and variable definitions (names, labels, types, starting values)
   common_events.json    common events
   map_index.json        the map tree (order, parents, favourites)
-  profile.json          the project's style (2000/2003, VX/Ace or MV)
+  profile.json          the project's style (2000/2003, VX/Ace or MV); optionally "move_speeds", your own six movement speeds in tiles a second
   extensions.json       plugin and extension settings (when any are set)
   database/
     actors.json  classes.json  skills.json  items.json  weapons.json  armors.json
