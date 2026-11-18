@@ -15,6 +15,9 @@ const SCOPE_LABELS := ["None", "One enemy", "All enemies", "N random enemies", "
 const OCCASIONS := ["always", "battle", "menu", "never"]
 const DAMAGE_TYPES := ["none", "damage", "recover", "drain"]
 const HIT_TYPES := ["certain", "physical", "magical"]
+## Item fields that only mean something with a Damage type: hidden, and left out of the record,
+## while it is "none".
+const ITEM_DAMAGE_ONLY := {"show_if": {"key": "damage_type", "equals": ["damage", "recover", "drain"]}, "drop_hidden": true}
 const RESTRICTIONS := ["none", "attack_enemy", "attack_anyone", "attack_ally", "cannot_use_skills", "cannot_act"]
 const SPANS := ["once_per_battle", "once_per_turn", "every_check"]
 ## Effect kinds (RPGRuleSystem.apply_action) and their labels.
@@ -114,9 +117,8 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_c("occasion", "Usable", OCCASIONS, "always"),
 				_c("damage_type", "Damage type", DAMAGE_TYPES, "damage"),
 				_c("resource", "Affects", _ids(resources), "hp"),
-				_type_field("element", "Element", type_lists, "elements"),
-				{"key": "formula", "kind": "text", "default": "", "label": "Damage formula", "formula": true,
-					"help": "a = user, b = target, v.<variable>. Helpers: min, max, clamp, roll(\"1d6\"), mod(x)..."},
+				_element_field(type_lists),
+				_formula_field(),
 				_i("hit", "Hit %", 100, 0, 100), _c("hit_type", "Hit type", HIT_TYPES, "certain"),
 				_i("variance", "Variance %", 15, 0, 100), _b("critical", "Can be critical", false),
 				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast skill acts first"}),
@@ -131,6 +133,17 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 				_c("scope", "Target", SCOPES, "one_ally").merged({"option_labels": SCOPE_LABELS}),
 				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
 				_c("occasion", "Usable", OCCASIONS, "always"),
+				# RPG Maker's Damage and Invocation sections, as on skills. Most items do no
+				# damage, so the damage fields show only once a Damage type is picked.
+				_c("damage_type", "Damage type", DAMAGE_TYPES, "none").merged({
+					"help": "Damage, recovery or drain worked out by a formula, as on a skill. None: the item only has its effects."}),
+				_c("resource", "Affects", _ids(resources), "hp").merged(ITEM_DAMAGE_ONLY),
+				_element_field(type_lists).merged(ITEM_DAMAGE_ONLY),
+				_formula_field().merged(ITEM_DAMAGE_ONLY),
+				_i("variance", "Variance %", int((rule_def.get("damage", {}) as Dictionary).get("variance", 15)), 0, 100).merged(ITEM_DAMAGE_ONLY),
+				_b("critical", "Can be critical", false).merged(ITEM_DAMAGE_ONLY),
+				_i("hit", "Hit %", 100, 0, 100).merged({"help": "RPG Maker's Success %. Rolled for the Physical and Magical hit types; a Certain hit always lands."}),
+				_c("hit_type", "Hit type", HIT_TYPES, "certain"),
 				_i("speed", "Speed", 0, -2000, 2000).merged({"help": "Added to the turn-order roll, so a fast item acts first"}),
 				_i("repeats", "Repeats", 1, 1, 9),
 				_animation_field(),
@@ -402,7 +415,16 @@ static func new_record(type: String, id: String, fields: Array) -> Dictionary:
 ## The record as its form shows it (RPGRecordTab.form_value). Enemies: an own HP / MP action
 ## condition written as a single bound ({op, percent}, the kit's older form) is shown as the
 ## range it means, since the form edits ranges; the record itself only changes when it is edited.
+## Items: a formula with no Damage type is shown as the damage it does.
 static func for_form(type: String, rec: Dictionary) -> Dictionary:
+	if type == "items":
+		# An item with a formula and no Damage type deals damage in the game
+		# (RPGRuleSystem.resolve_action); the form shows that instead of its default, None.
+		if not rec.has("damage_type") and str(rec.get("formula", "")) != "":
+			var with_type := rec.duplicate()
+			with_type["damage_type"] = "damage"
+			return with_type
+		return rec
 	if type != "enemies" or not (rec.get("actions") is Array):
 		return rec
 	var actions: Array = rec.actions
@@ -500,6 +522,25 @@ static func _battle_commands_field(label: String, lists: Dictionary) -> Dictiona
 				"show_if": {"key": "kind", "equals": "event"},
 				"help": "The menu entry's text. Empty: the id."},
 		]}
+
+
+## A skill's or item's Element: none, RPG Maker's "Normal Attack" (the user's Attack Element
+## traits, RPGRuleSystem.NORMAL_ATTACK_ELEMENT) or an entry of Types > Elements.
+static func _element_field(lists: Dictionary) -> Dictionary:
+	var f := _type_field("element", "Element", lists, "elements")
+	var hint := "Normal Attack uses the user's Attack Element traits (its weapon's element); with several, the one the target is weakest to."
+	if str(f.kind) == "choice":
+		f["options"] = [f.options[0], RPGRuleSystem.NORMAL_ATTACK_ELEMENT] + f.options.slice(1)
+		f["option_labels"] = [f.option_labels[0], "Normal Attack"] + f.option_labels.slice(1)
+		f["help"] = "%s %s" % [hint, f.get("help", "")]
+	else:
+		f["help"] = "An element ID, or %s. %s" % [RPGRuleSystem.NORMAL_ATTACK_ELEMENT, hint]
+	return f
+
+
+static func _formula_field() -> Dictionary:
+	return {"key": "formula", "kind": "text", "default": "", "label": "Damage formula", "formula": true,
+		"help": "a = user, b = target, v.<variable>. Helpers: min, max, clamp, roll(\"1d6\"), mod(x)..."}
 
 
 static func _type_field(key: String, label: String, lists: Dictionary, list_id: String) -> Dictionary:

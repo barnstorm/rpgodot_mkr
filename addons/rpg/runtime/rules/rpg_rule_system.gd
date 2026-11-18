@@ -691,10 +691,28 @@ func party_trait_rate(party: Array, kind: String) -> float:
 	return rate
 
 
+## RPG Maker's "Normal Attack" element, for a skill's or item's "element": the user's Attack
+## Element traits (its weapon's elements) instead of a fixed one. The Attack command uses it.
+const NORMAL_ATTACK_ELEMENT := "normal_attack"
+
+
+## The first element the battler's "attack_element" traits name ("" when it has none).
 func attack_element(b: RPGBattler) -> String:
 	for t in traits(b, "attack_element"):
 		return str(t.get("id", ""))
 	return ""
+
+
+## Every element the battler's "attack_element" traits name, in trait order.
+func attack_elements(b: RPGBattler) -> Array:
+	var out := []
+	if b == null:
+		return out
+	for t in traits(b, "attack_element"):
+		var id := str(t.get("id", ""))
+		if id != "" and not out.has(id):
+			out.append(id)
+	return out
 
 
 # --------------------------------------------------------------------------------------------
@@ -1602,9 +1620,9 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 			u = (definition.get("attack", {}) as Dictionary).duplicate(true)
 			u.kind = "attack"
 			u.id = "attack"
+			if str(u.get("element", "")) == "":
+				u.element = NORMAL_ATTACK_ELEMENT
 			if user != null:
-				if str(u.get("element", "")) == "":
-					u.element = attack_element(user)
 				# Attack State and Attack Speed traits ride on every normal attack (MV's
 				# attackStates / attackSpeed): each state lands with its trait chance, and the
 				# speed joins the turn-order roll.
@@ -1661,6 +1679,11 @@ func resolve_action(user: RPGBattler, action: Dictionary) -> Dictionary:
 		u.damage_type = "damage" if u.formula != "" else "none"
 	u.resource = str(u.get("resource", life_resource()))
 	u.element = str(u.get("element", ""))
+	# "Normal Attack": the user's Attack Element traits. `elements` lists them all (damage()
+	# takes the one the target is weakest to); `element` is the first, "" when it has none.
+	if u.element == NORMAL_ATTACK_ELEMENT:
+		u["elements"] = attack_elements(user)
+		u.element = str(u.elements[0]) if not u.elements.is_empty() else ""
 	u.hit = u.get("hit", 100)
 	u.hit_type = str(u.get("hit_type", "certain"))
 	u.variance = u.get("variance", dmg_cfg.get("variance", 0))
@@ -1981,6 +2004,13 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 	var cfg: Dictionary = definition.get("damage", {})
 	if out.element != "":
 		out.element_rate = trait_rate(target, "element_rate", out.element)
+		# "Normal Attack" with several Attack Element traits: the element the target is weakest
+		# to counts (VX Ace's elements_max_rate), and it is the one reported.
+		for el in u.get("elements", []):
+			var rate := trait_rate(target, "element_rate", str(el))
+			if rate > out.element_rate:
+				out.element_rate = rate
+				out.element = str(el)
 		value *= out.element_rate
 	# A drain (HP Drain / MP Drain) is damage to the target for every modifier below, as in
 	# MV's makeDamageValue; apply_action caps it at what the target has and gives it to the user.

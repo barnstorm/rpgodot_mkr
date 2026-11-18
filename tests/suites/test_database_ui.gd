@@ -1010,6 +1010,38 @@ func test_e1_no_project_state_then_the_new_project_is_picked_up() -> void:
 	assert_true(screen._status.text.contains("new project"), screen._status.text)
 
 
+## Issue #167: the item form has a skill's damage fields. They show once the item has a Damage
+## type and are dropped from the record without one; the element can be Normal Attack.
+func test_167_item_damage_fields_in_the_editor() -> void:
+	await _open_screen()
+	var items := _tab("items")
+	_select_id(items, "potion")
+	var shown := func(key: String) -> bool:
+		var row: Variant = items._form._editors[key].get("row")
+		return row != null and row.visible
+	assert_false(items.current_record().has("damage_type"), "the sample potion has no Damage type")
+	assert_true(shown.call("damage_type") and shown.call("hit") and shown.call("hit_type"))
+	for k in ["formula", "variance", "critical", "element", "resource"]:
+		assert_false(shown.call(k), "'%s' is hidden without a Damage type" % k)
+	items._form.set_field("price", 55)
+	var rec: Dictionary = items.current_record()
+	for k in ["formula", "variance", "critical", "element", "resource"]:
+		assert_false(rec.has(k), "'%s' stays out of an item with no Damage type" % k)
+	items._form.set_field("damage_type", "damage")
+	for k in ["formula", "variance", "critical", "element", "resource"]:
+		assert_true(shown.call(k), "'%s' shows with a Damage type" % k)
+	items._form.set_field("element", "normal_attack")
+	items._form.set_field("formula", "a.atk * 2")
+	rec = items.current_record()
+	assert_eq(rec.get("damage_type"), "damage")
+	assert_eq(rec.get("element"), "normal_attack")
+	assert_eq(rec.get("formula"), "a.atk * 2")
+	items._form.set_field("damage_type", "none")
+	rec = items.current_record()
+	assert_false(rec.has("formula") or rec.has("element"), "back to None: the damage fields are dropped again")
+	screen.reload(false)
+
+
 ## E1: reload() is safe at any time: unsaved tabs keep their edits; Reload's discard drops them.
 func test_e1_reload_keeps_unsaved_edits_unless_discarded() -> void:
 	await _open_screen()

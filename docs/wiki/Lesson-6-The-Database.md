@@ -24,8 +24,8 @@ The stats you see (HP, SP, Strength…) come from the project's **rule system**.
 | --- | --- |
 | **Actors** | The heroes: name, nickname, description, class, starting and max level, walk sprite, face, battler and side-view battler, starting equipment, extra skills, stat bonuses, battle commands, traits |
 | **Classes** | EXP curve, stat growth (per level, or a curve with a graph), skills learned at each level, which weapon and armour types can be equipped, battle commands, traits |
-| **Skills** | Icon, skill type, required weapon (VX Ace/MV: the skill needs one of these weapon types equipped), cost, target, where it can be used, damage type, element, damage formula, hit %, variance, criticals, speed, repeats, TP gain (VX Ace/MV), animation, battle message, effects |
-| **Items** | Icon, price, consumed or not, key item, target, where it can be used, animation, effects |
+| **Skills** | Icon, skill type, required weapon (VX Ace/MV: the skill needs one of these weapon types equipped), cost, target, where it can be used, damage type, element (one from Types, or *Normal Attack* for the weapon's), damage formula, hit %, variance, criticals, speed, repeats, TP gain (VX Ace/MV), animation, battle message, effects |
+| **Items** | Icon, price, consumed or not, key item, target, where it can be used, damage type (with the element, formula, variance and criticals a skill has), hit %, hit type, speed, repeats, animation, effects |
 | **Weapons**, **Armour** | Icon, type (and slot for armour), price, stat changes, animation (weapons), traits |
 | **Enemies** | Battler picture and hue, level, stats, EXP, gold, item drops, action patterns, traits |
 | **Enemy groups** | Which enemies appear and where, can escape, battle view and system, battle events ([Lesson 7](Lesson-7-Battles.md)) |
