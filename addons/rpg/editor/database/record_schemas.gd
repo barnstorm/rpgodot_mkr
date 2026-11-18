@@ -397,6 +397,60 @@ static func new_record(type: String, id: String, fields: Array) -> Dictionary:
 	return r
 
 
+## The record as its form shows it (RPGRecordTab.form_value). Enemies: an own HP / MP action
+## condition written as a single bound ({op, percent}, the kit's older form) is shown as the
+## range it means, since the form edits ranges; the record itself only changes when it is edited.
+static func for_form(type: String, rec: Dictionary) -> Dictionary:
+	if type != "enemies" or not (rec.get("actions") is Array):
+		return rec
+	var actions: Array = rec.actions
+	var changed := false
+	var out := []
+	for a in actions:
+		var c: Variant = a.get("condition") if a is Dictionary else null
+		var up: Variant = enemy_condition_as_range(c) if c is Dictionary else c
+		if a is Dictionary and c is Dictionary and up != c:
+			var copy: Dictionary = a.duplicate()
+			copy["condition"] = up
+			out.append(copy)
+			changed = true
+		else:
+			out.append(a)
+	if not changed:
+		return rec
+	var shown := rec.duplicate()
+	shown["actions"] = out
+	return shown
+
+
+## An enemy action condition with its own HP / MP bound as a range: ≤ and < become 0 to N,
+## ≥ and > become N to 100, = becomes N to N (the range counts both ends, as RPG Maker's does).
+## Anything else (a range already, ≠, another kind) is returned as it is.
+static func enemy_condition_as_range(c: Dictionary) -> Dictionary:
+	var kind := str(c.get("kind", ""))
+	if not (kind in ["hp", "mp"]) or c.has("min") or c.has("max"):
+		return c
+	var p := clampi(int(c.get("percent", 100 if kind == "hp" else 50)), 0, 100)
+	var lo := 0
+	var hi := 100
+	match str(c.get("op", "<=")):
+		"<=", "<":
+			hi = p
+		">=", ">":
+			lo = p
+		"==", "=":
+			lo = p
+			hi = p
+		_:
+			return c
+	var out := c.duplicate()
+	out.erase("op")
+	out.erase("percent")
+	out["min"] = lo
+	out["max"] = hi
+	return out
+
+
 ## A "virtual" field's value for a record (it is not stored; see RPGRecordTab).
 ## States: "duration" is "turns" when the state lasts at most one turn or more.
 static func virtual_value(type: String, key: String, rec: Dictionary) -> Variant:
@@ -708,6 +762,9 @@ static func _vehicle_fields() -> Array:
 ## Enemy action pattern conditions (RPGBattleCore._enemy_condition). Keys are distinct per
 ## field: one flat form serves every kind, so two fields can never share a key (the switch's
 ## ref is "id" and the variable's is "variable"; the variable's operand is "against").
+## Own HP / MP are RPG Maker's ranges ("min" % to "max" %, both ends count); the older single
+## bound {op, percent} still runs, and for_form() shows it as a range. Party level starts as
+## VX / VX Ace / MV mean it: the highest level in the party, at least N.
 static func _enemy_condition_fields() -> Array:
 	return [
 		{"key": "kind", "kind": "choice", "options": ["always", "turn", "hp", "mp", "state", "party_level", "enemies_alive", "variable", "switch"],
@@ -715,12 +772,17 @@ static func _enemy_condition_fields() -> Array:
 			"default": "always", "label": "When"},
 		{"key": "n", "kind": "int", "default": 1, "min": 0, "max": 9999, "label": "Turn", "show_if": {"key": "kind", "equals": "turn"}},
 		{"key": "every", "kind": "int", "default": 0, "min": 0, "max": 9999, "label": "Then every (0 = once)", "show_if": {"key": "kind", "equals": "turn"}},
-		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": "<=", "label": "Compare",
-			"show_if": {"key": "kind", "equals": ["hp", "mp", "party_level", "enemies_alive", "variable"]}},
-		{"key": "percent", "kind": "int", "default": 50, "min": 0, "max": 100, "label": "Percent", "show_if": {"key": "kind", "equals": ["hp", "mp"]}},
+		{"key": "min", "kind": "int", "default": 0, "min": 0, "max": 100, "label": "From %", "not_above": "max",
+			"show_if": {"key": "kind", "equals": ["hp", "mp"]},
+			"help": "The lowest percent that counts. HP 30% to 70% is \"while its HP is between 30% and 70%\"; 0% to 50% is \"at half HP or less\"."},
+		{"key": "max", "kind": "int", "default": 100, "min": 0, "max": 100, "label": "To %", "not_below": "min",
+			"show_if": {"key": "kind", "equals": ["hp", "mp"]}, "help": "The highest percent that counts."},
+		{"key": "op", "kind": "choice", "options": ["<=", "<", ">=", ">", "==", "!="], "option_labels": ["≤", "<", "≥", ">", "=", "≠"], "default": ">=", "label": "Compare",
+			"show_if": {"key": "kind", "equals": ["party_level", "enemies_alive", "variable"]}},
 		{"key": "state", "kind": "ref", "ref": "state", "default": "", "label": "State", "show_if": {"key": "kind", "equals": "state"}},
-		{"key": "pick", "kind": "choice", "options": ["average", "highest"], "option_labels": ["Average", "Highest"], "default": "average", "label": "Which",
-			"show_if": {"key": "kind", "equals": "party_level"}},
+		{"key": "pick", "kind": "choice", "options": ["average", "highest"], "option_labels": ["Average", "Highest"], "default": "highest", "label": "Which",
+			"show_if": {"key": "kind", "equals": "party_level"},
+			"help": "Highest is RPG Maker VX / VX Ace / MV's Party Level; Average is RPG Maker 2000 / 2003's."},
 		{"key": "level", "kind": "int", "default": 1, "min": 1, "max": 99, "label": "Level", "show_if": {"key": "kind", "equals": "party_level"}},
 		{"key": "count", "kind": "int", "default": 1, "min": 0, "max": 8, "label": "Monsters", "show_if": {"key": "kind", "equals": "enemies_alive"}},
 		{"key": "variable", "kind": "ref", "ref": "variable", "default": "", "label": "Variable", "show_if": {"key": "kind", "equals": "variable"}},
