@@ -1588,9 +1588,14 @@ static func image_map_problems(files: Dictionary, data: RPGProjectData) -> Array
 	return out
 
 
+## A skill's or item's "element" that names no entry of Types > Elements: RPG Maker's "Normal
+## Attack" (the same value as RPGRuleSystem.NORMAL_ATTACK_ELEMENT; a test keeps them equal).
+const NORMAL_ATTACK_ELEMENT := "normal_attack"
+
 ## Database fields whose value is an entry of a Types list (types.json record -> fields).
 const TYPED_FIELDS := {
 	"skills": {"skill_type": "skill_types", "element": "elements"},
+	"items": {"element": "elements"},
 	"weapons": {"weapon_type": "weapon_types"},
 	"armors": {"armor_type": "armor_types", "slot": "equip_slots"},
 }
@@ -1616,7 +1621,8 @@ static func type_refs(files: Dictionary) -> Array:
 			var base := "records/%d" % i
 			var typed: Dictionary = TYPED_FIELDS.get(t, {})
 			for key in typed:
-				if r.has(key):
+				# "Normal Attack" is not an entry of Types > Elements: it names no element.
+				if r.has(key) and not (str(typed[key]) == "elements" and str(r[key]) == NORMAL_ATTACK_ELEMENT):
 					_type_ref(out, typed[key], r, key, path, rec, key, "%s/%s" % [base, key])
 			if t == "classes" and r.get("equip") is Dictionary:
 				for key in ["weapon_types", "armor_types"]:
