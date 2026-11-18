@@ -34,6 +34,7 @@
 	"variable_division": "floor",
 	"recover_revives": true,
 	"state_countdown": "turn_end",
+	"class_equip_default": "none",
 	"levels": {"min": 1, "max": 99},
 	"growth": "class",
 	"growth_shapes": {"linear": 1.0, "fast": 0.75, "slow": 1.5, "very_fast": 0.5, "very_slow": 2.0, "early": 0.75, "late": 1.5},

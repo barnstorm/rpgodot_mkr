@@ -284,10 +284,19 @@ func compare_equip(b: Object, kind: String, id: String) -> Dictionary:
 	return {"can": true, "diff": int(round(diff)), "slot": slot}
 
 
-## The slot of `b` that takes this weapon/armor, or "" when the actor cannot equip it.
+## The slot of `b` that takes this weapon/armor, or "" when the actor cannot equip it: the
+## rule system's can_equip, the check of the Equip screen and Change Equipment (so the class's
+## lists, Equip Weapon / Equip Armor traits, dual wield and sealed slots all count here too).
 func equip_slot_for(b: Object, kind: String, id: String) -> String:
 	var rec := record(kind, id)
 	if rec.is_empty() or kind == "items":
+		return ""
+	if rules() != null and b is RPGBattler and rules().has_method("can_equip"):
+		for e in record("types", "equip_slots").get("entries", []):
+			var sid := str(e.get("id", ""))
+			var holds_weapons: bool = str(rules().equip_slot_kind(b, sid)) == "weapon"
+			if holds_weapons == (kind == "weapons") and rules().can_equip(b, sid, id):
+				return sid
 		return ""
 	var cls := record("classes", b.class_id)
 	var allowed: Variant = cls.get("equip")

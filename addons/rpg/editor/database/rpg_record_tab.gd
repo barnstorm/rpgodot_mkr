@@ -322,9 +322,10 @@ func _apply_equip_filters() -> void:
 			continue
 		var slot := str(rp.get_meta("equip_slot"))
 		var kind: String = rp.ref_kind
+		var class_default: String = str(rules.class_equip_default()) if rules != null and rules.has_method("class_equip_default") else "any"
 		rp.entry_filter = func(id: String) -> String:
 			var item := data.record("weapons" if kind == "weapon" else "armors", id)
-			return RPGValidator.equip_problem(slot, slots.get(slot, {}), kind, item, cls)
+			return RPGValidator.equip_problem(slot, slots.get(slot, {}), kind, item, cls, rec, class_default)
 		rp._refresh_button()
 
 

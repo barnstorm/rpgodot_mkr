@@ -292,6 +292,15 @@ func state_countdown() -> String:
 	return str(definition.get("state_countdown", "own_timing"))
 
 
+## What an actor may equip when its class record has no "Can equip" entry at all (issue #149).
+## "any" (the default, the Classic rules): such a class restricts nothing. "none" (VX Ace, MV):
+## only the types that Equip Weapon / Equip Armor traits name. A class that has the entry allows
+## exactly the types its lists name under every rule set (a list it does not have is empty),
+## and the traits add to them. See equip_type_allowed().
+func class_equip_default() -> String:
+	return str(definition.get("class_equip_default", "any"))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 
@@ -386,11 +395,27 @@ func is_slot_sealed(b: RPGBattler, slot: String) -> bool:
 	return false
 
 
-## Whether `b` may equip `item_id` into `slot` — the check the Equip screen and the Change
-## Equipment event command share. The record must exist for that kind of slot, the slot must not
-## be sealed, and the class's "equip" allow-lists must cover the item's weapon or armour type;
-## an "equip_weapon_type" / "equip_armor_type" trait widens them (MV's equippable weapons and
-## armours), so an equipment can grant the right to wear its kind.
+## Whether `b` may equip weapon or armour type `type_id` (`kind` is "weapon" or "armor"): an
+## "equip_weapon_type" / "equip_armor_type" trait names it (on the actor, the class, a state or
+## a piece of equipment, as RPG Maker's Equip Weapon / Equip Armor features), or the class's
+## "Can equip" list does. A class with no "equip" entry at all follows class_equip_default().
+func equip_type_allowed(b: RPGBattler, kind: String, type_id: String) -> bool:
+	if b == null:
+		return false
+	for t in traits(b, "equip_weapon_type" if kind == "weapon" else "equip_armor_type"):
+		if str(t.get("id", "")) == type_id:
+			return true
+	var allowed: Variant = _rec("classes", b.class_id).get("equip")
+	if not (allowed is Dictionary):
+		return class_equip_default() == "any"
+	var list: Variant = allowed.get("weapon_types" if kind == "weapon" else "armor_types")
+	return list is Array and (list as Array).has(type_id)
+
+
+## Whether `b` may equip `item_id` into `slot` — the one check the Equip screen, the shop's
+## "can equip" marks and the Change Equipment event command share. The record must exist for
+## that kind of slot, the slot must not be sealed, the armour must fit the slot, and the actor
+## must be allowed the item's weapon or armour type (equip_type_allowed).
 func can_equip(b: RPGBattler, slot: String, item_id: String) -> bool:
 	if b == null or not b.is_actor() or item_id == "":
 		return false
@@ -400,13 +425,8 @@ func can_equip(b: RPGBattler, slot: String, item_id: String) -> bool:
 	var rec := _rec("weapons", item_id) if kind == "weapon" else equip_record(slot, item_id)
 	if rec.is_empty():
 		return false
-	var allowed: Variant = _rec("classes", b.class_id).get("equip", {})
-	if not allowed is Dictionary:
-		allowed = {}
 	if kind == "weapon":
-		var ty := str(rec.get("weapon_type", ""))
-		var list: Variant = allowed.get("weapon_types", null)
-		return list == null or (list as Array).has(ty) or has_trait(b, "equip_weapon_type", ty)
+		return equip_type_allowed(b, "weapon", str(rec.get("weapon_type", "")))
 	if str(rec.get("slot", "")) != "" and str(rec.get("slot", "")) != slot:
 		return false
 	if str(rec.get("slot", "")) == "":
@@ -415,9 +435,7 @@ func can_equip(b: RPGBattler, slot: String, item_id: String) -> bool:
 				var types: Array = e.get("armor_types", [])
 				if not types.is_empty() and not types.has(str(rec.get("armor_type", ""))):
 					return false
-	var aty := str(rec.get("armor_type", ""))
-	var alist: Variant = allowed.get("armor_types", null)
-	return alist == null or (alist as Array).has(aty) or has_trait(b, "equip_armor_type", aty)
+	return equip_type_allowed(b, "armor", str(rec.get("armor_type", "")))
 
 
 ## Traits of `kind` from the battler's own record, class and states (not equipment, so the
