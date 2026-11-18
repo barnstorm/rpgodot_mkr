@@ -370,29 +370,174 @@ func equip_record_of(b: RPGBattler, slot: String, item_id: String) -> Dictionary
 
 
 ## "weapon" or "armor" for `slot` of `b`. A "dual_wield" trait {kind: "dual_wield", id: slot}
-## (on the actor, class or a state; id defaults to "shield") turns that slot into a weapon slot.
+## (on the actor, the class, a state or a piece of equipment; id defaults to "shield") turns
+## that slot into a weapon slot.
 func equip_slot_kind(b: RPGBattler, slot: String) -> String:
 	if b != null and b.is_actor() and dual_wield_slots(b).has(slot):
 		return "weapon"
 	return _slot_kind(slot)
 
 
-## Slots that hold a second weapon (trait "dual_wield").
+## Slots that hold a second weapon (trait "dual_wield" from any source, equipment included).
 func dual_wield_slots(b: RPGBattler) -> Array:
-	var out := []
-	for t in _intrinsic_traits(b, "dual_wield"):
+	return equip_state(b).dual
+
+
+## True when a "seal_equip" trait {kind: "seal_equip", id: slot} seals `slot`: whatever is in it
+## does not count, and menus do not let it change. The trait may sit on the actor, the class, a
+## state or a piece of equipment (a two-handed sword that seals the shield slot).
+func is_slot_sealed(b: RPGBattler, slot: String) -> bool:
+	return (equip_state(b).sealed as Array).has(slot)
+
+
+## True when a "fix_equip" trait {kind: "fix_equip", id: slot} names `slot`, or names no slot
+## (every slot, as VX's actor option Fix Equipment). What is in a fixed slot counts as usual.
+func is_slot_fixed(b: RPGBattler, slot: String) -> bool:
+	if b == null:
+		return false
+	for t in traits(b, "fix_equip"):
 		var s := str(t.get("id", ""))
-		out.append(s if s != "" else "shield")
+		if s == "" or s == slot:
+			return true
+	return false
+
+
+## Whether the player may change `slot` in the Equip menu: it is neither fixed nor sealed
+## (VX Ace's equip_change_ok?). The Change Equipment event command is not held back by Fix
+## Equip, as in RPG Maker.
+func equip_change_ok(b: RPGBattler, slot: String) -> bool:
+	return not is_slot_sealed(b, slot) and not is_slot_fixed(b, slot)
+
+
+## Which of `b`'s equipment counts: {records: {slot: record}, sealed: [slot], dual: [slot]}.
+## Seal Equip and Dual Wield traits on equipment count like the ones on the actor, the class
+## and states, so the three are worked out together: what a slot holds depends on the Dual
+## Wield slots, and whether it counts on the sealed ones. An item in a sealed slot is left out
+## with its traits, and the rest is looked at again (it may have been what sealed another
+## slot), slot by slot in the Types order, as RPG Maker's release_unequippable_items. An item
+## that stops fitting its slot when Dual Wield changes is left out the same way.
+func equip_state(b: RPGBattler) -> Dictionary:
+	var out := {"records": {}, "sealed": [], "dual": []}
+	if b == null:
+		return out
+	var base_sealed := []
+	for t in _intrinsic_traits(b, "seal_equip"):
+		base_sealed.append(str(t.get("id", "")))
+	var base_dual := []
+	for t in _intrinsic_traits(b, "dual_wield"):
+		var d := str(t.get("id", ""))
+		base_dual.append(d if d != "" else "shield")
+	out.sealed = base_sealed
+	out.dual = base_dual
+	if not b.is_actor() or b.equips.is_empty():
+		return out
+	var order := _equip_slot_order(b)
+	var sealed: Array = base_sealed
+	var dual: Array = base_dual
+	var live := {}
+	var seen := {}
+	var dropped := {}
+	for _pass in order.size() * 2 + 2:
+		live = {}
+		for slot in b.equips:
+			if dropped.has(slot):
+				continue
+			var item_id := str(b.equips[slot])
+			var r := _rec("weapons", item_id) if dual.has(slot) else equip_record(slot, item_id)
+			if not r.is_empty():
+				live[slot] = r
+				seen[slot] = true
+			elif seen.has(slot):
+				# It fitted the slot until Dual Wield changed: it no longer counts.
+				dropped[slot] = true
+		var now_sealed: Array = base_sealed.duplicate()
+		var now_dual: Array = base_dual.duplicate()
+		for slot in live:
+			for t in live[slot].get("traits", []):
+				if not (t is Dictionary):
+					continue
+				match str(t.get("kind", "")):
+					"seal_equip":
+						now_sealed.append(str(t.get("id", "")))
+					"dual_wield":
+						var d2 := str(t.get("id", ""))
+						now_dual.append(d2 if d2 != "" else "shield")
+		var changed: bool = now_dual != dual
+		sealed = now_sealed
+		dual = now_dual
+		for slot in order:
+			if live.has(slot) and sealed.has(slot):
+				dropped[slot] = true
+				live.erase(slot)
+				changed = true
+				break
+		if not changed:
+			break
+	for slot in sealed:
+		live.erase(slot)
+	out.records = live
+	out.sealed = sealed
+	out.dual = dual
 	return out
 
 
-## True when a "seal_equip" trait {kind: "seal_equip", id: slot} (actor, class or state) seals
-## `slot`: whatever is in it does not count, and menus should not let it change.
-func is_slot_sealed(b: RPGBattler, slot: String) -> bool:
-	for t in _intrinsic_traits(b, "seal_equip"):
-		if str(t.get("id", "")) == slot:
-			return true
-	return false
+## The actor's equipment slots: the Types order first, then any other slot it has.
+func _equip_slot_order(b: RPGBattler) -> Array:
+	var order := []
+	for e in _rec("types", "equip_slots").get("entries", []):
+		if e is Dictionary and b.equips.has(str(e.get("id", ""))):
+			order.append(str(e.get("id", "")))
+	for slot in b.equips:
+		if not order.has(slot):
+			order.append(slot)
+	return order
+
+
+## Slots whose item `b` could not be given now (can_equip says no): the slot is sealed, holds
+## the other kind of thing, or the actor may not wear that type.
+func unwearable_slots(b: RPGBattler) -> Array:
+	var out := []
+	if b == null or not b.is_actor():
+		return out
+	for slot in b.equips:
+		var item_id := str(b.equips[slot])
+		if item_id != "" and not can_equip(b, slot, item_id):
+			out.append(slot)
+	return out
+
+
+## Puts `item_id` ("" = nothing) in `slot` of `b`, then takes off whatever that change leaves
+## unwearable: the shield when a two-handed sword seals its slot, the second weapon when the
+## piece that gave Dual Wield comes off, the armour whose type a removed piece allowed. Taking
+## one thing off can leave another unwearable, so this repeats until nothing more comes off
+## (RPG Maker's release_unequippable_items). What was already unwearable before the change is
+## left alone. Returns what came off, [{slot, item, kind}] with kind "weapon" or "armor", for
+## the caller to put back in the bag; `slot`'s own old item is not in it.
+func set_equip(b: RPGBattler, slot: String, item_id: String) -> Array:
+	var released := []
+	if b == null:
+		return released
+	var kinds := {slot: equip_slot_kind(b, slot)}
+	for s in b.equips:
+		kinds[s] = equip_slot_kind(b, s)
+	var before := unwearable_slots(b)
+	before.erase(slot)
+	b.equips[slot] = item_id
+	for _pass in b.equips.size() + 1:
+		var off := ""
+		for s in unwearable_slots(b):
+			if not before.has(s):
+				off = s
+				break
+		if off == "":
+			break
+		var item := str(b.equips[off])
+		var kind := str(kinds.get(off, "armor"))
+		if _rec(kind + "s", item).is_empty():
+			kind = "armor" if kind == "weapon" else "weapon"
+		released.append({"slot": off, "item": item, "kind": kind})
+		b.equips[off] = ""
+	return released
 
 
 ## Whether `b` may equip weapon or armour type `type_id` (`kind` is "weapon" or "armor"): an
@@ -438,8 +583,8 @@ func can_equip(b: RPGBattler, slot: String, item_id: String) -> bool:
 	return equip_type_allowed(b, "armor", str(rec.get("armor_type", "")))
 
 
-## Traits of `kind` from the battler's own record, class and states (not equipment, so the
-## equipment list itself can depend on them).
+## Traits of `kind` from the battler's own record, class and states (not equipment: equip_state
+## adds the equipment's own Seal Equip and Dual Wield traits to these).
 func _intrinsic_traits(b: RPGBattler, kind: String) -> Array:
 	var out := []
 	if b == null:
@@ -459,21 +604,15 @@ func _intrinsic_traits(b: RPGBattler, kind: String) -> Array:
 	return out
 
 
+## The weapon and armour records that count for `b` (equip_state): not the ones in sealed slots.
 func _equip_records(b: RPGBattler) -> Array:
 	var out := []
 	if not b.is_actor():
 		return out
-	var sealed := []
-	for t in _intrinsic_traits(b, "seal_equip"):
-		sealed.append(str(t.get("id", "")))
-	var dual := dual_wield_slots(b)
+	var records: Dictionary = equip_state(b).records
 	for slot in b.equips:
-		if sealed.has(slot):
-			continue
-		var item_id := str(b.equips[slot])
-		var r := _rec("weapons", item_id) if dual.has(slot) else equip_record(slot, item_id)
-		if not r.is_empty():
-			out.append(r)
+		if records.has(slot):
+			out.append(records[slot])
 	return out
 
 
