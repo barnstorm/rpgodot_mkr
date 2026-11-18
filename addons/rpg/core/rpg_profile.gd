@@ -11,6 +11,7 @@ extends RefCounted
 ##   p.folder("charset")    -> "CharSet"
 ##   p.sheet_size("charset") -> Vector2i(288, 256)
 ##   p.sound_role("door_open") -> "door_open"
+##   p.move_speeds          -> tiles per second for movement speeds 1..6
 ##   p.decoders              -> {sheet kind: note} for the kinds this addon decodes
 ##   p.limitations           -> known gaps of the decoders (shown to the user, not enforced)
 ## A profile's status is "supported" only when its decoders pass their fixtures
@@ -28,6 +29,11 @@ const KINDS: Array[String] = [
 	"backdrop", "panorama", "title", "gameover",
 ]
 
+## Tiles per second for movement speeds 1..6 when a profile does not say: RPG Maker VX / VX Ace
+## / MV, where a character covers 2^speed / 256 of a tile per frame at 60 frames a second
+## (speed 4, "Normal", is 3.75 tiles a second, and each step up doubles it).
+const DEFAULT_MOVE_SPEEDS := [0.46875, 0.9375, 1.875, 3.75, 7.5, 15.0]
+
 static var _cache: Dictionary = {}
 
 var id := ""
@@ -35,6 +41,10 @@ var display_name := ""
 var version := 0
 var status := "planned"
 var tile_size := 16
+## Tiles per second for movement speeds 1..6 in this profile's RPG Maker ("move_speeds").
+## 2000/2003 move 2^(speed+1) / 256 of a tile per frame at 60 fps (speed 4 = 7.5 tiles/s), VX,
+## VX Ace and MV 2^speed / 256 (3.75), XP 2^speed / 128 at 40 fps (5).
+var move_speeds: Array = DEFAULT_MOVE_SPEEDS
 var folders: Dictionary = {}
 var sheets: Dictionary = {}
 var sound_roles: Dictionary = {}
@@ -95,6 +105,7 @@ func _setup(d: Dictionary) -> void:
 	version = int(d.get("version", 0))
 	status = str(d.get("status", "planned"))
 	tile_size = int(d.get("tile_size", 16))
+	move_speeds = d.get("move_speeds") if valid_move_speeds(d.get("move_speeds")) else DEFAULT_MOVE_SPEEDS
 	folders = d.get("folders", {})
 	sheets = d.get("sheets", {})
 	sound_roles = d.get("sound_roles", {})
@@ -102,6 +113,16 @@ func _setup(d: Dictionary) -> void:
 	extensions = d.get("extensions", {})
 	decoders = d.get("decoders", {})
 	limitations = d.get("limitations", [])
+
+
+## A movement speed table: six numbers above zero (tiles per second for speeds 1..6).
+static func valid_move_speeds(v: Variant) -> bool:
+	if not (v is Array) or (v as Array).size() != 6:
+		return false
+	for x in v:
+		if not (typeof(x) in [TYPE_INT, TYPE_FLOAT]) or float(x) <= 0.0:
+			return false
+	return true
 
 
 func is_supported() -> bool:

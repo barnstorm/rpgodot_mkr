@@ -11,7 +11,7 @@ static func descriptor() -> Dictionary:
 		"fields": [
 			{"key": "direction", "kind": "choice", "options": ["down", "left", "right", "up", "return", "lock", "unlock"], "default": "down", "label": "Direction", "help": "Lock stops the camera following the player (RM2000/2003's Pan Screen Lock); unlock resumes it without snapping"},
 			{"key": "distance", "kind": "int", "default": 3, "min": 0, "max": 100, "label": "Tiles", "show_if": {"key": "direction", "equals": ["down", "left", "right", "up"]}},
-			{"key": "speed", "kind": "int", "default": 4, "min": 1, "max": 6, "label": "Speed", "show_if": {"key": "direction", "equals": ["down", "left", "right", "up", "return"]}},
+			{"key": "speed", "kind": "choice", "options": [1, 2, 3, 4, 5, 6], "option_labels": RPGCharacter.SPEED_LABELS, "default": 4, "label": "Speed", "show_if": {"key": "direction", "equals": ["down", "left", "right", "up", "return"]}},
 			{"key": "wait", "kind": "bool", "default": true, "label": "Wait until done", "show_if": {"key": "direction", "equals": ["down", "left", "right", "up", "return"]}},
 		],
 	}
@@ -41,7 +41,7 @@ func run(ctx: RPGContext, args: Dictionary) -> RPGResult:
 		p.unlock_camera()
 		return RPGResult.ok()
 	# Pan speeds are the character speeds (1..6) in tiles per second.
-	var px_per_sec: float = m.tile_size * RPGCharacter.SPEEDS[clampi(int(args.speed), 1, 6)]
+	var px_per_sec: float = m.tile_size * ctx.data.move_speed(int(args.speed))
 	if direction == "return":
 		p.queue_pan_to_center(px_per_sec)
 	else:

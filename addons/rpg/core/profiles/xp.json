@@ -5,6 +5,7 @@
 	"version": 1,
 	"status": "supported",
 	"tile_size": 32,
+	"move_speeds": [0.625, 1.25, 2.5, 5.0, 10.0, 20.0],
 	"autotile_frame_time": 0.4,
 	"decoders": {
 		"tileset": "RPGTilesheetXP: 8 tiles wide, any height; tile 0 is the eraser",

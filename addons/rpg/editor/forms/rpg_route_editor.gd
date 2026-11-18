@@ -45,7 +45,7 @@ const BUTTONS := [
 const STEP_FIELDS := {
 	"jump": [{"key": "jump", "kind": "operand_pair_int", "label": "Offset [dx, dy]"}],
 	"wait": [{"key": "wait", "kind": "float", "min": 0.0, "max": 60.0, "label": "Seconds"}],
-	"speed": [{"key": "speed", "kind": "int", "min": 1, "max": 6, "label": "Speed"}],
+	"speed": [{"key": "speed", "kind": "choice", "options": [1, 2, 3, 4, 5, 6], "option_labels": RPGCharacter.SPEED_LABELS, "label": "Speed"}],
 	"frequency": [{"key": "frequency", "kind": "int", "min": 1, "max": 5, "label": "Frequency"}],
 	"graphic": [{"key": "graphic", "kind": "graphic", "label": "Graphic"}],
 	"opacity": [{"key": "opacity", "kind": "int", "min": 0, "max": 255, "label": "Opacity"}],
@@ -159,7 +159,10 @@ static func describe(s: Variant) -> String:
 	if s.has("wait"):
 		return "Wait %s s" % str(s.wait)
 	if s.has("speed"):
-		return "Speed %s" % str(s.speed)
+		var n: Variant = s.speed
+		if typeof(n) in [TYPE_INT, TYPE_FLOAT] and int(n) >= 1 and int(n) <= 6:
+			return "Speed %s" % RPGCharacter.SPEED_LABELS[int(n) - 1]
+		return "Speed %s" % str(n)
 	if s.has("frequency"):
 		return "Frequency %s" % str(s.frequency)
 	if s.has("graphic"):

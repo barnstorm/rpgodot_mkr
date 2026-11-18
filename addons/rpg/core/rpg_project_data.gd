@@ -218,6 +218,32 @@ func tile_size() -> int:
 	return int(profile.get("tile_size", 16))
 
 
+var _move_speeds_key: Array = []
+var _move_speeds: Array = []
+
+
+## Tiles per second for RPG Maker's movement speeds 1..6: the project's own table (six numbers
+## under "move_speeds" in the project's profile.json) or, without one, the scale of the
+## profile's RPG Maker (RPGProfile.move_speeds), so a cutscene timed with speed 3 takes as
+## long as it does there.
+func move_speeds() -> Array:
+	var own: Variant = profile.get("move_speeds")
+	var key := [str(profile.get("profile", RPGProfile.DEFAULT_PROFILE)), own]
+	if _move_speeds.is_empty() or key != _move_speeds_key:
+		_move_speeds_key = key.duplicate(true)
+		if RPGProfile.valid_move_speeds(own):
+			_move_speeds = (own as Array).duplicate()
+		else:
+			var p := RPGProfile.load_profile(str(key[0]))
+			_move_speeds = (p.move_speeds if p != null else RPGProfile.DEFAULT_MOVE_SPEEDS).duplicate()
+	return _move_speeds
+
+
+## Tiles per second for movement speed `n` (1..6, clamped).
+func move_speed(n: int) -> float:
+	return float(move_speeds()[clampi(n, 1, 6) - 1])
+
+
 func scene_setting(key: String, fallback: String) -> String:
 	var scenes: Dictionary = project.get("scenes", {})
 	var v: String = scenes.get(key, "")

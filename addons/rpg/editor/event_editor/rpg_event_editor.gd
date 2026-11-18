@@ -36,7 +36,8 @@ const PAGE_FIELDS := [
 	{"key": "graphic", "kind": "graphic", "default": null, "label": "Graphic"},
 	{"key": "movement", "kind": "object", "default": {"type": "fixed"}, "label": "Movement", "fields": [
 		{"key": "type", "kind": "choice", "options": ["fixed", "random", "vertical", "horizontal", "approach", "away", "custom"], "option_labels": ["Fixed", "Random", "Vertical", "Horizontal", "Approach the player", "Away from the player", "Custom route"], "default": "fixed", "label": "Type"},
-		{"key": "speed", "kind": "int", "default": 3, "min": 1, "max": 6, "label": "Speed (1-6)"},
+		{"key": "speed", "kind": "choice", "options": [1, 2, 3, 4, 5, 6], "option_labels": RPGCharacter.SPEED_LABELS, "default": 3, "label": "Speed",
+			"help": "RPG Maker's movement speeds: each one is twice as fast as the one before. Normal is the player's walking speed."},
 		{"key": "frequency", "kind": "int", "default": 3, "min": 1, "max": 5, "label": "Frequency (1-5)"},
 		{"key": "route", "kind": "route", "route_options": true, "default": null, "label": "Route", "show_if": {"key": "type", "equals": "custom"}},
 	]},

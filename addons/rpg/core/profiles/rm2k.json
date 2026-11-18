@@ -5,6 +5,7 @@
 	"version": 1,
 	"status": "supported",
 	"tile_size": 16,
+	"move_speeds": [0.9375, 1.875, 3.75, 7.5, 15.0, 30.0],
 	"layers": ["lower", "upper"],
 	"extensions": {
 		"image": ["png"],

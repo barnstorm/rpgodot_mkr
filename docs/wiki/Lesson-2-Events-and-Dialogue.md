@@ -27,7 +27,7 @@ Double-click an empty grass tile. The event editor opens:
 - **Left column**, the page's settings:
   - **Conditions**: when this page is active (Lesson 4).
   - **Graphic**: the character sheet, which character on it, the direction it faces and the frame. Choose *Tile* to show a tile of the tileset instead (a pot, a sign), or nothing for an invisible event.
-  - **Movement**: *Fixed* (stands still), *Random*, *Vertical* / *Horizontal* (paces one axis, turning back at obstacles), *Approach the player*, *Away from the player* or *Custom route*, with a speed (1–6) and how often it moves (1–5).
+  - **Movement**: *Fixed* (stands still), *Random*, *Vertical* / *Horizontal* (paces one axis, turning back at obstacles), *Approach the player*, *Away from the player* or *Custom route*, with a speed and how often it moves (1–5). The speeds are RPG Maker's six, *1: x8 Slower* to *6: x4 Faster*: each is twice as fast as the one before, and *4: Normal* is the player's walking speed.
   - **Options**: walking animation, stepping animation (moves its feet while standing), direction fix (never turns), walk through.
   - **Priority**: *Below characters* (the player walks over it, like a switch on the floor), *Same as characters* (it blocks like a person) or *Above characters*. A new page starts *Below characters*, as in RPG Maker, so a page you leave empty lets the player walk through; picking a character graphic turns it to *Same as characters*.
   - **Trigger**: how it starts:

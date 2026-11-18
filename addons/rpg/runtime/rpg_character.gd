@@ -7,8 +7,13 @@ signal step_finished(cell: Vector2i)
 signal step_blocked(dir: Vector2i)
 signal route_done()
 
-## RPG Maker speeds 1..6 in tiles per second.
-const SPEEDS := [0.0, 1.0, 2.0, 3.0, 4.2, 6.0, 9.0]
+## RPG Maker speeds 1..6 in tiles per second (index 0 is unused) for a character with no
+## project to ask: VX / VX Ace / MV's scale, each speed twice the one before. In a game the
+## project's table is used (RPGProjectData.move_speeds: the profile's RPG Maker scale, or the
+## project's own); see move_speed().
+const SPEEDS := [0.0, 0.46875, 0.9375, 1.875, 3.75, 7.5, 15.0]
+## RPG Maker's names for speeds 1..6.
+const SPEED_LABELS := ["1: x8 Slower", "2: x4 Slower", "3: x2 Slower", "4: Normal", "5: x2 Faster", "6: x4 Faster"]
 const CHARSET_SCRIPT := "res://addons/rpg/import/rpg_charset.gd"
 
 var map: Node
@@ -101,8 +106,11 @@ func debug_through() -> bool:
 	return false
 
 
+## Tiles per second at the character's speed (twice that while dashing).
 func move_speed() -> float:
 	var s: float = SPEEDS[clampi(speed, 1, 6)]
+	if map != null and map.get("rpg") != null and map.rpg.get("data") != null:
+		s = map.rpg.data.move_speed(speed)
 	if dashing:
 		s *= 2.0
 	return s
