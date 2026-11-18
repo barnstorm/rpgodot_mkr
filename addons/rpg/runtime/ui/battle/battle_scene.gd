@@ -1823,7 +1823,12 @@ func _run_victory_node(node: Node) -> void:
 # --- player input --------------------------------------------------------------------------
 
 func _input_phase() -> String:
-	inputs = core.inputs_needed()
+	# One entry per command to enter: an actor with Action Times+ is asked once per action, as
+	# in VX Ace (its command window comes up again).
+	inputs = []
+	for i in core.inputs_needed():
+		for k in maxi(1, core.actions_needed(i)):
+			inputs.append(i)
 	if inputs.is_empty():
 		return "fight"
 	_show_party_command()
@@ -1885,7 +1890,9 @@ func _show_actor_command(keep_cursor := false) -> void:
 	cmd_list.active = true
 	_place_status_cursor(core.party.find(b))
 	log_win.visible = true
-	log_label.text = b.name
+	# With several actions this turn the log says which one is being entered: "Eric (2/2)".
+	var total: int = inputs.count(inputs[input_pos])
+	log_label.text = b.name if total <= 1 else "%s (%d/%d)" % [b.name, _input_slot() + 1, total]
 
 
 ## The actor's battle command list: the rules resolve the actor record's, else its class's, else
@@ -2013,7 +2020,7 @@ func handle_action(a: String) -> void:
 						_show_party_command()
 					else:
 						input_pos -= 1
-						current_actor().action = {}
+						core.clear_action(inputs[input_pos], _input_slot())
 						_show_actor_command()
 		"skill", "item":
 			match a:
@@ -2266,11 +2273,19 @@ func _back_from_target() -> void:
 		_open_select(_target_return, current_actor(), true)
 
 
+## Which of the current actor's actions this turn is being entered (0 = the first): how many
+## earlier entries of the input list are the same actor's.
+func _input_slot() -> int:
+	if input_pos >= inputs.size():
+		return 0
+	return inputs.slice(0, input_pos).count(inputs[input_pos])
+
+
 ## Stores the current actor's action and moves to the next actor (or ends input).
 func _commit(action: Dictionary) -> void:
 	target_arrow.visible = false
 	var idx: int = inputs[input_pos]
-	if not core.set_action(idx, action):
+	if not core.set_action(idx, action, 0 if core.is_timed() else _input_slot()):
 		play("buzzer")
 		_show_actor_command(true)
 		return
