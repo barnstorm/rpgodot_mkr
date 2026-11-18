@@ -133,6 +133,9 @@ var hooks: Object = null
 
 var _queue: Array = []
 var _queue_built := false
+## Battlers with no action this turn (they cannot act), still owed their action end under the
+## "turn_end" countdown: handled after the queue, where VX Ace's speed-0 battlers come up.
+var _lost: Array = []
 var _result := ""
 var _rewards := {}
 var _page_runs := {}           ## page id -> turn it last ran
@@ -387,6 +390,12 @@ func next_action() -> Dictionary:
 		var b: RPGBattler = _queue.pop_front()
 		if not b.is_active() or not rules.can_act(b):
 			_forced_next.erase(b)
+			# Under the "turn_end" countdown a battler that loses its action still reaches its
+			# action end (VX Ace's on_action_end), or a state that stops it could never wear
+			# off there. What wore off is shown like any other tick.
+			var lost := _lost_action_tick(b)
+			if not lost.is_empty():
+				return lost
 			continue
 		var before := _vitals()
 		_hook("turn_started", [b])
@@ -409,8 +418,31 @@ func next_action() -> Dictionary:
 		checkpoint.emit("after_action")
 		result.battle_over = battle_over()
 		return result
+	while not _lost.is_empty():
+		var lost := _lost_action_tick(_lost.pop_front())
+		if not lost.is_empty():
+			return lost
 	phase = "turn_end"
 	return {}
+
+
+## The action-end pass of a battler that could not act, under the "turn_end" countdown: {} when
+## nothing wore off (or the rules count down the other way), else a silent result that carries
+## the tick for the UI.
+func _lost_action_tick(b: RPGBattler) -> Dictionary:
+	if not b.is_active() or rules.state_countdown() != "turn_end":
+		return {}
+	var before := _vitals()
+	var tick := rules.tick_states(b, "action_end")
+	if tick.lines.is_empty():
+		return {}
+	tick.battler = b
+	report_changes()
+	if _vitals() != before:
+		checkpoint.emit("after_change")
+	return {"user": b, "action": {"kind": "wait", "silent": true}, "kind": "wait", "name": "", "targets": [],
+		"effects": [], "lines": [], "text": "", "escaped": false, "ticks": [tick], "skipped": true,
+		"battle_over": battle_over()}
 
 
 ## Life resource and states of every battler, to detect the "after an HP or state change"
@@ -504,6 +536,11 @@ func _build_queue() -> void:
 			times = maxi(1, rules.action_times(e.b))
 		for k in times:
 			_queue.append(e.b)
+	_lost.clear()
+	if rules.state_countdown() == "turn_end":
+		for b in all_battlers():
+			if b.is_active() and b.action.is_empty():
+				_lost.append(b)
 	_queue_built = true
 
 
@@ -1279,6 +1316,12 @@ func act(b: RPGBattler) -> Dictionary:
 		_forced_next.erase(b)
 		res = {"user": b, "action": {"kind": "wait", "silent": true}, "kind": "wait", "name": "", "targets": [],
 			"effects": [], "lines": [], "text": "", "escaped": false, "battle_over": ""}
+		# The lost action still ends (see next_action).
+		if b.is_active() and rules.state_countdown() == "turn_end":
+			var lost_tick := rules.tick_states(b, "action_end")
+			if not lost_tick.lines.is_empty():
+				lost_tick.battler = b
+				res["ticks"] = [lost_tick]
 	else:
 		_hook("turn_started", [b])
 		var given: Variant = null
