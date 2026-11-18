@@ -1624,6 +1624,9 @@ static func type_refs(files: Dictionary) -> Array:
 					if vals is Array:
 						for j in vals.size():
 							_type_ref(out, key, vals, j, path, rec, "equip", "%s/equip/%s/%d" % [base, key, j])
+			if t == "skills" and r.get("required_weapons") is Array:
+				for j in r.required_weapons.size():
+					_type_ref(out, "weapon_types", r.required_weapons, j, path, rec, "required_weapons", "%s/required_weapons/%d" % [base, j])
 			if t == "actors" and r.get("equips") is Dictionary:
 				for slot in r.equips.keys():
 					_type_ref(out, "equip_slots", r.equips, slot, path, rec, "equips", "%s/equips/%s" % [base, slot], true)

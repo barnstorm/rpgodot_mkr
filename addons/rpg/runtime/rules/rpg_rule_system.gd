@@ -1554,11 +1554,59 @@ func can_use(user: RPGBattler, action: Dictionary) -> bool:
 			return false
 		if not skill_type_usable(user, str(u.get("skill_type", ""))):
 			return false
+		if not weapon_requirement_met(user, u):
+			return false
 		var cost: Dictionary = _skill_cost(user, u)
 		for res_id in cost:
 			if user.get_resource(res_id) < int(cost[res_id]):
 				return false
 	return true
+
+
+## VX Ace / MV "Required Weapon": a skill whose "required_weapons" lists weapon types can only
+## be used by an actor with a weapon of one of those types equipped. An empty or missing list
+## asks for nothing, and enemies ignore the field, as in RPG Maker (they carry no weapons).
+func weapon_requirement_met(user: RPGBattler, usable: Dictionary) -> bool:
+	if user == null or not user.is_actor():
+		return true
+	var need: Array = required_weapon_types(usable)
+	if need.is_empty():
+		return true
+	var have := equipped_weapon_types(user)
+	for w in need:
+		if have.has(w):
+			return true
+	return false
+
+
+## The weapon types a skill record (or a resolved action) asks for: its "required_weapons"
+## list without the blank entries.
+func required_weapon_types(usable: Dictionary) -> Array:
+	var out := []
+	var need: Variant = usable.get("required_weapons")
+	if need is Array:
+		for w in need:
+			if str(w) != "" and not out.has(str(w)):
+				out.append(str(w))
+	return out
+
+
+## The weapon types of the weapons `b` has equipped: every weapon slot (a Dual Wield slot
+## included) that is not sealed.
+func equipped_weapon_types(b: RPGBattler) -> Array:
+	var out := []
+	if b == null or not b.is_actor():
+		return out
+	for slot in b.equips:
+		if equip_slot_kind(b, slot) != "weapon" or is_slot_sealed(b, slot):
+			continue
+		var r := _rec("weapons", str(b.equips[slot]))
+		if r.is_empty():
+			continue
+		var wt := str(r.get("weapon_type", ""))
+		if wt != "" and not out.has(wt):
+			out.append(wt)
+	return out
 
 
 ## The battler's skill list with traits folded in (MV's skills()): the learned list, plus
