@@ -62,6 +62,7 @@ The official beginner tutorials at <https://www.rpgmakerweb.com/tutorials> are w
 | Features *Equip Weapon* / *Equip Armor* (VX Ace, MV) | Traits **Equip Weapon Type** / **Equip Armor Type** on the actor, the class, a state or a piece of equipment, added to the class's **Can equip** lists. Give Ryan *Equip Weapon Type: Sword* on a new class and he can equip swords and nothing else |
 | Skill *Required Weapon 1* / *2* (VX Ace, MV) | Skill **Required weapon**: a list of weapon types, as many as you like. The skill is greyed out in battle and in the menu unless a weapon of one of those types is equipped (a second weapon counts). Enemies ignore it |
 | Weapon or armour features *Seal Equip*, *Slot Type: Dual Wield*, *Fix Equip* (VX Ace, MV); VX actor options *Two Swords Style*, *Fix Equipment* | Traits **Seal Equip**, **Dual Wield** and **Fix Equip** on the actor, the class, a state or the weapon / armour itself. Equipping a sword with *Seal Equip: Shield* sends the shield back to the bag and greys its slot out; *Fix Equip* with no slot fixes them all |
+| Feature *Action Times+* (VX Ace, MV) | Trait **Action Times+** (a percent chance of one more action). Each action is its own choice: an enemy rolls its action list again, and the actor's command menu comes up again (*Eric (2/2)*) |
 | Class parameter curves | Classes: each stat is **Per level** or **Curve** (level 1 / level 99 values and a shape), with a graph |
 | Battle Test (party, levels) | **Game > Battle test…** (choose the enemy group, the party and their levels), or Battle test on the Enemy groups tab |
 | Auto-change BGM / BGS | Map properties: Music and Background sound, each "(keep playing)", "(stop)" or a file |
@@ -83,13 +84,12 @@ The **Classic** rule system uses XP-style stats: HP, SP, STR, DEX, AGI, INT. The
 - MV invocation fields: *Speed* (joins the turn-order roll), *Repeat* (1-9 hits; a random scope re-picks its targets per repeat) and *TP Gain* (charged to the user once per use — not per target or repeat, and even on a miss).
 - The rest of the Features: *Attack State* rides every normal attack, *Attack Speed* speeds them, *Add Skill* / *Seal Skill* change the skill list, *Equip Weapon/Armor Type* say what an actor can equip, together with the class's **Can equip** lists (the types either one names; a class with no lists and no such trait equips nothing under these rules, and the shop's marks, the Equip menu and Change Equipment all use the one check), *Auto Battle* picks its own command, *Guard* halves damage without the command, *Substitute* covers a friend under a quarter of HP, and the *Collapse Effect* picks the death animation (normal, boss, instant, none).
 - *Seal Equip*, *Dual Wield* and *Fix Equip* count from any source, equipment included: a two-handed sword with *Seal Equip: Shield* sends the shield back to the bag and locks its slot, a weapon with *Dual Wield* opens the shield slot to a second weapon, and *Fix Equip* greys a slot out in the Equip menu (blank slot = every slot; Change Equipment still works).
+- *Action Times+* gives extra actions, each chosen on its own: an enemy rolls its action list once per action, and an actor's command menu comes up once per action. The battler acts them one after the other, at the slowest of their speeds.
 - State restrictions: *Attack an Enemy* (berserk), *Attack Anyone* (confusion, itself included), *Attack an Ally* (charm, never itself), *Cannot Use Skills* and *Cannot Act*. The most limiting state wins, a confused battler asks for no command (a monster skips its action list), and the log names the driving state.
 
 Switch with *Database > Rule system…*. The switch shows a preview and makes a backup first.
 
 With VX Ace style rules, actors can only use a skill type (Magic, Special) once their class or actor record adds it with an *Add Skill Type* trait, just as in Ace. When they are granted, the default battle menu follows Ace too: Attack, one command per skill type, Guard, Item — and a per-actor or per-class **Battle commands** list replaces it outright.
-
-Not covered yet: Action Times+ repeats the same action.
 
 ## Things still different
 

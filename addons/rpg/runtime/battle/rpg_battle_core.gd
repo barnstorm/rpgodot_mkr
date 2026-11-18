@@ -136,6 +136,16 @@ var _queue_built := false
 ## Battlers with no action this turn (they cannot act), still owed their action end under the
 ## "turn_end" countdown: handled after the queue, where VX Ace's speed-0 battlers come up.
 var _lost: Array = []
+## Turn-based, "action_times" traits (Action Times+). Each of a battler's actions in a turn is
+## chosen on its own: `_counts` is how many it takes this turn (rolled once per turn), `_plans`
+## the actions the player entered after the first, `_lineup` what each queued battler still
+## has to do, in order, and `_owed` the battlers whose action end waits for their last action.
+var _counts := {}
+var _plans := {}
+var _lineup := {}
+var _owed := {}
+## Actions that end the battler's turn: nothing follows them in the same turn.
+const ONE_SHOT_KINDS := ["escape", "self_destruct", "transform"]
 var _result := ""
 var _rewards := {}
 var _page_runs := {}           ## page id -> turn it last ran
@@ -288,6 +298,10 @@ func begin_turn() -> void:
 	_queue.clear()
 	_queue_built = false
 	_actions_begun = false
+	_counts.clear()
+	_plans.clear()
+	_lineup.clear()
+	_owed.clear()
 
 
 ## Turn-based: the commands are in and the turn's actions begin. The turn number goes up and
@@ -315,14 +329,37 @@ func inputs_needed() -> Array:
 	return out
 
 
-## Stores an actor's action. Returns false if the action is not allowed.
-func set_action(actor_index: int, action: Dictionary) -> bool:
+## Turn-based: how many actions `b` takes this turn: 1 plus its Action Times+ rolls, made once
+## per turn (VX Ace's make_action_times), so the commands asked for and the turn agree.
+func action_count(b: RPGBattler) -> int:
+	if b == null:
+		return 0
+	if not _counts.has(b):
+		_counts[b] = maxi(1, rules.action_times(b))
+	return int(_counts[b])
+
+
+## Turn-based: how many commands the player enters for party member `actor_index` this turn
+## (0 when it needs none). More than 1 with Action Times+: set_action() takes them one by one,
+## its `slot` saying which.
+func actions_needed(actor_index: int) -> int:
+	if not inputs_needed().has(actor_index):
+		return 0
+	return action_count(party[actor_index])
+
+
+## Stores an actor's action. Returns false if the action is not allowed. `slot` is which of the
+## actor's actions this turn it is (0 = the first; see actions_needed()). A driver that enters
+## only the first gets it repeated for the others, as before.
+func set_action(actor_index: int, action: Dictionary, slot := 0) -> bool:
 	if actor_index < 0 or actor_index >= party.size():
 		return false
 	var b: RPGBattler = party[actor_index]
 	if not b.is_active() or not rules.can_act(b):
 		return false
 	if is_timed() and not ready_queue.has(b):
+		return false
+	if slot < 0 or (slot > 0 and (is_timed() or slot >= action_count(b))):
 		return false
 	var kind := str(action.get("kind", ""))
 	match kind:
@@ -339,8 +376,28 @@ func set_action(actor_index: int, action: Dictionary) -> bool:
 				return false
 		_:
 			return false
+	if slot > 0:
+		var more: Array = _plans.get(b, [])
+		while more.size() < slot:
+			more.append({})
+		more[slot - 1] = action.duplicate(true)
+		_plans[b] = more
+		return true
 	b.action = action.duplicate(true)
 	return true
+
+
+## Takes back an action entered with set_action() (the player cancelled out of it).
+func clear_action(actor_index: int, slot := 0) -> void:
+	if actor_index < 0 or actor_index >= party.size():
+		return
+	var b: RPGBattler = party[actor_index]
+	if slot <= 0:
+		b.action = {}
+		return
+	var more: Array = _plans.get(b, [])
+	if slot - 1 < more.size():
+		more[slot - 1] = {}
 
 
 ## Battle-event forced action (Force Action). With timing "now" the battler performs the
@@ -388,15 +445,24 @@ func next_action() -> Dictionary:
 	phase = "actions"
 	while not _queue.is_empty():
 		var b: RPGBattler = _queue.pop_front()
+		# The battler's next action of the turn (Action Times+ gives it several, each its own).
+		var line: Array = _lineup.get(b, [])
+		var planned: Dictionary = line.pop_front() if not line.is_empty() else {}
 		if not b.is_active() or not rules.can_act(b):
 			_forced_next.erase(b)
+			if _queue.has(b):
+				continue   # its action end comes with its last entry
 			# Under the "turn_end" countdown a battler that loses its action still reaches its
 			# action end (VX Ace's on_action_end), or a state that stops it could never wear
-			# off there. What wore off is shown like any other tick.
-			var lost := _lost_action_tick(b)
+			# off there. So does one that acted earlier this turn and lost the rest. What wore
+			# off is shown like any other tick.
+			var lost := _lost_action_tick(b, _owed.has(b))
+			_owed.erase(b)
 			if not lost.is_empty():
 				return lost
 			continue
+		if not planned.is_empty():
+			b.action = planned
 		var before := _vitals()
 		_hook("turn_started", [b])
 		var given: Variant = null
@@ -405,12 +471,17 @@ func next_action() -> Dictionary:
 			given = _forced_targets(b, b.action)
 			_forced_next.erase(b)
 		var result := _execute(b, given)
-		# States set to wear off at the battler's action end tick right here (MV's Action End),
-		# with the action's result for the UI; the rest wait for end_turn().
-		var tick := rules.tick_states(b, "action_end")
-		if not tick.lines.is_empty():
-			tick.battler = b
-			result["ticks"] = [tick]
+		# States set to wear off at the battler's action end tick here, with the action's result
+		# for the UI; the rest wait for end_turn(). A battler with several actions reaches its
+		# action end after the last of them (VX Ace's on_action_end, MV's onAllActionsEnd).
+		if _queue.has(b):
+			_owed[b] = true
+		else:
+			_owed.erase(b)
+			var tick := rules.tick_states(b, "action_end")
+			if not tick.lines.is_empty():
+				tick.battler = b
+				result["ticks"] = [tick]
 		_note_command(b, result)
 		report_changes()
 		if _vitals() != before:
@@ -426,11 +497,12 @@ func next_action() -> Dictionary:
 	return {}
 
 
-## The action-end pass of a battler that could not act, under the "turn_end" countdown: {} when
-## nothing wore off (or the rules count down the other way), else a silent result that carries
-## the tick for the UI.
-func _lost_action_tick(b: RPGBattler) -> Dictionary:
-	if not b.is_active() or rules.state_countdown() != "turn_end":
+## The action-end pass of a battler that could not act, under the "turn_end" countdown, or of
+## one that is `owed` it (it acted earlier this turn and lost its later actions): {} when
+## nothing wore off (or the rules count down the other way and nothing is owed), else a silent
+## result that carries the tick for the UI.
+func _lost_action_tick(b: RPGBattler, owed := false) -> Dictionary:
+	if not b.is_active() or (rules.state_countdown() != "turn_end" and not owed):
 		return {}
 	var before := _vitals()
 	var tick := rules.tick_states(b, "action_end")
@@ -497,6 +569,10 @@ func _build_queue() -> void:
 	# pincer like a surprise attack.
 	var enemies_act := not (turn == 1 and advantage in ["preemptive", "initiative", "surround"])
 	var party_acts := not (turn == 1 and advantage in ["surprise", "back_attack", "pincer"])
+	# Each battler's actions for the turn. Action Times+ gives several, and each is chosen on
+	# its own (VX Ace's make_actions): an enemy rolls its action list once per action, an actor
+	# enters one command per action. A forced action is the battler's only one that turn.
+	var plans := {}
 	if enemies_act:
 		for e in enemies:
 			if _forced_next.has(e):
@@ -504,16 +580,25 @@ func _build_queue() -> void:
 				# cannot act now (the entry is consumed either way, so it cannot go stale).
 				e.action = _forced_next[e]
 				_forced_next.erase(e)
+				plans[e] = [e.action]
 			elif e.is_active() and rules.can_act(e):
-				e.action = choose_enemy_action(e)
+				var picks := []
+				for k in action_count(e):
+					picks.append(choose_enemy_action(e))
+					# Escaping, self-destructing and transforming end the battler's turn.
+					if ONE_SHOT_KINDS.has(str(picks[-1].get("kind", ""))):
+						break
+				e.action = picks[0]
+				plans[e] = picks
 	if party_acts:
 		for a in party:
 			if _forced_next.has(a):
 				a.action = _forced_next[a]
 				_forced_next.erase(a)
-			elif a.is_active() and rules.can_act(a) and a.action.is_empty():
-				a.action = _confused_action(a) if _confused(a) \
-					else (_auto_battle_action(a) if _auto_battle(a) else {"kind": "attack", "target": -1})
+				plans[a] = [a.action]
+			elif not a.action.is_empty() or (a.is_active() and rules.can_act(a)):
+				plans[a] = _actor_plan(a)
+				a.action = plans[a][0]
 	var entries := []
 	var order := 0
 	for b in all_battlers():
@@ -521,20 +606,23 @@ func _build_queue() -> void:
 			order += 1
 			continue
 		if b.is_active() and not b.action.is_empty():
-			entries.append({"b": b, "speed": rules.action_speed(b, b.action), "order": order})
+			# The battler comes up once, for all its actions, at the slowest of their speeds
+			# (VX Ace's make_speed).
+			var plan: Array = plans.get(b, [b.action])
+			var speed: int = rules.action_speed(b, plan[0])
+			for k in range(1, plan.size()):
+				speed = mini(speed, rules.action_speed(b, plan[k]))
+			entries.append({"b": b, "speed": speed, "order": order, "plan": plan})
 		order += 1
 	entries.sort_custom(func(x, y):
 		if x.speed != y.speed:
 			return x.speed > y.speed
 		return x.order < y.order)
 	_queue.clear()
+	_lineup.clear()
 	for e in entries:
-		# "action_times" traits: the battler repeats its action right after its turn comes up.
-		# One-shot actions (escaping, self-destructing, transforming) never repeat.
-		var times := 1
-		if not ["escape", "self_destruct", "transform"].has(str(e.b.action.get("kind", ""))):
-			times = maxi(1, rules.action_times(e.b))
-		for k in times:
+		_lineup[e.b] = (e.plan as Array).duplicate()
+		for k in (e.plan as Array).size():
 			_queue.append(e.b)
 	_lost.clear()
 	if rules.state_countdown() == "turn_end":
@@ -542,6 +630,28 @@ func _build_queue() -> void:
 			if b.is_active() and b.action.is_empty():
 				_lost.append(b)
 	_queue_built = true
+
+
+## An actor's actions for the turn. With no command entered each one is picked on its own (a
+## confused or auto-battling actor, or the plain attack). Otherwise the commands entered, in
+## order; one the driver did not enter repeats the first, as before (unless the first ends the
+## turn: ONE_SHOT_KINDS).
+func _actor_plan(a: RPGBattler) -> Array:
+	var n := action_count(a)
+	var out := []
+	if a.action.is_empty():
+		for k in n:
+			out.append(_confused_action(a) if _confused(a) \
+				else (_auto_battle_action(a) if _auto_battle(a) else {"kind": "attack", "target": -1}))
+		return out
+	out.append(a.action)
+	if ONE_SHOT_KINDS.has(str(a.action.get("kind", ""))):
+		return out
+	var more: Array = _plans.get(a, [])
+	for k in range(1, n):
+		var entered: Dictionary = more[k - 1] if k - 1 < more.size() else {}
+		out.append(entered if not entered.is_empty() else a.action.duplicate(true))
+	return out
 
 
 func _execute(b: RPGBattler, given_targets: Variant = null) -> Dictionary:
