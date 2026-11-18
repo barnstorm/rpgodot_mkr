@@ -1566,6 +1566,12 @@ func show_action(r: Dictionary) -> void:
 				break
 		if res.get("knocked_out", false) and t.is_enemy():
 			_collapse(t)
+		# HP Drain / MP Drain: what was taken pops up on the user as a gain.
+		var drained: Dictionary = res.get("drained", {})
+		for rid in drained:
+			var life: bool = rid == rules().life_resource()
+			var got := str(int(drained[rid]))
+			popup(user, got if life else "+" + got, Color(0.55, 1.0, 0.6) if life else SP_COLOUR, "heal" if life else "resource_up")
 		_refresh_status()
 	# Self-Destruct: the user goes with its blast.
 	if str(r.get("kind", "")) == "self_destruct" and user.is_enemy():

@@ -56,6 +56,7 @@ The kit follows RPG Maker's way of working: maps painted from tilesets, events w
 | Conditional Branch: what started the event / collision checks | **Started by** (action button, a touch, autorun, parallel, Call Event) and **Can pass** (a character can step N cells a direction), branch-only kinds |
 | Troops: Autoname | **Autoname** on the Enemy groups tab |
 | Actor Description, Status screen | Actor **Description**; on the Status screen, OK shows it |
+| Skill Damage type: HP / MP Damage, HP / MP Recover, HP / MP Drain | **Damage type** (*damage*, *recover* or *drain*) with **Affects** (HP, MP). A drain takes the amount from the target, at most what it has left, and gives it to the user; guarding and critical hits count as for damage |
 | Class parameter curves | Classes: each stat is **Per level** or **Curve** (level 1 / level 99 values and a shape), with a graph |
 | Battle Test (party, levels) | **Game > Battle test…** (choose the enemy group, the party and their levels), or Battle test on the Enemy groups tab |
 | Auto-change BGM / BGS | Map properties: Music and Background sound, each "(keep playing)", "(stop)" or a file |

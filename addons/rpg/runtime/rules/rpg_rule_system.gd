@@ -31,6 +31,7 @@ const DEFAULT_TERMS := {
 	"no_damage": "%1 takes no damage.",
 	"recover": "%1 recovers %2 %3!",
 	"resource_damage": "%1 loses %2 %3!",
+	"drain": "%1 was drained of %2 %3!",
 	"miss": "%1 missed!",
 	"evade": "%1 dodged the attack!",
 	"critical": "A critical hit!",
@@ -1695,9 +1696,12 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 	if out.element != "":
 		out.element_rate = trait_rate(target, "element_rate", out.element)
 		value *= out.element_rate
+	# A drain (HP Drain / MP Drain) is damage to the target for every modifier below, as in
+	# MV's makeDamageValue; apply_action caps it at what the target has and gives it to the user.
+	var harms: bool = out.type == "damage" or out.type == "drain"
 	# The damage-rate Sp-Parameters (MV's makeDamageValue): PDR/MDR scale damage by the hit's
 	# type — a "certain" hit is neither — and REC scales recovery received. 100 = unchanged.
-	if out.type == "damage":
+	if harms:
 		match str(u.get("hit_type", "certain")):
 			"physical":
 				value *= float(trait_field(target, "pdr", 100)) / 100.0
@@ -1707,7 +1711,7 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 				value *= float(trait_field(target, "mdr", 100)) / 100.0
 	elif out.type == "recover":
 		value *= float(trait_field(target, "rec", 100)) / 100.0
-	if out.type == "damage" and u.critical:
+	if harms and u.critical:
 		var crit_cfg: Dictionary = definition.get("critical", {})
 		var crit := false
 		if crit_cfg.has("on_natural") and hit_info.has("natural") and int(hit_info.natural) > 0:
@@ -1725,12 +1729,12 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 			value += rng.randi_range(-amp, amp)
 	# Guarding, or MV's Guard special flag — which guards whenever the battler can still act.
 	var guarding := target.guarding or (has_trait(target, "guard") and can_act(target))
-	if out.type == "damage" and guarding and value > 0.0:
+	if harms and guarding and value > 0.0:
 		# MV's applyGuard: damage / (2 x GRD). guard_percent is the /2 (50 = half damage), the
 		# Guard Effect Sp-Parameter the rest — a rules set without it divides by 100 (= x1.0).
 		value = value * float(cfg.get("guard_percent", 50)) / float(trait_field(target, "grd", 100))
 	var final_value := roundi(value)
-	if out.type == "damage":
+	if harms:
 		final_value = maxi(final_value, int(cfg.get("min", 0)))
 		if damage_filter.is_valid():
 			var f: Variant = damage_filter.call(user, target, action, final_value)
@@ -1748,8 +1752,9 @@ func damage(user: RPGBattler, target: RPGBattler, action: Dictionary, hit_info: 
 ##  removed_states, resisted_states, knocked_out, revived, lines: [String], text, error}.
 ## `damage` is life lost (>= 0), `recovered` is life regained; `changes` maps every resource
 ## to its net change. Only when non-empty: `charged` (target resources gained from taking damage,
-## included in `changes`). The user's own use charge (e.g. TP) is not part of this per-target
-## result — see gain_on_use(), which callers run once per use.
+## included in `changes`) and `drained` ({resource: amount} a drain took from the target and gave
+## to the user; `damage` is that amount too). The user's own use charge (e.g. TP) is not part of
+## this per-target result — see gain_on_use(), which callers run once per use.
 func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> Dictionary:
 	var res := {"hit": false, "evaded": false, "damage": 0, "recovered": 0, "resource": life_resource(),
 		"critical": false, "element_rate": 1.0, "added_states": [], "removed_states": [], "resisted_states": [],
@@ -1786,6 +1791,16 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		if d.critical:
 			res.lines.append(term("critical"))
 		_change(target, d.resource, -int(d.value))
+	elif d.type == "drain":
+		# HP Drain / MP Drain (VX Ace / MV): the target loses the amount, capped at what it
+		# has, and the user gains what was taken.
+		if d.critical:
+			res.lines.append(term("critical"))
+		d.value = clampi(int(d.value), 0, target.get_resource(d.resource))
+		_change(target, d.resource, -int(d.value))
+		if int(d.value) > 0:
+			_change(user, d.resource, int(d.value))
+			res["drained"] = {d.resource: int(d.value)}
 	elif d.type == "recover" and not (target.is_dead() and d.resource == life_resource()):
 		_change(target, d.resource, int(d.value))
 	# Effects (RPG Maker's item/skill effects). recover / damage: `percent` of the maximum plus a
@@ -1896,7 +1911,7 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		var delta: int = target.get_resource(rid) - int(before[rid])
 		if delta != 0:
 			res.changes[rid] = delta
-	if d.type == "damage":
+	if d.type == "damage" or d.type == "drain":
 		res.damage = int(d.value)
 	res.recovered = maxi(0, int(res.changes.get(life_resource(), 0)))
 	_describe(user, target, u, d, res)
@@ -1936,7 +1951,9 @@ func _change(b: RPGBattler, res_id: String, delta: int) -> void:
 
 func _describe(_user: RPGBattler, target: RPGBattler, _u: Dictionary, d: Dictionary, res: Dictionary) -> void:
 	var label := _resource_label(d.resource)
-	if d.type == "damage":
+	if d.type == "drain" and d.value > 0:
+		res.lines.append(term("drain", [target.name, d.value, label]))
+	elif d.type == "damage" or (d.type == "drain" and d.resource == life_resource()):
 		if d.resource == life_resource():
 			res.lines.append(term("damage", [target.name, d.value]) if d.value > 0 else term("no_damage", [target.name]))
 		else:
@@ -1944,7 +1961,7 @@ func _describe(_user: RPGBattler, target: RPGBattler, _u: Dictionary, d: Diction
 	var charged: Dictionary = res.get("charged", {})
 	for rid in res.changes:
 		var delta: int = res.changes[rid] - int(charged.get(rid, 0))
-		if delta > 0 and not (d.type == "damage" and rid == d.resource):
+		if delta > 0 and not ((d.type == "damage" or d.type == "drain") and rid == d.resource):
 			res.lines.append(term("recover", [target.name, delta, _resource_label(rid)]))
 	for sid in res.added_states:
 		if sid == death_state():
