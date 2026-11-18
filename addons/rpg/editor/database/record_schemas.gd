@@ -106,6 +106,8 @@ static func fields_for(type: String, stats: Array = [], resources: Array = [], t
 			f = [
 				_t("name", "Name"), _m("description", "Description"), _icon_field(),
 				_type_field("skill_type", "Skill type", type_lists, "skill_types"),
+				_type_list_field("required_weapons", "Required weapon", type_lists, "weapon_types").merged({
+					"help": "The skill can only be used with a weapon of one of these types equipped. Leave it empty to ask for nothing. Enemies ignore it."}, true),
 				_obj("cost", "Cost", _resource_fields(resources)),
 				_c("scope", "Target", SCOPES, "one_enemy").merged({"option_labels": SCOPE_LABELS}),
 				_i("random_count", "How many random enemies", 1, 1, 4).merged({"show_if": {"key": "scope", "equals": "random_enemies"}, "drop_hidden": true}),
