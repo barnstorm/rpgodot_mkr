@@ -75,7 +75,7 @@ Effects can recover HP or SP, deal damage, add or remove a state, raise a stat p
 4. **Battle animation**: an animation, or one of the built-in effects (slash, fire, ice, thunder, heal, hit).
 5. Add the skill to a class's **Skills learned** at level 3.
 
-**Target** goes further than one/all: *N random enemies* (MV's multi-hit random scope — each of the 1-4 hits re-picks whoever is still standing, so one enemy can be struck twice), the *(dead or alive)* ally scopes that reach a fallen friend (a revive item), and *Everyone*, both sides at once.
+**Target** goes further than one/all: *N random enemies* (MV's multi-hit random scope — each of the 1-4 hits re-picks whoever is still standing, so one enemy can be struck twice), the *(dead or alive)* ally scopes that reach a fallen friend (a revive item), and *Everyone*, both sides at once. To make a revive item, give it the target *One dead ally*: under the VX Ace rules a **Recover** effect on HP is enough (the ally rises with that HP); under the Classic rules put **Remove State**: Knockout first and the recovery after it.
 
 ## 5. Icons
 

@@ -270,6 +270,15 @@ func variable_division() -> String:
 	return str(definition.get("variable_division", "truncate"))
 
 
+## Whether recovering life revives a knocked-out target (issue #153). True (VX Ace, MV): a
+## skill or item that reaches the fallen (a "dead" or "dead or alive" scope) and restores HP
+## raises them with that HP, whatever else it does and in whatever order. False (the default,
+## RM2000/2003): only removing the death state revives, so a revive item lists Remove State
+## before its recovery.
+func recover_revives() -> bool:
+	return bool(definition.get("recover_revives", false))
+
+
 func has_capability(cap: String) -> bool:
 	return capabilities().has(cap)
 
@@ -1801,8 +1810,8 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		if int(d.value) > 0:
 			_change(user, d.resource, int(d.value))
 			res["drained"] = {d.resource: int(d.value)}
-	elif d.type == "recover" and not (target.is_dead() and d.resource == life_resource()):
-		_change(target, d.resource, int(d.value))
+	elif d.type == "recover":
+		_recover(target, d.resource, int(d.value), res)
 	# Effects (RPG Maker's item/skill effects). recover / damage: `percent` of the maximum plus a
 	# flat `amount`; add_state / remove_state: `chance` % (default 100); add_buff / add_debuff /
 	# remove_buff / remove_debuff: `id` = stat, `turns` for the adds (a debuff rolls its chance
@@ -1816,7 +1825,7 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 		match str(e.get("kind", "")):
 			"recover", "damage":
 				var rid := str(e.get("resource", life_resource())) if e.get("resource") != null else life_resource()
-				if target.is_dead() and rid == life_resource():
+				if target.is_dead() and rid == life_resource() and not (recover_revives() and str(e.kind) == "recover"):
 					continue
 				var amount := int(_num(e.get("amount"), 0.0)) + int(float(max_resource(target, rid)) * _num(e.get("percent"), 0.0) / 100.0)
 				if str(e.kind) == "recover" and (rid == life_resource() or rid == magic_resource()):
@@ -1825,7 +1834,10 @@ func apply_action(user: RPGBattler, target: RPGBattler, action: Dictionary) -> D
 					amount = roundi(amount * float(trait_field(target, "rec", 100)) / 100.0)
 					if u.kind == "item":
 						amount = roundi(amount * float(trait_field(user, "pha", 100)) / 100.0)
-				_change(target, rid, -amount if str(e.kind) == "damage" else amount)
+				if str(e.kind) == "damage":
+					_change(target, rid, -amount)
+				else:
+					_recover(target, rid, amount, res)
 			"add_state":
 				var sid := str(e.get("id", ""))
 				var chance := _num(e.get("chance"), 100.0) * state_chance_rate(target, sid)
@@ -1947,6 +1959,20 @@ static func had_effect(r: Dictionary) -> bool:
 func _change(b: RPGBattler, res_id: String, delta: int) -> void:
 	var m := max_resource(b, res_id)
 	b.set_resource(res_id, clampi(b.get_resource(res_id) + delta, 0, m))
+
+
+## Recovery from an action (apply_action only lets one reach a fallen target through a scope
+## for the dead). Life does nothing for the fallen, unless the rules say recovery revives
+## (recover_revives): then they rise with the recovered amount, as VX Ace's refresh drops the
+## death state once HP is above 0. `res` is the action's result.
+func _recover(target: RPGBattler, res_id: String, amount: int, res: Dictionary) -> void:
+	var fallen := target.is_dead() and res_id == life_resource()
+	if fallen and not (recover_revives() and amount > 0):
+		return
+	_change(target, res_id, amount)
+	if fallen and remove_state(target, death_state()):
+		res.removed_states.append(death_state())
+		res.revived = true
 
 
 func _describe(_user: RPGBattler, target: RPGBattler, _u: Dictionary, d: Dictionary, res: Dictionary) -> void:
